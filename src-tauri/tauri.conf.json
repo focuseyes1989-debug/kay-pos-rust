@@ -1,0 +1,36 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "KAY POS Rust",
+  "version": "0.1.0",
+  "identifier": "com.kaypos.rustclient",
+  "build": {
+    "frontendDist": "../target/dioxus",
+    "devUrl": "http://localhost:8080",
+    "beforeDevCommand": "",
+    "beforeBuildCommand": ""
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "KAY POS Rust",
+        "width": 1366,
+        "height": 768,
+        "minWidth": 1280,
+        "minHeight": 720,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "../crates/pos_desktop/assets/kay-simple.ico",
+      "../crates/pos_desktop/assets/kay-simple.png"
+    ]
+  }
+}

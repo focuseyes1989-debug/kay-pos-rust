@@ -1,0 +1,24 @@
+[workspace]
+members = [
+    "crates/pos_core",
+    "crates/pos_desktop",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+license = "MIT OR Apache-2.0"
+rust-version = "1.80"
+
+[workspace.dependencies]
+anyhow = "1"
+base64 = "0.22"
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+dioxus = { version = "0.7.10", features = ["desktop"] }
+dioxus-desktop = "0.7.10"
+dotenvy = "0.15"
+rust_decimal = { version = "1", features = ["serde-with-str"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio", "tls-native-tls", "postgres", "chrono", "derive", "rust_decimal"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }

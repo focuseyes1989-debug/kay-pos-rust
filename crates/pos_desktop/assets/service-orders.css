@@ -1,0 +1,130 @@
+.service_page { --shop-item-tint:color-mix(in srgb,var(--shop-category,#2563eb) 12%,var(--panel)); --shop-item-ink:var(--ink); min-height:0; min-width:0; overflow:auto; padding:16px; color:var(--ink); }
+.service_heading,.service_filters,.service_detail_title,.service_job_actions,.service_dialog_actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.service_heading { justify-content:flex-start; margin-bottom:12px; }
+.service_heading h2 { margin:0; font-size:20px; }
+.service_filters { margin-bottom:12px; }
+.shell .service_page .service_filters > input { width:340px; max-width:100%; flex:0 1 340px; }
+.shell .service_page .service_filters > select,
+.shell .service_page .service_filters > .touch-combo { width:200px; max-width:100%; flex:0 1 200px; }
+.shell .service_page .service_filters > input,
+.shell .service_page .service_filters > select,
+.shell .service_page .service_filters .touch-combo-input { height:36px; min-height:36px; padding-top:6px; padding-bottom:6px; }
+.service_filters > .touch-combo::after { top:12px; }
+.shell .service_page .service_filters > button { height:36px; min-height:36px; padding:6px 12px; }
+.service_job_toolbar { position:sticky; top:-16px; z-index:2; background:var(--bg); padding:10px 0; }
+.service_table tbody tr { cursor:pointer; }
+.service_table tbody tr:hover:not(.selected) { background:color-mix(in srgb,var(--shop-category,#2563eb) 6%,var(--panel)); }
+.service_page :is(input,select,textarea),.service_dialog :is(input:not([type="checkbox"]),select,textarea) { background:var(--panel); color:var(--ink); border:1px solid var(--line); border-radius:6px; padding:9px 12px; min-height:40px; min-width:0; font:inherit; }
+.service_page button:not(.receipt_tabs button),.service_dialog button { min-height:36px; padding:8px 12px; border:1px solid var(--line); border-radius:6px; background:var(--panel); color:var(--ink); font:inherit; cursor:pointer; }
+.service_page button:disabled,.service_dialog button:disabled { opacity:.5; cursor:not-allowed; }
+.shell :is(.service_page,.service_dialog) .customer_primary { background:var(--shop-button,#2563eb); border-color:var(--shop-button,#2563eb); color:var(--shop-button-text,#fff); }
+.shell :is(.service_page,.service_dialog) button.danger { background:var(--panel); color:light-dark(#b91c1c,#fca5a5); border-color:light-dark(#fca5a5,#b91c1c); }
+.shell :is(.service_page,.service_dialog) button.danger:hover:not(:disabled) { background:light-dark(#fee2e2,#542828); }
+.service_dialog :is(h2,h3,p),.service_detail_title h3 { overflow-wrap:anywhere; }
+.service_table_scroll { max-height:48vh; overflow:auto; border:1px solid var(--line); border-radius:6px; background:var(--panel); }
+.service_table { border-collapse:separate; border-spacing:0; width:100%; font-size:12px; }
+.service_table :is(th,td) { padding:9px 12px; text-align:left; border-bottom:1px solid var(--line); min-width:110px; vertical-align:top; }
+.service_table th { position:sticky; top:0; z-index:1; background:var(--panel); font-weight:600; white-space:nowrap; }
+.service_table td small { display:block; margin-top:4px; color:var(--muted); }
+.service_details_cell { max-width:300px; min-width:180px; white-space:pre-wrap; overflow-wrap:anywhere; }
+.service_table tr.selected { background:var(--shop-item-tint); }
+.service_job_name { color:var(--ink); font-weight:600; overflow-wrap:anywhere; }
+.service_table tbody tr:focus-visible { outline:2px solid var(--shop-focus,#2563eb); outline-offset:-2px; }
+.service_status { display:inline-block; padding:4px 7px; border-radius:4px; white-space:nowrap; color:light-dark(#92400e,#fde68a); background:light-dark(#fef3c7,#44351c); }
+.service_status[data-status="In Progress"] { background:var(--shop-item-tint); color:var(--shop-item-ink); }
+.service_status[data-status="Ready for Pickup"] { background:light-dark(#f3e8ff,#452a60); color:light-dark(#6b21a8,#e9d5ff); }
+.service_status[data-status="Delivered"] { background:light-dark(#dcfce7,#173e2f); color:light-dark(#166534,#bbf7d0); }
+.service_status[data-status="Cancelled"] { background:light-dark(#fee2e2,#542828); color:light-dark(#991b1b,#fecaca); }
+.service_table [data-urgency="overdue"] { color:light-dark(#b91c1c,#fca5a5); font-weight:600; }
+.service_table [data-urgency="soon"] { color:light-dark(#9a3412,#fdba74); font-weight:600; }
+.service_table [data-urgency="upcoming"] { color:light-dark(#854d0e,#fde047); }
+.service_jobs_columns { display:grid; grid-template-columns:minmax(0,2fr) minmax(300px,1fr); gap:16px; align-items:start; }
+.service_jobs_list { min-width:0; }
+.service_jobs_list .service_table_scroll { max-height:calc(100vh - 270px); }
+.service_job_detail { min-width:0; max-height:calc(100vh - 270px); overflow:auto; padding:0 0 0 16px; border-left:1px solid var(--line); }
+.service_detail_title h3 { font-size:16px; margin:0; }
+.service_detail_title span { color:var(--muted); }
+.service_detail_copy { display:grid; grid-template-columns:minmax(0,1fr); gap:8px; }
+.service_detail_copy h4 { font-size:12px; color:var(--muted); margin:14px 0 6px; }
+.service_detail_copy p,.service_preserve { white-space:pre-wrap; overflow-wrap:anywhere; margin-top:0; }
+.service_job_actions { margin-block:12px; }
+.service_job_detail details { border-top:1px solid var(--line); padding-top:12px; margin-top:12px; }
+.service_history { font-size:12px; color:var(--muted); }
+.service_history span { display:block; color:var(--ink); white-space:pre-wrap; }
+.service_empty { padding:24px; color:var(--muted); text-align:center; }
+.service_dialog { background:var(--panel); color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:24px; width:min(680px,calc(100vw - 32px)); max-width:100%; max-height:calc(100vh - 40px); overflow:auto; }
+.service_dialog h2 { margin:0 0 12px; font-size:20px; }
+.service_form { display:grid; gap:12px; margin-block:16px; }
+.service_form label { display:grid; gap:6px; min-width:0; }
+.service_check,.service_form label.service_check { display:flex; align-items:center; gap:8px; }
+.service_check input[type="checkbox"] { flex-shrink:0; width:22px; min-height:22px; height:22px; padding:0; margin:0; }
+.service_form textarea { width:100%; resize:vertical; }
+.service_dialog_actions { justify-content:flex-end; position:sticky; bottom:-24px; padding:12px 0; background:var(--panel); border-top:1px solid var(--line); }
+.service_prompt_columns { display:grid; grid-template-columns:minmax(0,3fr) minmax(320px,2fr); gap:16px; height:calc(100vh - 214px); min-height:300px; }
+.service_prompt_list { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); align-content:start; gap:12px; min-width:0; overflow:auto; padding:2px; }
+.shell .service_page button.service_prompt_item { display:flex; flex-direction:column; text-align:left; padding:0; min-width:0; border:1px solid var(--line); border-radius:6px; overflow:hidden; background:var(--panel); color:var(--ink); }
+.service_prompt_thumbnail { width:100%; height:150px; flex:none; display:flex; align-items:center; justify-content:center; background:color-mix(in srgb,var(--ink) 4%,var(--panel)); color:var(--muted); border-bottom:1px solid var(--line); }
+.service_prompt_thumbnail img { display:block; width:100%; height:100%; object-fit:contain; }
+.service_prompt_caption { padding:12px; width:100%; }
+.shell .service_page button.service_prompt_item:is(:hover,.selected) { border-color:var(--shop-category,#2563eb); background:var(--shop-item-tint); color:var(--ink); }
+.shell .service_page button.service_prompt_item.selected { box-shadow:inset 0 0 0 1px var(--shop-category,#2563eb); }
+.service_prompt_inactive { color:var(--muted); }
+.service_prompt_item strong,.service_prompt_item small { display:block; overflow-wrap:anywhere; }
+.service_prompt_item small { margin-top:4px; }
+.service_page .service_prompt_item.selected { border-color:var(--shop-category); background:var(--shop-item-tint); }
+.service_prompt_detail { min-width:0; overflow:auto; padding:16px; border:1px solid var(--line); border-radius:6px; background:var(--panel); }
+.service_prompt_detail h3 { margin:0 0 6px; font-size:16px; overflow-wrap:anywhere; }
+.service_prompt_detail > .service_empty { display:flex; align-items:center; justify-content:center; height:100%; margin:0; }
+.service_prompt_image { display:block; width:100%; max-width:480px; height:220px; object-fit:contain; margin-block:12px; background:var(--panel); }
+.service_page [role="alert"],.service_dialog [role="alert"] { color:light-dark(#b91c1c,#fca5a5); overflow-wrap:anywhere; }
+@media(max-width:800px) { .service_prompt_columns,.service_detail_copy { grid-template-columns:minmax(0,1fr); } .service_prompt_columns { height:auto; } .service_prompt_list { max-height:420px; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); } .service_prompt_detail { min-height:240px; max-height:600px; } }
+@media(max-width:800px) { .service_jobs_columns { grid-template-columns:minmax(0,1fr); } .service_job_detail { border-left:0; border-top:1px solid var(--line); padding:12px 0 0; } }
+.service_jobs_page { display:grid; grid-template-columns:minmax(0,2fr) minmax(300px,1fr); grid-template-rows:auto auto auto minmax(0,1fr); column-gap:16px; overflow:hidden; }
+.service_jobs_page > .service_heading { grid-column:1; grid-row:1; }
+.service_jobs_page > .service_filters { grid-column:1; grid-row:2; }
+.service_jobs_page > .service_job_toolbar { grid-column:1; grid-row:3; position:static; margin:0 0 12px; padding:0; }
+.service_job_messages { grid-column:1; grid-row:3; }
+.service_jobs_page .service_jobs_columns { display:contents; }
+.service_jobs_page .service_jobs_list { grid-column:1; grid-row:4; min-height:0; display:flex; flex-direction:column; gap:8px; }
+.service_jobs_page .service_table_scroll { flex:1; min-height:0; max-height:none; border:1px solid var(--line); border-radius:6px; }
+.service_jobs_page .service_job_detail { grid-column:2; grid-row:1 / -1; align-self:stretch; min-height:0; max-height:none; padding:0; border:1px solid var(--line); border-radius:6px; background:var(--panel); display:flex; flex-direction:column; overflow:hidden; }
+.service_job_detail_body { flex:1; min-height:0; overflow:auto; padding:16px; }
+.service_detail_top_actions { display:flex; justify-content:flex-end; flex-wrap:wrap; flex:none; gap:8px; padding:12px; border-bottom:1px solid var(--line); }
+.service_job_detail .service_job_toolbar { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); position:static; flex:none; margin:0; padding:12px; border-top:1px solid var(--line); background:var(--panel); gap:8px; }
+.service_job_detail .service_job_toolbar button { min-width:0; white-space:normal; overflow-wrap:anywhere; }
+.service_job_detail_body > .service_empty { height:100%; margin:0; display:flex; align-items:center; justify-content:center; }
+.service_prompts_page { display:grid; grid-template-columns:minmax(0,2fr) minmax(300px,1fr); grid-template-rows:auto auto auto minmax(0,1fr); column-gap:16px; overflow:hidden; }
+.service_prompts_page > .service_heading { grid-column:1; grid-row:1; }
+.service_prompts_page > .service_filters { grid-column:1; grid-row:2; }
+.service_prompt_messages { grid-column:1; grid-row:3; }
+.service_prompts_page .service_prompt_columns { display:contents; }
+.service_prompts_page .service_prompt_gallery { grid-column:1; grid-row:4; min-height:0; display:flex; flex-direction:column; }
+.service_prompts_page .service_prompt_list { flex:1; min-height:0; max-height:none; }
+.service_prompt_pagination { display:flex; align-items:center; justify-content:space-between; gap:8px; padding-top:10px; }
+.service_prompts_page .service_prompt_detail { grid-column:2; grid-row:1 / -1; min-height:0; padding:0; display:flex; flex-direction:column; overflow:hidden; }
+.service_prompt_detail_body { flex:1; min-height:0; overflow:auto; padding:16px; }
+.service_prompt_detail_body > .service_empty { height:100%; margin:0; display:flex; align-items:center; justify-content:center; }
+.service_prompt_footer { flex:none; margin:0; padding:12px; border-top:1px solid var(--line); gap:8px; }
+.service_dialog.service_prompt_editor { width:min(1000px,calc(100vw - 40px)); }
+.service_prompt_editor_columns { display:grid; grid-template-columns:minmax(0,3fr) minmax(260px,2fr); gap:24px; }
+.service_prompt_editor_columns > .service_form { margin:0 0 16px; }
+.service_prompt_photo { min-width:0; padding-left:24px; border-left:1px solid var(--line); }
+.service_prompt_photo h3 { margin:0 0 12px; font-size:14px; }
+.service_prompt_photo_preview { height:320px; display:flex; align-items:center; justify-content:center; overflow:hidden; border:1px solid var(--line); border-radius:6px; background:var(--panel); color:var(--muted); }
+.service_prompt_photo_preview img { display:block; width:100%; height:100%; object-fit:contain; }
+.service_prompt_photo .service_job_actions { gap:8px; }
+@media(max-width:700px) {
+  .service_prompt_editor_columns { grid-template-columns:minmax(0,1fr); gap:12px; }
+  .service_prompt_photo { padding:12px 0 0; border-left:0; border-top:1px solid var(--line); }
+  .service_prompt_photo_preview { height:240px; }
+}
+@media(max-width:800px) {
+  .service_prompts_page { display:flex; flex-direction:column; overflow:auto; }
+  .service_prompts_page .service_prompt_list { flex:none; max-height:420px; }
+  .service_prompts_page .service_prompt_detail { flex:none; height:480px; margin-top:12px; }
+}
+@media(max-width:800px) {
+  .service_jobs_page { display:flex; flex-direction:column; overflow:auto; }
+  .service_jobs_page .service_jobs_list { flex:none; height:360px; }
+  .service_jobs_page .service_job_detail { flex:none; min-height:260px; margin-top:12px; }
+}

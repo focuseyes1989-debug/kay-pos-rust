@@ -1,0 +1,38 @@
+# Build output and generated client packages
+/target/
+**/target/
+*.exe
+*.dll
+*.pdb
+*.zip
+
+# Local database configuration and credentials
+.env
+.env.*
+!.env.example
+kay-pos-db.json
+**/kay-pos-db.json
+*.pem
+*.pfx
+*.p12
+*.key
+!crates/pos_desktop/assets/update-public.key
+
+# Shop data and runtime output
+/receipt_print/
+/pending/
+/database-backups/
+/backups/
+*.dump
+*.backup
+*.db
+*.sqlite
+*.sqlite3
+*.log
+
+# Local editor/OS files
+.idea/
+.vscode/
+Thumbs.db
+Desktop.ini
+.DS_Store
