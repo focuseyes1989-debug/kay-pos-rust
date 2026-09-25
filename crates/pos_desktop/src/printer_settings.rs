@@ -72,7 +72,7 @@ pub fn PrinterSettings(
                 option {value:"80","80 mm roll"}
             }
           }
-          button {disabled:saving()||!printers.finished(),onclick:move |_|printers.restart(),"Refresh Printers"}
+          button { hidden:true, "data-page-refresh":"true", tabindex:-1, aria_hidden:"true",disabled:saving()||!printers.finished(),onclick:move |_|printers.restart(),"Refresh Printers"}
         }
         p {role:"status",if !printers.finished(){"Loading printers..."}else if let Some(Err(e))=state.as_ref(){"{e}"}else{"{names.len()} Windows printer(s) available."}}
         label {class:"tax_discount_toggle",input {r#type:"checkbox",checked:auto_print(),disabled:saving(),onchange:move |e|auto_print.set(e.checked())} span {"Print receipt automatically after completing a sale"}}

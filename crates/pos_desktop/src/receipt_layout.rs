@@ -1,4 +1,4 @@
-use crate::{format_ks, format_qty, line_total, setting_value, ReceiptData, ReceiptDetail};
+use crate::{format_qty, line_total, setting_value, ReceiptData, ReceiptDetail};
 use serde::Serialize;
 use std::collections::HashMap;
 
@@ -34,6 +34,8 @@ fn header(settings: &HashMap<String,String>, invoice: &str, payment_type: &str) 
     rows
 }
 fn totals(rows: &mut Vec<Row>, subtotal: Option<f64>, discount:f64, total:f64, payment:f64, change:f64, settings:&HashMap<String,String>) {
+    let currency = crate::regional::Currency::from_settings(settings);
+    let format_ks = |value| currency.format(value);
     rows.push(Row::new("rule","",""));
     if let Some(subtotal)=subtotal {
         rows.push(Row::new("pair","Subtotal",format_ks(subtotal)));
@@ -51,6 +53,8 @@ fn totals(rows: &mut Vec<Row>, subtotal: Option<f64>, discount:f64, total:f64, p
     }
 }
 pub fn sale(receipt: &ReceiptData, settings:&HashMap<String,String>) -> Vec<Row> {
+    let currency = crate::regional::Currency::from_settings(settings);
+    let format_ks = |value| currency.format(value);
     let mut rows=header(settings,&receipt.invoice_no,&receipt.payment_type);
     for item in &receipt.lines {
         rows.push(Row::new("item",item.display_name(),""));
@@ -60,6 +64,8 @@ pub fn sale(receipt: &ReceiptData, settings:&HashMap<String,String>) -> Vec<Row>
     rows
 }
 pub fn detail(receipt: &ReceiptDetail, settings:&HashMap<String,String>) -> Vec<Row> {
+    let currency = crate::regional::Currency::from_settings(settings);
+    let format_ks = |value| currency.format(value);
     let summary=&receipt.summary;
     let invoice=summary.invoice_no.clone().unwrap_or_else(||format!("Sale #{}",summary.id));
     let mut rows=header(settings,&invoice,summary.payment_type.as_deref().unwrap_or("Unknown"));

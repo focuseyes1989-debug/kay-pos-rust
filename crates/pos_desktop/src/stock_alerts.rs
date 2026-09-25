@@ -54,7 +54,7 @@ pub fn StockAlerts(form: DbForm) -> Element {
                     select {aria_label:"Stock status",value:severity(),onchange:move |e|severity.set(e.value()),
                         option {value:"","All ({all.len()})"} option {value:"low","Low stock ({low})"} option {value:"out","Out of stock ({out})"}
                     }
-                    button {disabled:!data.finished(),onclick:move |_|data.restart(),"Refresh"}
+                    button { hidden:true, "data-page-refresh":"true", tabindex:-1, aria_hidden:"true",disabled:!data.finished(),onclick:move |_|data.restart(),"Refresh"}
                 }
                 if !error().is_empty(){p {role:"alert","{error}"}}
                 div {class:"stock_alert_list",

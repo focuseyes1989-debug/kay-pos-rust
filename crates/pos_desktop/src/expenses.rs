@@ -44,7 +44,7 @@ pub fn QuickExpense(db_form: DbForm, on_close: EventHandler<()>, on_saved: Event
                             p { role: "alert", "{message}" }
                             button { onclick: move |_| data.restart(), "Retry" }
                         } else { p { role: "status", "Loading..." } }
-                        button { onclick: move |_| on_close.call(()), "Cancel" }
+                        button { onclick: move |_| on_close.call(()), crate::icons::ActionLabel { label:"Cancel" } }
                     }
                 }
             }
@@ -131,13 +131,14 @@ pub fn ExpensesPage(
     filter_categories.dedup();
     rsx! {
         section { class: "customers_page expense_touch",
+            button { hidden:true, "data-page-refresh":"true", disabled:!data.finished(), onclick:move |_|data.restart() }
             div { class: "expense_touch_summary",
-                div { span { "Total spending" } strong { "{money(total)} Ks" } }
-                div { span { "Expenses" } strong { "{rows.len()}" } }
-                div { span { "Average expense" } strong { "{money(average)} Ks" } }
+                div { span { "Total spending" } strong { "{money(total)} {crate::regional::current().symbol()}" } }
+                div { span { crate::icons::ActionLabel { label:"Expenses" } } strong { "{rows.len()}" } }
+                div { span { "Average expense" } strong { "{money(average)} {crate::regional::current().symbol()}" } }
             }
             header { class: "customers_header expense_touch_header",
-                div { h2 { "Expenses" } }
+                div { h2 { crate::icons::ActionLabel { label:"Expenses" } } }
                 div { class: "customers_actions",
                     button { disabled: exporting() || !matches!(state.as_ref(),Some(Ok(_))), onclick: {
                         let rows=rows.clone(); move |_| { let rows=rows.clone(); exporting.set(true); spawn(async move {
@@ -145,8 +146,8 @@ pub fn ExpensesPage(
                                 match export(&rows,file.path()) { Ok(())=>notice.set(format!("Exported to {}",file.path().display())), Err(err)=>error.set(format!("{err:#}")) }
                             } exporting.set(false);
                         }); }
-                    }, "Export Excel" }
-                    button { class: "customer_primary", onclick: move |_| editor.set(Some(new_record())), "+ Add expense" }
+                    }, crate::icons::ActionLabel { label:"Export Excel" } }
+                    button { class: "customer_primary", onclick: move |_| editor.set(Some(new_record())), crate::icons::ActionLabel { label:"+ Add expense" } }
                 }
             }
             div { class: "expense_history_header",
@@ -182,10 +183,10 @@ pub fn ExpensesPage(
                             small { "{row.expense_no} · {row.reference_no}" }
                             if !row.notes.is_empty() { details { summary { "More details" } p { "{row.notes}" } } }
                         }
-                        div { class: "expense_item_amount", strong { "{money(row.amount)}" } small { "Ks" } span { "{row.payment_method}" } }
+                        div { class: "expense_item_amount", strong { "{money(row.amount)}" } small { "{crate::regional::current().symbol()}" } span { "{row.payment_method}" } }
                         div { class: "customers_actions",
-                            button { onclick: { let row=row.clone(); move |_| editor.set(Some(row.clone())) }, "Edit" }
-                            button { class: "expense_delete", onclick: { let row=row.clone(); move |_| deleting.set(Some(row.clone())) }, "Delete" }
+                            button { onclick: { let row=row.clone(); move |_| editor.set(Some(row.clone())) }, crate::icons::ActionLabel { label:"Edit" } }
+                            button { class: "expense_delete", onclick: { let row=row.clone(); move |_| deleting.set(Some(row.clone())) }, crate::icons::ActionLabel { label:"Delete" } }
                         }
                     }
                 }
@@ -209,9 +210,9 @@ pub fn ExpensesPage(
             div { class: "modal_backdrop",
                 section { class: "customer_dialog", role: "dialog", aria_modal: "true", aria_label: "Delete expense",
                     h2 { "Delete expense?" }
-                    p { "{row.expense_no} · {row.category} · {money(row.amount)} Ks" }
+                    p { "{row.expense_no} · {row.category} · {money(row.amount)} {crate::regional::current().symbol()}" }
                     div { class: "customers_actions",
-                        button { disabled: busy(), onclick: move |_| deleting.set(None), "Cancel" }
+                        button { disabled: busy(), onclick: move |_| deleting.set(None), crate::icons::ActionLabel { label:"Cancel" } }
                         button { disabled: busy(), onclick: move |_| {
                             if busy() { return; } let source=db_form.clone(); busy.set(true);
                             spawn(async move {
@@ -219,7 +220,7 @@ pub fn ExpensesPage(
                                 busy.set(false);
                                 match result { Ok(())=> { deleting.set(None); notice.set("Expense deleted.".into()); data.restart(); }, Err(err)=>error.set(format!("{err:#}")) }
                             });
-                        }, if busy() { "Deleting..." } else { "Delete" } }
+                        }, if busy() { "Deleting..." } else { crate::icons::ActionLabel { label:"Delete" } } }
                     }
                 }
             }
@@ -287,7 +288,7 @@ fn ExpenseEditor(
                     label { class: "customer_remarks", "Notes" textarea { value: "{form().notes}", disabled: saving(), oninput: move |event| form.write().notes=event.value() } }
                 }
                 div { class: "customers_actions",
-                    button { disabled: saving(), onclick: move |_| on_close.call(()), "Cancel" }
+                    button { disabled: saving(), onclick: move |_| on_close.call(()), crate::icons::ActionLabel { label:"Cancel" } }
                     button { class: "customer_primary", disabled: saving(), onclick: move |_| {
                         if saving() { return; }
                         let mut expense=form();

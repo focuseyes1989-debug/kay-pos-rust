@@ -57,7 +57,7 @@ pub fn StatusBar(form: DbForm, operator: String, activity: String) -> Element {
                 span { class: "status_dot", aria_hidden: "true" }
                 span { "{label}" }
             }
-            button { class: "status_refresh", title: "Check database connection", aria_label: "Check database connection", disabled: checking,
+            button { hidden:true, "data-refresh-health":"true", class: "status_refresh", title: "Check database connection", aria_label: "Check database connection", disabled: checking,
                 onclick: move |_| refresh += 1, "↻" }
             span { class: "status_activity", title: activity.clone(), "{activity}" }
             crate::stock_alerts::StockAlerts { form: form.clone() }

@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 fn sample_receipt() -> ReceiptData {
     let product = Product {
-        id: 0, name: "Sample item".into(), category_id: None, category_name: None,
+        id: 0, name: "Sample item".into(), description: None, category_id: None, category_name: None,
         sku: None, barcode: None, price: 2500.0, cost: 0.0, stock: 0.0,
         low_stock: 0.0, sold_by: Some("Each".into()), image_filename: None,
         image_data_url: None, variants: vec![], price_tiers: vec![],
@@ -45,6 +45,20 @@ pub fn ReceiptPreview(original: Vec<(String, String)>, draft: Signal<HashMap<Str
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn printed_receipt_uses_explicit_currency_without_ui_context() {
+        for (currency, symbol, amount) in [("Kyats (Ks)", "Ks", "5,000 Ks"), ("Dollar ($)", "$", "5,000.00 $"), ("Baht (B)", "B", "5,000.00 B")] {
+            let settings = HashMap::from([("currency".into(), currency.into()), ("currency_symbol".into(), "Ks".into())]);
+            let rows = receipt_layout::sale(&sample_receipt(), &settings);
+            assert!(rows.iter().any(|r| r.kind == "total" && r.right == amount));
+            for row in rows.iter().filter(|r| r.kind == "total" || (r.kind == "pair" && r.text != "Payment method")) {
+                assert!(row.right.ends_with(symbol), "{}", row.right);
+            }
+            if symbol != "Ks" {
+                assert!(!rows.iter().any(|r| r.text.contains(" Ks") || r.right.contains(" Ks")));
+            }
+        }
+    }
     #[test]
     fn preview_uses_printer_lines_and_draft_values() {
         let mut settings = HashMap::from([("shop_name".into(), "Original".into())]);

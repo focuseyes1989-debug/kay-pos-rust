@@ -34,7 +34,7 @@ pub async fn deduct(
     invoice: &str,
     actor: &str,
 ) -> Result<Vec<Allocation>> {
-    let (master, mode): (f64, String) = sqlx::query_as(
+    let (mut master, mode): (f64, String) = sqlx::query_as(
         "SELECT COALESCE(stock,0)::float8,COALESCE(sold_by,'Each') FROM products WHERE id=$1",
     )
     .bind(item.product_id)
@@ -75,10 +75,14 @@ pub async fn deduct(
         .bind(item.product_id)
         .fetch_one(&mut *connection)
         .await?;
-        ensure!(
-            (sum - master).abs() < 0.000001,
-            "Reconcile master and variant stock in Main POS first"
-        );
+        ensure!(sum.is_finite() && sum >= 0.0, "Invalid variant stock total");
+        // The parent is a derived total. Its row is already locked by lock_products;
+        // any subsequent validation failure rolls this repair back with the sale.
+        if (sum - master).abs() >= 0.000001 || !master.is_finite() {
+            sqlx::query("UPDATE products SET stock=$1,last_updated=CURRENT_TIMESTAMP WHERE id=$2")
+                .bind(sum).bind(item.product_id).execute(&mut *connection).await?;
+        }
+        master = sum;
         stock
     } else {
         master
@@ -102,6 +106,22 @@ pub async fn deduct(
     } else {
         "id"
     };
+    if let Some(id) = item.variant_id {
+        let quantities: Vec<i32> = sqlx::query_scalar("SELECT quantity FROM variant_stock_batches WHERE product_id=$1 AND variant_id=$2 FOR UPDATE")
+            .bind(item.product_id).bind(id).fetch_all(&mut *connection).await?;
+        let tracked: i64 = quantities.iter().map(|q| i64::from(*q)).sum();
+        ensure!(quantities.iter().all(|q| *q >= 0) && tracked as f64 <= old,
+            "Variant batch stock exceeds total or contains invalid quantities for {}. Review stock before continuing", item.product_name);
+        let missing = old - tracked as f64;
+        ensure!(missing.is_finite() && missing.fract() == 0.0 && missing <= i32::MAX as f64,
+            "Invalid unallocated variant stock for {}", item.product_name);
+        // Match Main POS legacy reconciliation without inventing a location or expiry.
+        // Product/variant locks serialize this opening; rollback covers the entire sale.
+        if missing > 0.0 {
+            sqlx::query("INSERT INTO variant_stock_batches(product_id,variant_id,location,batch_no,expire_date,quantity,expiry_unknown) VALUES($1,$2,'Legacy / unassigned','LEGACY-OPENING','',$3,1) ON CONFLICT(product_id,variant_id,location,batch_no,expire_date) DO UPDATE SET quantity=variant_stock_batches.quantity+EXCLUDED.quantity,expiry_unknown=1")
+                .bind(item.product_id).bind(id).bind(missing as i32).execute(&mut *connection).await?;
+        }
+    }
     let rows: Vec<(String, Option<i32>, String, String, String, f64)> = sqlx::query_as(&format!(
         "SELECT ctid::text,{location_id},COALESCE(location,'Shop'),COALESCE(batch_no,''),COALESCE(expire_date,''),COALESCE(quantity,0)::float8 FROM {table} WHERE product_id=$1{variant} ORDER BY COALESCE(NULLIF(expire_date,''),'9999-12-31'),location,batch_no,ctid FOR UPDATE"
     )).bind(item.product_id).fetch_all(&mut *connection).await?;

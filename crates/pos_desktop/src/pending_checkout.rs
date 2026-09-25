@@ -208,7 +208,7 @@ pub fn Recovery(
                 }
                 if saving() { p { role: "status", "Checking server..." } }
                 if !error().is_empty() { p { role: "alert", "{error}" } }
-                button { disabled: saving(), onclick: move |_| session.set(None), "Sign out" }
+                button { disabled: saving(), onclick: move |_| session.set(None), crate::icons::ActionLabel { label:"Sign out" } }
             }
         }
     }

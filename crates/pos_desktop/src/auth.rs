@@ -54,6 +54,7 @@ fn Login() -> Element {
     let mut error = use_signal(String::new);
     let mut configure = use_signal(|| false);
     let mut appearance_revision = use_signal(|| 0u64);
+    let initial_appearance = use_hook(|| local_appearance::load().unwrap_or_default());
     let appearance = use_resource(move || {
         let _ = appearance_revision();
         async move {
@@ -62,24 +63,19 @@ fn Login() -> Element {
                 let rows = pos_core::db::list_settings(&pool).await?;
                 Ok::<HashMap<String, String>, anyhow::Error>(
                     rows.into_iter()
-                        .filter(|row| {
-                            row.key == "theme"
-                                || row.key == "follow_system_theme"
-                                || appearance_colors::FIELDS
-                                    .iter()
-                                    .any(|(key, _, _)| *key == row.key)
-                        })
+                        .filter(|row| local_appearance::is_key(&row.key))
                         .map(|row| (row.key, row.value.unwrap_or_default()))
                         .collect(),
                 )
             };
             match tokio::time::timeout(Duration::from_secs(4), request).await {
-                Ok(Ok(settings)) => settings,
-                _ => HashMap::new(),
+                Ok(Ok(settings)) => local_appearance::resolve(settings)
+                    .unwrap_or_else(|_| local_appearance::load().unwrap_or_default()),
+                _ => local_appearance::load().unwrap_or_default(),
             }
         }
     });
-    let colors = appearance.read().as_ref().cloned().unwrap_or_default();
+    let colors = appearance.read().as_ref().cloned().unwrap_or(initial_appearance);
     let background = use_hook(|| {
         format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(
             include_bytes!("../assets/market.png")
@@ -121,7 +117,7 @@ fn Login() -> Element {
                 label { "Username" input { autofocus: true, autocomplete: "username", disabled: busy(), value: username(), oninput: move |e| username.set(e.value()) } }
                 label { "Password" input { r#type: "password", autocomplete: "current-password", disabled: busy(), value: password(), oninput: move |e| password.set(e.value()) } }
                 if !error().is_empty() { p { role: "alert", "{error}" } }
-                button { class: "primary", r#type: "submit", disabled: busy(), if busy() { "Signing in..." } else { "Sign in" } }
+                button { class: "primary", r#type: "submit", disabled: busy(), if busy() { "Signing in..." } else { crate::icons::ActionLabel { label:"Sign in" } } }
                 button { class: "login_connection", r#type: "button", disabled: busy(), onclick: move |_| configure.set(true), "Database connection" }
                 updates::UpdatePanel { allow_install: true, busy }
             }

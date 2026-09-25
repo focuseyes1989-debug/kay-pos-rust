@@ -66,6 +66,8 @@
   }
 
   function enhance(select) {
+    // This reactive screen owns its controls; injected siblings can survive rerenders.
+    if (select?.closest('.employees_page')) return;
     if (!select || select.dataset[ENHANCED] || select.dataset[SKIP] || select.multiple || Number(select.size || 0) > 1) return;
     select.dataset[ENHANCED] = '1';
 

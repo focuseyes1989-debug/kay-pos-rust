@@ -1,10 +1,13 @@
 pub mod catalog;
+pub mod dashboard;
 pub mod categories;
 pub mod customer_credit;
 pub mod customers;
 pub mod db;
 pub mod expenses;
+pub mod employees;
 pub mod inventory;
+pub mod inventory_reversal;
 pub mod locations;
 pub mod models;
 pub mod numbers;
@@ -15,6 +18,8 @@ pub mod service_orders;
 pub mod stock_alerts;
 pub mod suppliers;
 pub mod users;
+pub mod zkteco;
+pub mod attendance_sync;
 
 pub use db::{connect, DatabaseConfig};
 pub use models::{

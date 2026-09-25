@@ -99,9 +99,9 @@ pub async fn save_with_image(
         None
     };
     let sql = if p.id == 0 {
-        "INSERT INTO products (name,category_id,category,sku,barcode,price,cost,low_stock,sold_by,stock) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,0) RETURNING id"
+        "INSERT INTO products (name,category_id,category,sku,barcode,price,cost,low_stock,sold_by,description,stock) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,0) RETURNING id"
     } else {
-        "UPDATE products SET name=$1,category_id=$2,category=$3,sku=$4,barcode=$5,price=$6,cost=$7,low_stock=$8,sold_by=$9 WHERE id=$10 RETURNING id"
+        "UPDATE products SET name=$1,category_id=$2,category=$3,sku=$4,barcode=$5,price=$6,cost=$7,low_stock=$8,sold_by=$9,description=$10 WHERE id=$11 RETURNING id"
     };
     let q = sqlx::query_scalar::<_, i32>(sql)
         .bind(p.name.trim())
@@ -112,7 +112,8 @@ pub async fn save_with_image(
         .bind(p.price)
         .bind(p.cost)
         .bind(p.low_stock)
-        .bind(&p.sold_by);
+        .bind(&p.sold_by)
+        .bind(&p.description);
     let id = if p.id == 0 {
         q.fetch_one(&mut *tx).await?
     } else {
@@ -303,6 +304,7 @@ mod tests {
         Product {
             id: 0,
             name: "Test".into(),
+            description: None,
             category_id: None,
             category_name: None,
             sku: None,

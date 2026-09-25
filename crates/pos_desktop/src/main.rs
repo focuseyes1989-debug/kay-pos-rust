@@ -4,7 +4,11 @@ use dioxus::prelude::*;
 mod auth;
 mod service_orders;
 mod app_icon;
+mod icons;
 mod appearance_colors;
+mod local_appearance;
+mod employees;
+mod regional;
 mod cash_drawer;
 mod categories;
 mod customer_display;
@@ -14,11 +18,14 @@ mod inventory;
 mod locations;
 mod pending_checkout;
 mod printer_settings;
+mod zkteco;
+mod attendance_sync;
 mod products;
 mod receipt_printer;
 mod receipt_layout;
 mod receipt_preview;
 mod sale_summary;
+mod dashboard;
 mod status_bar;
 mod stock_alerts;
 mod suppliers;
@@ -68,6 +75,8 @@ struct UiCategory {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum WorkspaceView {
+    Dashboard,
+    Employees,
     ServiceOrders,
     SaleSummary,
     Inventory,
@@ -160,6 +169,7 @@ fn App() -> Element {
         ));
     });
     let mut products = use_signal(Vec::<Product>::new);
+    use_effect(|| { let _ = document::eval(include_str!("../assets/page-refresh.js")); });
     let mut categories = use_signal(Vec::<UiCategory>::new);
     let mut selected_category = use_signal(|| None::<i32>);
     let mut db_status = use_signal(|| "DB not checked".to_string());
@@ -191,7 +201,9 @@ fn App() -> Element {
     let mut receipt_to = use_signal(current_receipt_date);
     let mut settings_query = use_signal(String::new);
     let mut settings_page = use_signal(|| "overview".to_string());
-    let mut app_settings = use_signal(HashMap::<String, String>::new);
+    // Apply local colors on the first render, before asynchronous database loading.
+    let mut app_settings = use_signal(|| local_appearance::load().unwrap_or_default());
+    use_context_provider(move || regional::RegionalSettings(app_settings));
     let mut payment_types = use_signal(Vec::<PaymentType>::new);
     let mut selected_payment_id = use_signal(|| None::<i32>);
     let mut payment_form_name = use_signal(String::new);
@@ -203,28 +215,52 @@ fn App() -> Element {
     let mut variant_product = use_signal(|| None::<Product>);
     let mut selected_variant_id = use_signal(|| None::<i32>);
 
+    // Navigation invalidates the sales snapshot after inventory/product changes.
+    // Resource cancellation prevents an older request from replacing a newer one.
+    let mut sales_catalog = use_resource(move || {
+        let view = active_view();
+        let form = db_form.read().clone();
+        async move {
+            if view != WorkspaceView::Sales { return None; }
+            Some(load_catalog_from_database(form).await.map_err(|e| format!("{e:#}")))
+        }
+    });
+    use_effect(move || {
+        if let Some(Some(result)) = sales_catalog.read().as_ref() {
+            match result {
+                Ok((loaded_categories, loaded_products)) => {
+                    categories.set(loaded_categories.clone());
+                    products.set(loaded_products.clone());
+                    refresh_cart_stock(&mut cart.write(), loaded_products);
+                    variant_product.set(None);
+                    selected_variant_id.set(None);
+                }
+                Err(error) => {
+                    // Do not allow selling from a stale snapshot after a failed refresh.
+                    products.set(Vec::new());
+                    message_box.set(Some(format!("Catalog refresh failed: {error}")));
+                }
+            }
+        }
+    });
+
     use_effect(move || {
         db_status.set("Auto connecting to PostgreSQL...".to_string());
-        product_cards_loading.set(true);
         let form = db_form.read().clone();
         spawn(async move {
-            match load_startup_data_from_database(form).await {
-                Ok((loaded_categories, loaded_products, loaded_settings, loaded_payment_types)) => {
-                    categories.set(loaded_categories);
-                    products.set(loaded_products);
+            match load_settings_center_data_from_database(form).await {
+                Ok((loaded_settings, loaded_payment_types)) => {
                     app_settings.set(loaded_settings);
                     payment_types.set(loaded_payment_types);
                     selected_category.set(None);
                     cart.set(Vec::new());
                     visible_product_limit.set(PRODUCT_BATCH_SIZE);
                     db_status.set("Connected".to_string());
-                    product_cards_loading.set(false);
                 }
                 Err(error) => {
                     let message = format!("Auto connect failed: {error:#}");
                     db_status.set(message.clone());
                     message_box.set(Some(message));
-                    product_cards_loading.set(false);
                 }
             }
         });
@@ -403,7 +439,7 @@ fn App() -> Element {
                 }
                 }
                 nav { class: "top_navigation", aria_label: "Quick navigation",
-                    button { class: "top_nav_link", aria_current: if *active_view.read()==WorkspaceView::Sales {"page"}else{"false"}, onclick: move |_| { show_side_menu.set(false); active_view.set(WorkspaceView::Sales); }, "Sales" }
+                    button { class: "top_nav_link", aria_current: if *active_view.read()==WorkspaceView::Sales {"page"}else{"false"}, onclick: move |_| { show_side_menu.set(false); active_view.set(WorkspaceView::Sales); }, crate::icons::ActionLabel { label:"Sales" } }
                     if can_manage { button { class: "top_nav_link", onclick: move |_| { show_side_menu.set(false); if *active_view.read()==WorkspaceView::Expenses {new_expense.set(true);}else{quick_expense.set(true);} }, "Add Expense" } }
                     button { class: "top_nav_link", disabled: drawer_busy(), title: "Open cashdrawer (Ctrl+Shift+D)", onclick: move |_| open_cash_drawer.call(()), if drawer_busy() {"Opening..."}else{"Open Cashdrawer"} }
                     button { class: "top_nav_link", title: "Customer display (Ctrl+Shift+C)", aria_pressed: customer_display_visible(),
@@ -421,7 +457,10 @@ fn App() -> Element {
                     }
                 }
                 div { class: "top_actions",
-                    button { class: "top_sign_out", disabled: checkout_saving(), onclick: move |_| session.set(None), "Sign out" }
+                    button { id:"page-refresh", class:"top_refresh", title:"Refresh current page", aria_label:"Refresh current page", "data-blocked":checkout_saving().to_string(),
+                        onclick:move |_| { let _ = document::eval("window.KayPageRefresh?.refresh()"); },
+                        icons::Icon {name:"refresh"}
+                    }
                 }
             }
 
@@ -443,7 +482,7 @@ fn App() -> Element {
                             strong { "KAY POS" }
                             small { "Rust client" }
                         }
-                        button { class: "side_close", aria_label: "Close menu", title: "Close menu", onclick: move |_| show_side_menu.set(false), "×" }
+                        button { class: "side_close", aria_label: "Close menu", title: "Close menu", onclick: move |_| show_side_menu.set(false), icons::Icon {name:"close"} }
                     }
                     div { class: "side_group",
                         span { "SALES" }
@@ -453,7 +492,7 @@ fn App() -> Element {
                                 show_side_menu.set(false);
                                 active_view.set(WorkspaceView::Sales);
                             },
-                            "Sales"
+                            crate::icons::ActionLabel { label:"Sales" }
                         }
                         button {
                             class: if *active_view.read()==WorkspaceView::Receipts {"side_active"}else{""},
@@ -491,31 +530,33 @@ fn App() -> Element {
                                     }
                                 });
                             },
-                            "Receipts"
+                            crate::icons::ActionLabel { label:"Receipts" }
                         }
-                        if can_manage { button { class: if *active_view.read()==WorkspaceView::Expenses {"side_active"}else{""}, onclick: move |_| { new_expense.set(false); active_view.set(WorkspaceView::Expenses); show_side_menu.set(false); }, "Expenses" } }
-                        button { class: if *active_view.read()==WorkspaceView::ServiceOrders {"side_active"}else{""}, onclick:move |_|{active_view.set(WorkspaceView::ServiceOrders);show_side_menu.set(false);},"Service Order" }
+                        if can_manage { button { class: if *active_view.read()==WorkspaceView::Expenses {"side_active"}else{""}, onclick: move |_| { new_expense.set(false); active_view.set(WorkspaceView::Expenses); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Expenses" } } }
+                        button { class: if *active_view.read()==WorkspaceView::ServiceOrders {"side_active"}else{""}, onclick:move |_|{active_view.set(WorkspaceView::ServiceOrders);show_side_menu.set(false);},crate::icons::ActionLabel { label:"Service Order" } }
                     }
                     if can_manage {
                     div { class: "side_group",
                         span { "PEOPLE" }
+                        button {class:if *active_view.read()==WorkspaceView::Employees{"side_active"}else{""},onclick:move |_|{active_view.set(WorkspaceView::Employees);show_side_menu.set(false);},crate::icons::ActionLabel { label:"Employees" }}
                         button {
                             class: if *active_view.read()==WorkspaceView::Customers {"side_active"}else{""},
                             onclick: move |_| { active_view.set(WorkspaceView::Customers); show_side_menu.set(false); },
-                            "Customers"
+                            crate::icons::ActionLabel { label:"Customers" }
                         }
-                        button { class: if *active_view.read()==WorkspaceView::Suppliers {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Suppliers); show_side_menu.set(false); }, "Suppliers" }
+                        button { class: if *active_view.read()==WorkspaceView::Suppliers {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Suppliers); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Suppliers" } }
                     }
                     div { class: "side_group",
                         span { "PRODUCTS & STOCK" }
-                        button { class: if *active_view.read()==WorkspaceView::Products {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Products); show_side_menu.set(false); }, "Products" }
-                        button { class: if *active_view.read()==WorkspaceView::Categories {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Categories); show_side_menu.set(false); }, "Categories" }
-                        button { class: if *active_view.read()==WorkspaceView::Locations {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Locations); show_side_menu.set(false); }, "Locations" }
-                        button { class: if *active_view.read()==WorkspaceView::Inventory {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Inventory); show_side_menu.set(false); }, "Inventory" }
+                        button { class: if *active_view.read()==WorkspaceView::Products {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Products); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Products" } }
+                        button { class: if *active_view.read()==WorkspaceView::Categories {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Categories); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Categories" } }
+                        button { class: if *active_view.read()==WorkspaceView::Locations {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Locations); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Locations" } }
+                        button { class: if *active_view.read()==WorkspaceView::Inventory {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Inventory); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Inventory" } }
                     }
                     div { class: "side_group",
                         span { "REPORTS" }
-                        button { class: if *active_view.read()==WorkspaceView::SaleSummary {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::SaleSummary); show_side_menu.set(false); }, "Sale Summary" }
+                        button { class: if *active_view.read()==WorkspaceView::Dashboard {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Dashboard); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Dashboard" } }
+                        button { class: if *active_view.read()==WorkspaceView::SaleSummary {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::SaleSummary); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Sale Summary" } }
                     }
                     if actor.allows(pos_core::auth::Permission::Admin) {
                     div { class: "side_group",
@@ -539,10 +580,13 @@ fn App() -> Element {
                                     }
                                 });
                             },
-                            "Settings Center"
+                            crate::icons::ActionLabel { label:"Settings Center" }
                         }
                     }
                     }
+                    }
+                    div { class:"side_group side_account",
+                        button { disabled:checkout_saving(), onclick:move |_| { show_side_menu.set(false);session.set(None); }, crate::icons::ActionLabel { label:"Sign out" } }
                     }
                 }
             }
@@ -560,8 +604,12 @@ fn App() -> Element {
 
             if !auth::can_open(&actor, *active_view.read()) {
                 p { role: "alert", "Your account does not have permission to open this page." }
+            } else if *active_view.read() == WorkspaceView::Employees {
+                employees::EmployeesPage {db_form:db_form.read().clone()}
             } else if *active_view.read() == WorkspaceView::ServiceOrders {
                 service_orders::ServiceOrdersPage {db_form:db_form.read().clone()}
+            } else if *active_view.read() == WorkspaceView::Dashboard {
+                dashboard::DashboardPage { db_form: db_form.read().clone(), actor: actor.clone(), on_navigate: move |view| active_view.set(view) }
             } else if *active_view.read() == WorkspaceView::SaleSummary {
                 sale_summary::SaleSummaryPage { db_form: db_form.read().clone(), on_sales: move |_| active_view.set(WorkspaceView::Sales) }
             } else if *active_view.read() == WorkspaceView::Inventory {
@@ -801,7 +849,7 @@ fn App() -> Element {
             section { class: "workspace",
                 aside { class: "categories panel",
                     div { class: "panel_head",
-                        strong { "Categories" }
+                        strong { crate::icons::ActionLabel { label:"Categories" } }
                         span { class: "count_badge", "{categories.read().len()}" }
                     }
                     label { class: "category_search",
@@ -829,10 +877,11 @@ fn App() -> Element {
                 section { class: "catalog panel",
                     div { class: "panel_head",
                         div {
-                            strong { "Products" }
+                            strong { crate::icons::ActionLabel { label:"Products" } }
                             small { "Tap a category or search the live catalog" }
                         }
                         span { class: "count_badge", "{filtered_products.len()} items" }
+                        button { hidden:true, "data-page-refresh":"true", tabindex:-1, aria_hidden:"true", disabled: !sales_catalog.finished(), onclick: move |_| sales_catalog.restart(), "Refresh" }
                     }
                     label { class: "catalog_search",
                         span { "⌕" }
@@ -842,6 +891,7 @@ fn App() -> Element {
                             placeholder: "Search product, SKU or scan barcode (F2)",
                             onmounted: move |element| async move { let _ = element.data().set_focus(true).await; },
                             onkeydown: move |event| {
+                                if !sales_catalog.finished() { return; }
                                 if event.key() != Key::Enter { return; }
                                 event.prevent_default();
                                 let code = normalize_scan(&query());
@@ -871,7 +921,7 @@ fn App() -> Element {
                         }
                     }
                     div { class: "product_grid",
-                        if *product_cards_loading.read() {
+                        if *product_cards_loading.read() || !sales_catalog.finished() {
                             div { class: "product_loading",
                                 span { class: "loading_spinner" }
                                 strong { "Loading..." }
@@ -979,6 +1029,8 @@ fn App() -> Element {
                             }
                             button {
                                 class: "checkout",
+                                id: "sales_checkout",
+                                "aria-keyshortcuts": "F4",
                                 disabled: cart.read().is_empty(),
                                 onclick: move |_| {
                                     let settings = app_settings.read();
@@ -1193,31 +1245,16 @@ async fn load_catalog_from_database(
     Ok((category_names, products))
 }
 
-async fn load_startup_data_from_database(
-    form: DbForm,
-) -> anyhow::Result<(
-    Vec<UiCategory>,
-    Vec<Product>,
-    HashMap<String, String>,
-    Vec<PaymentType>,
-)> {
-    // Establish the shared pool first so parallel loads reuse the same connection pool.
-    let _pool = connect(&form.database_config()?).await?;
-    let ((categories, products), (settings, payment_types)) = tokio::try_join!(
-        load_catalog_from_database(form.clone()),
-        load_settings_center_data_from_database(form)
-    )?;
-    Ok((categories, products, settings, payment_types))
-}
-
 async fn load_app_settings_from_database(form: DbForm) -> anyhow::Result<HashMap<String, String>> {
     let config = form.database_config()?;
     let pool = connect(&config).await?;
-    Ok(list_settings(&pool)
+    let mut settings = local_appearance::resolve(list_settings(&pool)
         .await?
         .into_iter()
         .map(|setting| (setting.key, setting.value.unwrap_or_default()))
-        .collect())
+        .collect())?;
+    regional::normalize(&mut settings);
+    Ok(settings)
 }
 
 async fn load_payment_types_from_database(form: DbForm) -> anyhow::Result<Vec<PaymentType>> {
@@ -1384,7 +1421,7 @@ fn CheckoutDialog(
                             strong { "Checkout" }
                             small { "Review payment before saving" }
                         }
-                        button { disabled: saving, onclick: move |_| on_cancel.call(()), "×" }
+                        button { disabled: saving, title:"Close",aria_label:"Close", onclick: move |_| on_cancel.call(()), icons::Icon {name:"close"} }
                     }
                     div { class: "checkout_body",
                         div { class: "checkout_summary",
@@ -1567,6 +1604,11 @@ fn settings_nav_items() -> Vec<SettingsNavItem> {
             keywords: "currency language kyats",
         },
         SettingsNavItem {
+            id: "zkteco",
+            title: "ZKTeco Device",
+            keywords: "zkteco k20 device biometric attendance tcp ip comm key",
+        },
+        SettingsNavItem {
             id: "printer",
             title: "Printer",
             keywords: "windows receipt local printer printing",
@@ -1688,8 +1730,10 @@ fn SettingsCenterPage(
                             key: "{active_page}",
                             db_form: db_form.clone(), on_saved,
                             description: "Receipt branding and print values loaded from PostgreSQL settings.",
-                            rows: settings_rows(&settings, &["shop_name", "shop_phone", "shop_address", "receipt_header", "receipt_footer", "shop_footer_message", "receipt_paper_size"])
+                            rows: settings_rows(&settings, &["shop_name", "shop_phone", "shop_address", "receipt_header", "receipt_footer", "shop_footer_message", "receipt_paper_size", "currency", "currency_symbol"])
                         }
+                    } else if active_page == "zkteco" {
+                        zkteco::ZktecoSettings {db_form:db_form.clone()}
                     } else if active_page == "printer" {
                         printer_settings::PrinterSettings { settings: settings.clone(), db_form: db_form.clone(), on_saved }
                     } else if active_page == "regional" {
@@ -1830,13 +1874,13 @@ fn PaymentTypesSettings(
                         class: "secondary",
                         disabled: !can_edit,
                         onclick: move |event| on_update.call(event),
-                        "Edit"
+                        crate::icons::ActionLabel { label:"Edit" }
                     }
                     button {
                         class: "danger",
                         disabled: !can_delete,
                         onclick: move |event| on_delete.call(event),
-                        "Delete"
+                        crate::icons::ActionLabel { label:"Delete" }
                     }
                 }
                 if !status.is_empty() {
@@ -2090,9 +2134,13 @@ fn SettingsSection(
                         }
                     }
                     let form = db_form.clone();
+                    let local_only = title == "Appearance";
                     saving.set(true);
                     spawn(async move {
                         let result = async {
+                            if local_only {
+                                return local_appearance::save(&values);
+                            }
                             let pool = connect(&form.database_config()?).await?;
                             pos_core::db::save_settings(&pool, &values).await
                         }.await;
@@ -2102,7 +2150,7 @@ fn SettingsSection(
                             Err(err) => { error.set(true); notice.set(format!("Could not save settings: {err:#}")); }
                         }
                     });
-                }, if saving() { "Saving..." } else { "Save Settings" } }
+                }, if saving() { "Saving..." } else { crate::icons::ActionLabel { label:"Save Settings" } } }
             }
             if !notice().is_empty() {
                 if error() {
@@ -2315,7 +2363,7 @@ fn ReceiptsPage(
         section { class: "receipts_page",
             div { class: "receipts_title panel",
                 div {
-                    strong { "Receipts" }
+                    strong { crate::icons::ActionLabel { label:"Receipts" } }
                     small { "Find a sale, review its items and payment details." }
                 }
             }
@@ -2355,6 +2403,7 @@ fn ReceiptsPage(
                         oninput: move |event| on_search.call(event.value())
                     }
                 }
+                button { hidden:true, "data-page-refresh":"true", tabindex:-1, aria_hidden:"true", disabled:status.starts_with("Loading"), onclick:move |event|on_refresh.call(event), "Refresh" }
                 button { class: "primary", onclick: move |event| on_refresh.call(event), "Apply filters" }
             }
 
@@ -2363,7 +2412,7 @@ fn ReceiptsPage(
                     button {
                         class: if active_tab == "receipts" { "active" } else { "" },
                         onclick: move |_| on_tab.call("receipts".to_string()),
-                        "Receipts"
+                        crate::icons::ActionLabel { label:"Receipts" }
                     }
                     button {
                         class: if active_tab == "refunded" { "active" } else { "" },
@@ -2526,7 +2575,7 @@ fn ReceiptDetailPanel(
                         strong { "{invoice}" }
                         small { "{created_at} · {customer} · {status}" }
                     }
-                    button { onclick: move |event| on_close.call(event), "Close" }
+                    button { onclick: move |event| on_close.call(event), crate::icons::ActionLabel { label:"Close" } }
                 }
                 div { class: "receipt_items_table",
                     div { class: "receipt_item_header",
@@ -2558,7 +2607,7 @@ fn ReceiptDetailPanel(
                         onclick: move |_| on_refund.call(sale_id),
                         "Refund"
                     }
-                    button { onclick: move |_| on_print.call(printable_detail.clone()), "Print Receipt" }
+                    button { onclick: move |_| on_print.call(printable_detail.clone()), crate::icons::ActionLabel { label:"Print Receipt" } }
                 }
             }
         }
@@ -2597,7 +2646,7 @@ fn ServicePriceDialog(
                         strong { "{product.name}" }
                         small { "Enter service price" }
                     }
-                    button { onclick: move |_| on_cancel.call(()), "×" }
+                    button { title:"Close",aria_label:"Close",onclick: move |_| on_cancel.call(()), icons::Icon {name:"close"} }
                 }
                 div { class: "service_body",
                     label { class: "service_price_field",
@@ -2700,7 +2749,7 @@ fn VariantDialog(
                         strong { "{product.name}" }
                         small { "Choose one variant" }
                     }
-                    button { onclick: move |event| on_cancel.call(event), "×" }
+                    button { title:"Close",aria_label:"Close",onclick: move |event| on_cancel.call(event), icons::Icon {name:"close"} }
                 }
                 div { class: "variant_list",
                     for variant in product.variants.iter().cloned() {
@@ -2712,7 +2761,7 @@ fn VariantDialog(
                     }
                 }
                 div { class: "variant_actions",
-                    button { onclick: move |event| on_cancel.call(event), "Cancel" }
+                    button { onclick: move |event| on_cancel.call(event), crate::icons::ActionLabel { label:"Cancel" } }
                     button {
                         class: "primary",
                         disabled: !selected_in_stock,
@@ -2848,9 +2897,7 @@ fn ReceiptDialog(
                     if !print_status.read().is_empty() {
                         small { class: "print_status", "{print_status}" }
                     }
-                    button { onclick: move |event| on_done.call(event), "Done" }
                     button {
-                        class: "primary",
                         onclick: move |_| {
                             let receipt=receipt.clone();
                             let settings=settings.clone();
@@ -2862,8 +2909,9 @@ fn ReceiptDialog(
                                 }
                             });
                         },
-                        "Print Receipt"
+                        crate::icons::ActionLabel { label:"Print Receipt" }
                     }
+                    button { class: "primary", onclick: move |event| on_done.call(event), crate::icons::ActionLabel { label:"Close" } }
                 }
             }
         }
@@ -3111,7 +3159,7 @@ fn DbSettingsDialog(
                     }
                 }
                 div { class: "dialog_actions",
-                    button { onclick: move |event| on_cancel.call(event), "Cancel" }
+                    button { onclick: move |event| on_cancel.call(event), crate::icons::ActionLabel { label:"Cancel" } }
                     button {
                         class: "primary",
                         onclick: move |_| on_save.call(draft.read().clone()),
@@ -3236,30 +3284,21 @@ async fn load_cached_product_image(form: DbForm, id: i32) -> anyhow::Result<Opti
 #[component]
 fn CatalogImage(id: i32, name: String) -> Element {
     let source = use_context::<Signal<DbForm>>();
-    let image = use_resource(move || {
-        let form = source.read().clone();
-        async move { load_cached_product_image(form, id).await }
-    });
+    let form = source.read().clone();
+    let image = use_resource(use_reactive((&id, &form), move |(id, form)| async move {
+        let result = load_cached_product_image(form.clone(), id).await;
+        (id, form, result)
+    }));
     let state = image.read();
     match state.as_ref() {
-        Some(Ok(Some(url))) => rsx! { img { src: "{url}", alt: "{name}", loading: "lazy" } },
-        Some(Err(_)) => rsx! { span { title: "Image could not be loaded", "KAY" } },
+        Some((loaded_id, loaded_form, Ok(Some(url)))) if *loaded_id == id && *loaded_form == form => rsx! { img { key: "{id}", src: "{url}", alt: "{name}", loading: "lazy" } },
+        Some((loaded_id, loaded_form, Err(_))) if *loaded_id == id && *loaded_form == form => rsx! { span { title: "Image could not be loaded", "KAY" } },
         _ => rsx! { span { "KAY" } },
     }
 }
 
 #[component]
 fn ProductCard(product: Product, on_add: EventHandler<MouseEvent>) -> Element {
-    let source = use_context::<Signal<DbForm>>();
-    let id = product.id;
-    let image = use_resource(move || {
-        let form = source.read().clone();
-        async move { load_cached_product_image(form, id).await.ok().flatten() }
-    });
-    let image_url = product
-        .image_data_url
-        .clone()
-        .or_else(|| image.read().as_ref().cloned().flatten());
     let category = product
         .category_name
         .clone()
@@ -3288,10 +3327,10 @@ fn ProductCard(product: Product, on_add: EventHandler<MouseEvent>) -> Element {
             disabled: out_of_stock,
             onclick: move |event| on_add.call(event),
             div { class: "product_image",
-                if let Some(url) = image_url {
-                    img { src: "{url}", alt: "{product.name}", loading: "lazy" }
+                if let Some(url) = &product.image_data_url {
+                    img { key: "{product.id}", src: "{url}", alt: "{product.name}", loading: "lazy" }
                 } else {
-                    span { "KAY" }
+                    CatalogImage { key: "{product.id}", id: product.id, name: product.name.clone() }
                 }
                 if service {
                     em { class: "product_badge", "Service" }
@@ -3384,6 +3423,36 @@ fn add_variant_to_cart(
             lines.push(candidate);
         }
     }
+}
+
+fn refresh_cart_stock(lines: &mut [CartLine], catalog: &[Product]) {
+    // Refresh availability only; keep the cashier's quantities and quoted prices.
+    for line in lines {
+        let product = catalog.iter().find(|p| p.id == line.product.id);
+        line.product.stock = product.map_or(0.0, |p| p.stock);
+        if let Some(variant) = line.variant.as_mut() {
+            variant.stock = product.and_then(|p| p.variants.iter().find(|v| v.variant_id == variant.variant_id)).map_or(0.0, |v| v.stock);
+        }
+    }
+}
+
+#[test]
+fn refreshed_variant_availability_preserves_cart_and_prices() {
+    let product: Product = serde_json::from_value(serde_json::json!({
+        "id":1,"name":"Variant product","price":4000.0,"cost":3000.0,"stock":40.0,"low_stock":0.0,
+        "sold_by":"Variants","variants":[{"variant_id":2,"product_id":1,"price":4000.0,"cost":3000.0,"stock":0.0,"low_stock":0.0,"wholesale_min_qty":0,"wholesale_price":0.0}],"price_tiers":[]
+    })).unwrap();
+    let mut lines=vec![CartLine { product:product.clone(),variant:Some(product.variants[0].clone()),qty:1.0,unit_price_override:Some(3900.0) }];
+    let mut fresh=product;
+    fresh.stock=86.0;fresh.variants[0].stock=46.0;fresh.variants[0].price=4500.0;
+    refresh_cart_stock(&mut lines,&[fresh]);
+    assert_eq!(lines[0].variant.as_ref().unwrap().stock,46.0);
+    assert_eq!(lines[0].variant.as_ref().unwrap().price,4000.0);
+    assert_eq!(lines[0].qty,1.0);
+    assert_eq!(lines[0].unit_price_override,Some(3900.0));
+    assert!(can_increase_line(&lines[0]));
+    refresh_cart_stock(&mut lines,&[]);
+    assert!(!can_increase_line(&lines[0]));
 }
 
 fn remove_from_cart(cart: &mut Signal<Vec<CartLine>>, index: usize) {
@@ -3617,21 +3686,7 @@ fn format_receipt_datetime(value: chrono::NaiveDateTime) -> String {
 }
 
 fn format_ks(value: f64) -> String {
-    let rounded = value.round() as i64;
-    let chars = rounded.abs().to_string().chars().rev().collect::<Vec<_>>();
-    let mut grouped = String::new();
-    for index in 0..chars.len() {
-        if index > 0 && index % 3 == 0 {
-            grouped.push(',');
-        }
-        grouped.push(chars[index]);
-    }
-    let formatted = grouped.chars().rev().collect::<String>();
-    if rounded < 0 {
-        format!("-{formatted} Ks")
-    } else {
-        format!("{formatted} Ks")
-    }
+    regional::current().format(value)
 }
 
 fn category_tone(id: Option<i32>, name: &str) -> usize {

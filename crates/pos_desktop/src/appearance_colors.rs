@@ -171,7 +171,7 @@ pub fn ColorPreferences(
                 div { class: "shop_preview_header", "KAY POS" }
                 div { class: "shop_preview_sidebar", "Side menu" }
                 div { class: "shop_preview_buttons",
-                    button { r#type: "button", class: "shop_preview_primary", "Save" }
+                    button { r#type: "button", class: "shop_preview_primary", crate::icons::ActionLabel { label:"Save" } }
                     button { r#type: "button", class: "shop_preview_hover", "Hover" }
                     span { class: "shop_preview_category", "Selected category" }
                     span { class: "shop_preview_product", "Product hover" }

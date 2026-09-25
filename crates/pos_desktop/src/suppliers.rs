@@ -59,10 +59,11 @@ pub fn SuppliersPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
     let current = page().min(pages - 1);
     rsx! {
         section { class: "customers_page customers_touch suppliers_touch",
+            button { hidden:true, "data-page-refresh":"true", disabled:!loaded.finished(), onclick:move |_|loaded.restart() }
             header { class: "customers_header customers_touch_header",
-                h2 { "Suppliers" }
+                h2 { crate::icons::ActionLabel { label:"Suppliers" } }
                 div { class: "customers_actions",
-                    button { class: "customer_primary", onclick: move |_| editor.set(Some(Supplier { status: "Active".into(), ..Default::default() })), "+ Add supplier" }
+                    button { class: "customer_primary", onclick: move |_| editor.set(Some(Supplier { status: "Active".into(), ..Default::default() })), crate::icons::ActionLabel { label:"+ Add supplier" } }
                 }
             }
             div { class: "customers_touch_search",
@@ -146,7 +147,7 @@ fn SupplierEditor(
                     label { "Status" select { value: "{form().status}", disabled: saving(), onchange: move |event|form.write().status=event.value(), option { "Active" } option { "Inactive" } } }
                 }
                 div { class: "customers_actions",
-                    button { disabled: saving(), onclick: move |_|on_close.call(()), "Cancel" }
+                    button { disabled: saving(), onclick: move |_|on_close.call(()), crate::icons::ActionLabel { label:"Cancel" } }
                     button { class: "customer_primary", disabled: saving() || form().name.trim().is_empty(), onclick: move |_| {
                         if saving() { return; } let supplier=form(); let source=db_form.clone(); saving.set(true);
                         spawn(async move {

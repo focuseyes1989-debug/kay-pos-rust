@@ -1,6 +1,48 @@
 use anyhow::{Context, Result};
 use dioxus::prelude::*;
 use std::{path::Path, time::Duration};
+use std::sync::{Arc, Mutex};
+
+#[derive(Clone, Debug, PartialEq)]
+enum InstallProgress {
+    Preparing,
+    Downloading(u64, Option<u64>),
+    Verifying,
+    Installing,
+}
+impl InstallProgress {
+    fn label(&self) -> &'static str {
+        match self {
+            Self::Preparing => "Preparing update...",
+            Self::Downloading(..) => "Downloading...",
+            Self::Verifying => "Verifying update...",
+            Self::Installing => "Installing...",
+        }
+    }
+    fn percent(&self) -> Option<f64> {
+        match self {
+            Self::Downloading(bytes, Some(total)) if *total > 0 =>
+                Some((*bytes as f64 / *total as f64 * 100.0).min(100.0)),
+            _ => None,
+        }
+    }
+    fn detail(&self) -> String {
+        match self {
+            Self::Downloading(bytes, total) => {
+                let downloaded = *bytes as f64 / 1_048_576.0;
+                match total.filter(|total| *total > 0) {
+                    Some(total) => format!("{:.0}%  |  {downloaded:.1} / {:.1} MB", self.percent().unwrap_or(0.0), total as f64 / 1_048_576.0),
+                    None => format!("{downloaded:.1} MB downloaded"),
+                }
+            }
+            _ => self.label().into(),
+        }
+    }
+}
+type ProgressState = Arc<Mutex<InstallProgress>>;
+fn report(progress: &ProgressState, value: InstallProgress) {
+    *progress.lock().unwrap_or_else(|e| e.into_inner()) = value;
+}
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 const OWNER: &str = "focuseyes1989-debug";
@@ -95,7 +137,7 @@ fn verify_binary(path: &Path, version: &str) -> Result<()> {
     }
 }
 
-fn install(version: &str) -> Result<std::path::PathBuf> {
+fn install(version: &str, progress: ProgressState) -> Result<std::path::PathBuf> {
     anyhow::ensure!(
         !cfg!(debug_assertions),
         "Install updates from a release build only"
@@ -116,6 +158,8 @@ fn install(version: &str) -> Result<std::path::PathBuf> {
         .context("Cannot create an executable backup. Use a writable installation folder.")?;
     let expected = asset_name(version);
     let version = version.to_string();
+    let download_progress = progress.clone();
+    let archive_progress = progress.clone();
     let mut config = builder();
     config
         .release_tag(format!("v{version}"))
@@ -125,9 +169,21 @@ fn install(version: &str) -> Result<std::path::PathBuf> {
                 .find(|asset| asset.name() == expected)
                 .cloned()
         })
+        .progress_callback(move |bytes, total| {
+            report(&download_progress, if total.is_some_and(|size| size > 0 && bytes >= size) {
+                InstallProgress::Verifying
+            } else { InstallProgress::Downloading(bytes, total) });
+        })
+        .verify_archive(move |_| {
+            report(&archive_progress, InstallProgress::Verifying);
+            Ok(())
+        })
         .verify_binary(move |path| {
+            report(&progress, InstallProgress::Verifying);
             verify_binary(path, &version)
-                .map_err(|e| self_update::Error::verification_rejected(format!("{e:#}")))
+                .map_err(|e| self_update::Error::verification_rejected(format!("{e:#}")))?;
+            report(&progress, InstallProgress::Installing);
+            Ok(())
         });
     config.build()?.update()?;
     Ok(executable)
@@ -144,13 +200,55 @@ pub fn UpdatePanel(allow_install: bool, mut busy: Signal<bool>) -> Element {
     let mut version = use_signal(|| None::<String>);
     let mut status = use_signal(String::new);
     let mut installed = use_signal(|| None::<std::path::PathBuf>);
+    let mut progress = use_signal(|| None::<InstallProgress>);
+    let mut checking = use_signal(|| false);
+    let mut restarting = use_signal(|| false);
+    let button_label = if restarting() { "Restarting..." }
+        else if installed().is_some() { "Restart KAY POS" }
+        else if let Some(value) = progress() { value.label() }
+        else if checking() { "Checking..." }
+        else if allow_install && version().is_some() { "Download & Install" }
+        else { "Check for Updates" };
     rsx! {
         section { class: "app_updates",
             strong { "KAY POS {VERSION}" }
             div { class: "app_update_actions",
-                button { r#type: "button", disabled: busy(), onclick: move |_| {
+                button { class: "primary update_check", r#type: "button",
+                    disabled: restarting() || (busy() && installed().is_none()),
+                    "aria-busy": checking() || progress().is_some() || restarting(),
+                    onclick: move |_| {
+                    if restarting() { return; }
+                    if let Some(path) = installed() {
+                        restarting.set(true);
+                        match std::process::Command::new(&path).spawn() {
+                            Ok(_) => dioxus_desktop::window().close(),
+                            Err(e) => { restarting.set(false); status.set(format!("Restart failed: {e}. Close and reopen KAY POS.")); }
+                        }
+                        return;
+                    }
                     if busy() { return; }
-                    busy.set(true); version.set(None); status.set("Checking for updates...".into());
+                    if let Some(next) = version().filter(|_| allow_install) {
+                        busy.set(true); status.set(String::new()); progress.set(Some(InstallProgress::Preparing));
+                        spawn(async move {
+                            let shared = Arc::new(Mutex::new(InstallProgress::Preparing));
+                            let worker_progress = shared.clone();
+                            let task = tokio::task::spawn_blocking(move || install(&next, worker_progress));
+                            // Coalesce download callbacks so fast transfers cannot flood the UI.
+                            while !task.is_finished() {
+                                let current = shared.lock().unwrap_or_else(|e| e.into_inner()).clone();
+                                if progress.peek().as_ref() != Some(&current) { progress.set(Some(current)); }
+                                tokio::time::sleep(Duration::from_millis(100)).await;
+                            }
+                            progress.set(None);
+                            match task.await {
+                                Ok(Ok(path)) => { installed.set(Some(path)); status.set("Update installed. Restart to continue.".into()); }
+                                Ok(Err(e)) => { status.set(format!("Update failed: {e:#}")); busy.set(false); }
+                                Err(e) => { status.set(format!("Update failed: {e}")); busy.set(false); }
+                            }
+                        });
+                        return;
+                    }
+                    busy.set(true); checking.set(true); version.set(None); status.set(String::new());
                     spawn(async move {
                         let result = tokio::task::spawn_blocking(check).await;
                         match result {
@@ -159,34 +257,17 @@ pub fn UpdatePanel(allow_install: bool, mut busy: Signal<bool>) -> Element {
                             Ok(Err(e)) => status.set(format!("Update check failed: {e:#}. You can continue using this version.")),
                             Err(e) => status.set(format!("Update check failed: {e}")),
                         }
-                        busy.set(false);
+                        checking.set(false); busy.set(false);
                     });
-                }, "Check for Updates" }
-                if let Some(next) = version() {
-                    if allow_install {
-                        button { r#type: "button", disabled: busy(), onclick: move |_| {
-                            if busy() { return; }
-                            let next=next.clone(); busy.set(true); status.set("Downloading and verifying update...".into());
-                            spawn(async move {
-                                match tokio::task::spawn_blocking(move || install(&next)).await {
-                                    Ok(Ok(path)) => { installed.set(Some(path)); status.set("Update installed. Restart to continue.".into()); }
-                                    Ok(Err(e)) => { status.set(format!("Update failed: {e:#}")); busy.set(false); }
-                                    Err(e) => { status.set(format!("Update failed: {e}")); busy.set(false); }
-                                }
-                            });
-                        }, "Download & Install" }
-                    } else { span { "Sign out to install this update." } }
-                }
-                if let Some(path) = installed() {
-                    button { r#type: "button", onclick: move |_| {
-                        let result = std::process::Command::new(&path).spawn();
-                        match result {
-                            Ok(_) => dioxus_desktop::window().close(),
-                            Err(e) => status.set(format!("Restart failed: {e}. Close and reopen KAY POS.")),
-                        }
-                    }, "Restart KAY POS" }
+                }, crate::icons::ActionLabel {label:button_label} }
+            }
+            if let Some(value) = progress() {
+                div { class: "app_update_progress",
+                    progress { max: "100", value: value.percent().map(|v| v.to_string()), aria_label: value.label() }
+                    small { "{value.detail()}" }
                 }
             }
+            if !allow_install && version().is_some() { p { "Sign out to install this update." } }
             if !status().is_empty() { p { role: "status", "{status}" } }
         }
     }
@@ -195,6 +276,18 @@ pub fn UpdatePanel(allow_install: bool, mut busy: Signal<bool>) -> Element {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn progress_is_byte_based_and_unknown_sizes_are_indeterminate() {
+        let progress = InstallProgress::Downloading(1_048_576, Some(4_194_304));
+        assert_eq!(progress.percent(), Some(25.0));
+        assert!(progress.detail().contains("1.0 / 4.0 MB"));
+        assert_eq!(InstallProgress::Downloading(20, Some(10)).percent(), Some(100.0));
+        assert_eq!(InstallProgress::Downloading(20, None).percent(), None);
+        assert_eq!(InstallProgress::Downloading(20, Some(0)).percent(), None);
+        for phase in [InstallProgress::Preparing, InstallProgress::Verifying, InstallProgress::Installing] {
+            assert_eq!(phase.percent(), None);
+        }
+    }
     #[test]
     #[ignore = "Requires a signed release package; uses only a local mock server and temporary executable"]
     fn staged_install_preserves_files_and_rejects_bad_signature() {

@@ -44,18 +44,19 @@ pub fn CustomersPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
     let current = page().min(pages - 1);
     rsx! {
         section { class: "customers_page customers_touch",
+            button { hidden:true, "data-page-refresh":"true", disabled:!loaded.finished(), onclick:move |_|loaded.restart() }
             header { class: "customers_header customers_touch_header",
-                div { small { class: "customer_eyebrow", "CUSTOMER MANAGEMENT" } h2 { "Customers" } }
+                div { small { class: "customer_eyebrow", "CUSTOMER MANAGEMENT" } h2 { crate::icons::ActionLabel { label:"Customers" } } }
                 div { class: "customers_actions",
-                    button { class: "customer_primary", onclick: move |_| editor.set(Some(Customer::default())), "+ Add customer" }
+                    button { class: "customer_primary", onclick: move |_| editor.set(Some(Customer::default())), crate::icons::ActionLabel { label:"+ Add customer" } }
                     div { class: "customer_more", onkeydown: move |event| { if event.key() == Key::Escape { more.set(false); } },
                         button { aria_expanded: more(), onclick: move |_| more.set(!more()), "More..." }
                         if more() {
                             div { class: "customer_menu_dismiss", onclick: move |_| more.set(false) }
                             div { class: "customer_more_menu",
-                                button { disabled: selected().is_none(), onclick: move |_| { more.set(false); editor.set(selected()); }, "Edit" }
+                                button { disabled: selected().is_none(), onclick: move |_| { more.set(false); editor.set(selected()); }, crate::icons::ActionLabel { label:"Edit" } }
                                 for label in ["Credit Sale", "Payment Collection", "Ledger", "Outstanding Report", "Delete"] {
-                                    button { disabled: label != "Outstanding Report" && selected().is_none(), onclick: move |_| { more.set(false); action.set(label.into()); }, "{label}" }
+                                    button { disabled: label != "Outstanding Report" && selected().is_none(), onclick: move |_| { more.set(false); action.set(label.into()); }, crate::icons::ActionLabel {label} }
                                 }
                                 button { disabled: exporting() || !matches!(state.as_ref(), Some(Ok(_))), onclick: {
                                     let rows = rows.clone();
@@ -69,7 +70,7 @@ pub fn CustomersPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
                                             exporting.set(false);
                                         });
                                     }
-                                }, "Export Excel" }
+                                }, crate::icons::ActionLabel { label:"Export Excel" } }
                             }
                         }
                     }
@@ -91,7 +92,7 @@ pub fn CustomersPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
             if !status().is_empty() { div { role: "status", class: "customers_notice", "{status}" } }
             div { class: "customers_touch_columns",
                 section { class: "customers_touch_list",
-                    h3 { "Customers" }
+                    h3 { crate::icons::ActionLabel { label:"Customers" } }
                     p { class: "customer_list_count", "{rows.len()} customers · Page {current + 1} of {pages}" }
                         for customer in rows.iter().skip(current * 25).take(25) {
                             button { key: "{customer.id}", class: if selected().as_ref().map(|c| c.id) == Some(customer.id) { "customer_list_item selected" } else { "customer_list_item" },
@@ -133,10 +134,10 @@ pub fn CustomersPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
                             div { dt { "Total spent" } dd { "{crate::format_ks(customer.total_spent)}" } }
                         }
                         div { class: "customer_detail_actions",
-                            button { onclick: move |_| action.set("Ledger".into()), "View ledger" }
+                            button { onclick: move |_| action.set("Ledger".into()), crate::icons::ActionLabel { label:"View ledger" } }
                             button { class: "customer_primary", onclick: move |_| action.set("Payment Collection".into()), "Payment Collection" }
-                            button { onclick: move |_| editor.set(selected()), "Edit" }
-                            button { class: "customer_delete_action", onclick: move |_| action.set("Delete".into()), "Delete" }
+                            button { onclick: move |_| editor.set(selected()), crate::icons::ActionLabel { label:"Edit" } }
+                            button { class: "customer_delete_action", onclick: move |_| action.set("Delete".into()), crate::icons::ActionLabel { label:"Delete" } }
                         }
                     } else {
                         p { class: "customer_detail_empty", "Select a customer to view details." }
@@ -348,7 +349,7 @@ fn CustomerAction(
                     }
                 }
                 div { class: "customers_actions",
-                    button { disabled: saving(), onclick: move |_| on_close.call(()), "Close" }
+                    button { disabled: saving(), onclick: move |_| on_close.call(()), crate::icons::ActionLabel { label:"Close" } }
                     if !report {
                         button { class: "customer_primary", disabled: saving() || !matches!(state.as_ref(),Some(Ok(_))), onclick: move |_| {
                             if saving() { return; }
@@ -369,7 +370,7 @@ fn CustomerAction(
                                 saving.set(false);
                                 match result { Ok(()) => on_saved.call(()), Err(err) => on_error.call(format!("{err:#}")) }
                             });
-                        }, if saving() { "Saving..." } else if action == "Delete" { "Delete Customer" } else { "Save" } }
+                        }, if saving() { "Saving..." } else if action == "Delete" { "Delete Customer" } else { crate::icons::ActionLabel { label:"Save" } } }
                     }
                 }
             }
@@ -405,7 +406,7 @@ fn CustomerEditor(
                     label { class: "customer_remarks", span { "Remarks" } textarea { value: "{form().remarks}", disabled: saving(), oninput: move |event| form.write().remarks = event.value() } }
                 }
                 div { class: "customers_actions",
-                    button { disabled: saving(), onclick: move |_| on_close.call(()), "Cancel" }
+                    button { disabled: saving(), onclick: move |_| on_close.call(()), crate::icons::ActionLabel { label:"Cancel" } }
                     button { class: "customer_primary", disabled: saving() || form().name.trim().is_empty(), onclick: move |_| {
                         let Ok(credit_limit) = limit().parse::<f64>() else { on_error.call("Enter a valid credit limit.".into()); return; };
                         if !credit_limit.is_finite() || credit_limit < 0.0 { on_error.call("Credit limit must be zero or greater.".into()); return; }

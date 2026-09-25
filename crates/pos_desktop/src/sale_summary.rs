@@ -65,7 +65,7 @@ pub fn SaleSummaryPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
     let expense_records: i64 = result.expenses.iter().map(|r| r.records).sum();
     let expense_amount: f64 = result.expenses.iter().map(|r| r.amount).sum();
     rsx! {section {class:"customers_page products_touch summary_touch",
-        header {class:"customers_header customers_touch_header",h2 {"Sale Summary"} div {class:"customers_actions",button {disabled:!data.finished(),onclick:move |_|data.restart(),"Refresh"}}}
+        header {class:"customers_header customers_touch_header",h2 {crate::icons::ActionLabel { label:"Sale Summary" }} div {class:"customers_actions",button { hidden:true, "data-page-refresh":"true", tabindex:-1, aria_hidden:"true",disabled:!data.finished(),onclick:move |_|data.restart(),"Refresh"}}}
         div {class:"summary_filters",
             label {"From" input {r#type:"date",value:"{from}",oninput:move |e|from.set(e.value())}}
             label {"To" input {r#type:"date",value:"{to}",oninput:move |e|to.set(e.value())}}
@@ -78,7 +78,7 @@ pub fn SaleSummaryPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
         else if let Some(Err(e))=state.as_ref(){p {role:"alert","{e}"}}
         else {
             div {class:"summary_metrics",
-                div {small {"Receipts"} strong {"{receipts}"}}
+                div {small {crate::icons::ActionLabel { label:"Receipts" }} strong {"{receipts}"}}
                 for (label,value) in [("Sales",sales),("Discount",discount),("Refunds",refunds),("Cost of goods",cost),("Gross profit",sales-cost)] {div {small {"{label}"} strong {{crate::format_ks(value)}}}}
             }
             if estimated>0 {p {class:"summary_warning","Estimated cost: {estimated} item lines use current product/variant cost."}}

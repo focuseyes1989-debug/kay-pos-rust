@@ -26,7 +26,15 @@ $info=Invoke-RestMethod $base -Headers $headers
 if ($info.private -or !$info.permissions.push) { throw 'Expected the public update repository with publisher access' }
 $existing=Invoke-RestMethod "$base/releases" -Headers $headers
 if ($existing | Where-Object tag_name -eq "v$Version") { throw 'This release already exists. Do not overwrite it.' }
-if ($info.size -eq 0) {
+$readmeExists = $true
+try {
+    Invoke-RestMethod "$base/contents/README.md" -Headers $headers | Out-Null
+} catch {
+    if ($_.Exception.Response -and [int]$_.Exception.Response.StatusCode -eq 404) {
+        $readmeExists = $false
+    } else { throw }
+}
+if (!$readmeExists) {
     $readme=@'
 # KAY POS Updates
 

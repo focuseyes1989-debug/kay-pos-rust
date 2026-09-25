@@ -28,6 +28,8 @@ pub struct PaymentType {
 pub struct Product {
     pub id: i32,
     pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
     pub category_id: Option<i32>,
     pub category_name: Option<String>,
     pub sku: Option<String>,

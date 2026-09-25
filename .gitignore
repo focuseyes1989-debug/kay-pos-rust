@@ -19,6 +19,7 @@ kay-pos-db.json
 !crates/pos_desktop/assets/update-public.key
 
 # Shop data and runtime output
+/scripts/correct-credit-invoices-*.sql
 /receipt_print/
 /pending/
 /database-backups/

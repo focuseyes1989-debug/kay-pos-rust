@@ -212,6 +212,7 @@ async fn search_products_with_images(
         SELECT
             p.id,
             p.name,
+            p.description,
             p.category_id,
             c.name AS category_name,
             p.sku,

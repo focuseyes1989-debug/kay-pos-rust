@@ -14,9 +14,25 @@ pub struct Movement {
     pub created_by: String,
     pub created_at: String,
     pub variant_id: Option<i32>,
+    pub notes: String,
+    pub variant_name: String,
+    pub batches: String,
 }
-pub async fn movements(pool: &PgPool, id: i32) -> Result<Vec<Movement>> {
-    Ok(sqlx::query_as("SELECT id,COALESCE(type,'') AS kind,COALESCE(quantity,0)::float8 AS quantity,COALESCE(old_stock,0)::float8 AS old_stock,COALESCE(new_stock,0)::float8 AS new_stock,COALESCE(location,'') AS location,COALESCE(reason,'') AS reason,COALESCE(reference,'') AS reference,COALESCE(created_by,'') AS created_by,COALESCE(created_at::text,'') AS created_at,variant_id FROM stock_movements WHERE product_id=$1 ORDER BY created_at DESC,id DESC").bind(id).fetch_all(pool).await?)
+pub async fn movements(pool: &PgPool, id: i32, limit: i64) -> Result<Vec<Movement>> {
+    Ok(sqlx::query_as("SELECT m.id,COALESCE(type,'') AS kind,COALESCE(quantity,0)::float8 AS quantity,COALESCE(old_stock,0)::float8 AS old_stock,COALESCE(new_stock,0)::float8 AS new_stock,COALESCE(location,'') AS location,COALESCE(reason,'') AS reason,COALESCE(reference,'') AS reference,COALESCE(created_by,'') AS created_by,COALESCE(created_at::text,'') AS created_at,variant_id,COALESCE(notes,'') AS notes,COALESCE((SELECT concat_ws(' / ',NULLIF(v.size,''),NULLIF(v.color,''),NULLIF(v.sku,'')) FROM product_variants v WHERE v.id=m.variant_id),'') AS variant_name,COALESCE((SELECT string_agg(concat(b.batch_no,' | ',CASE WHEN b.expiry_unknown=1 THEN 'Unknown expiry' ELSE COALESCE(NULLIF(b.expire_date,''),'No expiry') END,' | ',b.delta),'; ' ORDER BY b.batch_no,b.expire_date) FROM variant_batch_changes b WHERE b.movement_id=m.id),'') AS batches FROM stock_movements m WHERE product_id=$1 ORDER BY created_at DESC,m.id DESC LIMIT $2").bind(id).bind(limit.clamp(1,10001)).fetch_all(pool).await?)
+}
+
+// Show unallocated legacy stock before materializing its opening in a write transaction.
+const VARIANT_LOCATION_STOCK: &str = "SELECT (COALESCE(SUM(quantity) FILTER (WHERE location=$3),0) + CASE WHEN $3='Legacy / unassigned' THEN GREATEST(COALESCE((SELECT stock FROM product_variants WHERE product_id=$1 AND id=$2),0)-COALESCE(SUM(quantity),0),0) ELSE 0 END)::float8 FROM variant_stock_batches WHERE product_id=$1 AND variant_id=$2";
+
+pub async fn stock_location_names(pool: &PgPool, product: i32, variant: Option<i32>) -> Result<Vec<String>> {
+    let sql = if variant.is_some() { "SELECT DISTINCT location FROM variant_stock_batches WHERE product_id=$1 AND variant_id=$2 AND location IS NOT NULL UNION SELECT 'Legacy / unassigned' ORDER BY 1" } else { "SELECT DISTINCT location FROM product_locations WHERE product_id=$1 AND $2::integer IS NULL AND location IS NOT NULL ORDER BY 1" };
+    Ok(sqlx::query_scalar(sql).bind(product).bind(variant).fetch_all(pool).await?)
+}
+
+pub async fn location_stock(pool: &PgPool, product: i32, variant: Option<i32>, location: &str) -> Result<f64> {
+    let sql = if variant.is_some() { VARIANT_LOCATION_STOCK } else { "SELECT COALESCE(SUM(quantity),0)::float8 FROM product_locations WHERE product_id=$1 AND $2::integer IS NULL AND location=$3" };
+    Ok(sqlx::query_scalar(sql).bind(product).bind(variant).bind(location).fetch_one(pool).await?)
 }
 
 #[derive(Clone)]
@@ -34,6 +50,7 @@ pub struct Receipt {
     pub received_by: String,
     pub notes: String,
     pub expected_stock: f64,
+    pub expected_location_stock: Option<f64>,
 }
 impl Receipt {
     pub fn validate(&self) -> Result<()> {
@@ -54,7 +71,7 @@ impl Receipt {
     }
 }
 
-pub async fn change(pool: &PgPool, r: &Receipt, adjustment: bool) -> Result<()> {
+pub async fn change(pool: &PgPool, r: &Receipt, adjustment: bool, actor: &crate::auth::Session) -> Result<()> {
     ensure!(
         r.quantity >= 0 && (adjustment || r.quantity > 0),
         "Enter a valid quantity"
@@ -64,7 +81,8 @@ pub async fn change(pool: &PgPool, r: &Receipt, adjustment: bool) -> Result<()> 
         "Location and reason are required"
     );
     let mut tx = pool.begin().await?;
-    let (master,mode):(f64,String)=sqlx::query_as("SELECT COALESCE(stock,0)::float8,COALESCE(sold_by,'Each') FROM products WHERE id=$1 FOR UPDATE").bind(r.product_id).fetch_one(&mut *tx).await?;
+    actor.authorize(&mut tx, crate::auth::Permission::Manage).await?;
+    let (mut master,mode):(f64,String)=sqlx::query_as("SELECT COALESCE(stock,0)::float8,COALESCE(sold_by,'Each') FROM products WHERE id=$1 FOR UPDATE").bind(r.product_id).fetch_one(&mut *tx).await?;
     ensure!(
         master == r.expected_stock,
         "Stock changed. Refresh before saving"
@@ -84,18 +102,23 @@ pub async fn change(pool: &PgPool, r: &Receipt, adjustment: bool) -> Result<()> 
         .bind(r.product_id)
         .fetch_one(&mut *tx)
         .await?;
-        ensure!(sum == master, "Reconcile master and variant stock first");
+        ensure!(sum.is_finite() && sum >= 0.0, "Invalid variant total");
+        master = sum;
         sqlx::query_scalar::<_,f64>("SELECT COALESCE(stock,0)::float8 FROM product_variants WHERE id=$1 AND product_id=$2 AND COALESCE(active,1)=1 FOR UPDATE").bind(id).bind(r.product_id).fetch_one(&mut *tx).await?
     } else {
         master
     };
+    let location_sql = if r.variant_id.is_some() { VARIANT_LOCATION_STOCK } else { "SELECT COALESCE(SUM(quantity),0)::float8 FROM product_locations WHERE product_id=$1 AND $2::integer IS NULL AND location=$3" };
+    let at_location: f64 = sqlx::query_scalar(location_sql).bind(r.product_id).bind(r.variant_id).bind(r.location.trim()).fetch_one(&mut *tx).await?;
+    ensure!(r.expected_location_stock == Some(at_location), "Location stock changed. Refresh before saving");
     let delta = if adjustment {
-        f64::from(r.quantity) - old
+        f64::from(r.quantity) - at_location
     } else {
         -f64::from(r.quantity)
     };
+    ensure!(delta != 0.0, "No change: {} already has {} units. Select the location holding the stock", r.location.trim(), at_location);
     ensure!(
-        old + delta >= 0.0 && master + delta >= 0.0 && delta != 0.0,
+        old + delta >= 0.0 && master + delta >= 0.0,
         "Quantity must change stock without making it negative"
     );
     let table = if r.variant_id.is_some() {
@@ -114,13 +137,23 @@ pub async fn change(pool: &PgPool, r: &Receipt, adjustment: bool) -> Result<()> 
     .bind(r.product_id)
     .fetch_one(&mut *tx)
     .await?;
+    let invalid: bool = sqlx::query_scalar(&format!("SELECT EXISTS(SELECT 1 FROM {table} WHERE product_id=$1{variant_clause} AND (quantity IS NULL OR quantity<0))"))
+        .bind(r.product_id).fetch_one(&mut *tx).await?;
+    ensure!(!invalid && tracked.is_finite() && old.is_finite(), "Invalid batch stock. Review stock first");
+    if let Some(vid) = r.variant_id {
+        ensure!(tracked >= 0.0 && tracked <= old, "Variant batches exceed stock. Review stock first");
+        if tracked < old {
+            sqlx::query("INSERT INTO variant_stock_batches(product_id,variant_id,location,batch_no,expire_date,quantity,expiry_unknown) VALUES($1,$2,'Legacy / unassigned','LEGACY-OPENING','',$3,1) ON CONFLICT(product_id,variant_id,location,batch_no,expire_date) DO UPDATE SET quantity=variant_stock_batches.quantity+EXCLUDED.quantity,expiry_unknown=1")
+                .bind(r.product_id).bind(vid).bind((old-tracked) as i32).execute(&mut *tx).await?;
+        }
+    }
     ensure!(
-        tracked == old,
+        r.variant_id.is_some() || tracked == old,
         "Batch/location stock differs from total. Reconcile in Main POS first"
     );
     let mut changes: Vec<(String, String, f64, i32)> = vec![];
     if delta > 0.0 {
-        let batch = format!("ADJ-{}", chrono::Utc::now().format("%Y%m%d%H%M%S%f"));
+        let batch = crate::numbers::batch(&mut tx).await?;
         if let Some(vid) = r.variant_id {
             sqlx::query("INSERT INTO variant_stock_batches(product_id,variant_id,location,batch_no,expire_date,quantity,expiry_unknown) VALUES($1,$2,$3,$4,'',$5,1)").bind(r.product_id).bind(vid).bind(r.location.trim()).bind(&batch).bind(delta as i32).execute(&mut *tx).await?;
         } else {
@@ -156,6 +189,7 @@ pub async fn change(pool: &PgPool, r: &Receipt, adjustment: bool) -> Result<()> 
         }
     }
     if let Some(id) = r.variant_id {
+        ensure!((old + delta) <= i32::MAX as f64, "Variant quantity is too large");
         sqlx::query(
             "UPDATE product_variants SET stock=$1,updated_at=CURRENT_TIMESTAMP WHERE id=$2",
         )
@@ -169,7 +203,7 @@ pub async fn change(pool: &PgPool, r: &Receipt, adjustment: bool) -> Result<()> 
         .bind(r.product_id)
         .execute(&mut *tx)
         .await?;
-    let id:i32=sqlx::query_scalar("INSERT INTO stock_movements(product_id,variant_id,type,quantity,old_stock,new_stock,reason,reference,created_by,location,notes) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id").bind(r.product_id).bind(r.variant_id).bind(if adjustment{"adjustment"}else{"stock_out"}).bind(delta.abs()).bind(old).bind(old+delta).bind(&r.reason).bind(&r.reference).bind(if r.received_by.trim().is_empty(){"Rust POS"}else{r.received_by.trim()}).bind(r.location.trim()).bind(&r.notes).fetch_one(&mut *tx).await?;
+    let id:i32=sqlx::query_scalar("INSERT INTO stock_movements(product_id,variant_id,type,quantity,old_stock,new_stock,reason,reference,created_by,location,notes) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id").bind(r.product_id).bind(r.variant_id).bind(if adjustment{"adjustment"}else{"stock_out"}).bind(delta.abs()).bind(old).bind(old+delta).bind(&r.reason).bind(&r.reference).bind(actor.username()).bind(r.location.trim()).bind(&r.notes).fetch_one(&mut *tx).await?;
     if let Some(vid) = r.variant_id {
         for (batch, expiry, delta, unknown) in changes {
             sqlx::query("INSERT INTO variant_batch_changes(movement_id,product_id,variant_id,location,batch_no,expire_date,delta,expiry_unknown) VALUES($1,$2,$3,$4,$5,$6,$7,$8)").bind(id).bind(r.product_id).bind(vid).bind(r.location.trim()).bind(batch).bind(expiry).bind(delta as i32).bind(unknown).execute(&mut *tx).await?;
@@ -289,6 +323,7 @@ mod tests {
             received_by: String::new(),
             notes: String::new(),
             expected_stock: 0.0,
+            expected_location_stock: None,
         };
         assert!(r.validate().is_ok());
         r.quantity = 0;

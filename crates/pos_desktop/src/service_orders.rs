@@ -110,7 +110,7 @@ pub fn ServiceOrdersPage(db_form: DbForm) -> Element {
                         for (value,label) in [("","All statuses"),("pending","Pending"),("in_progress","In Progress"),("ready_for_pickup","Ready for Pickup"),("delivered","Delivered"),("cancelled","Cancelled")] {option {value,"{label}"}}
                     }
                     button {onclick:move |_|{applied.set(query());limit.set(100);},"Search"}
-                    button {disabled:busy(),onclick:move |_|{data.restart();revision+=1;},"Refresh"}
+                    button { hidden:true, "data-page-refresh":"true", tabindex:-1, aria_hidden:"true",disabled:busy(),onclick:move |_|{data.restart();revision+=1;},"Refresh"}
                 }
                 div {class:"service_job_messages",
                 if !notice().is_empty(){p {role:"status","{notice}"}}
@@ -147,7 +147,7 @@ pub fn ServiceOrdersPage(db_form: DbForm) -> Element {
                         let source=source.clone();busy.set(true);
                         spawn(async move{let result=async{jobs::reserve(&connect(&source.database_config()?).await?,&actor).await}.await;busy.set(false);match result{Ok(j)=>editor.set(Some((j,true))),Err(e)=>error.set(format!("{e:#}"))}});
                     }},"New"}
-                    button {disabled:busy()||current.as_ref().is_none_or(|j|matches!(j.status.as_str(),"delivered"|"cancelled")),onclick:{let j=current.clone();move |_|if let Some(j)=j.clone(){editor.set(Some((j,false)));}},"Edit"}
+                    button {disabled:busy()||current.as_ref().is_none_or(|j|matches!(j.status.as_str(),"delivered"|"cancelled")),onclick:{let j=current.clone();move |_|if let Some(j)=j.clone(){editor.set(Some((j,false)));}},crate::icons::ActionLabel { label:"Edit" }}
                     button {class:"customer_primary",disabled:busy()||current.as_ref().is_none_or(|j|!Action::Complete.allowed(&j.status)),
                         onclick:{let j=current.clone();move |_|if let Some(j)=j.clone(){confirmation.set(Some((j,Action::Complete)));}},"Complete"}
                 }
@@ -240,7 +240,7 @@ fn JobEditor(
         }
         if !error().is_empty(){p {role:"alert","{error}"}}
         div {class:"service_dialog_actions",
-            button {disabled:saving(),onclick:move |_|on_close.call(()),"Cancel"}
+            button {disabled:saving(),onclick:move |_|on_close.call(()),crate::icons::ActionLabel { label:"Cancel" }}
             button {class:"customer_primary",disabled:saving(),onclick:move |_|{
                 if saving(){return;}
                 let Some(actor)=session.read().clone() else{return;};
@@ -327,7 +327,7 @@ fn PromptLibrary(db_form: DbForm, job: Option<Job>) -> Element {
             input {aria_label:"Search prompts",placeholder:"Search prompts",value:query(),oninput:move |e|query.set(e.value())}
             select {aria_label:"Prompt category",value:category(),onchange:move |e|category.set(e.value()),option {value:"","All categories"} for c in categories {option {value:c.clone(),"{c}"}}}
             label {class:"service_check",input {r#type:"checkbox",checked:inactive(),onchange:move |e|inactive.set(e.checked())} "Include inactive"}
-            button {disabled:loading(),onclick:move |_|{data.restart();selected.set(None);},"Refresh"}
+            button { hidden:true, "data-page-refresh":"true", tabindex:-1, aria_hidden:"true",disabled:loading(),onclick:move |_|{data.restart();selected.set(None);},"Refresh"}
         }
         div {class:"service_prompt_messages",
         if let Some(Err(e))=data.read().as_ref(){p {role:"alert","{e}"}}
@@ -368,7 +368,7 @@ fn PromptLibrary(db_form: DbForm, job: Option<Job>) -> Element {
                 }
                 if let Some(prompt)=selected(){
                     div {class:"service_job_actions service_prompt_footer",
-                        button {onclick:{let p=prompt.clone();move |_|editor.set(Some(p.clone()))},"Edit"}
+                        button {onclick:{let p=prompt.clone();move |_|editor.set(Some(p.clone()))},crate::icons::ActionLabel { label:"Edit" }}
                         button {onclick:{let text=prompt.prompt_text.clone();move |_|{let text=text.clone();spawn(async move{match copy_text(text).await{Ok(())=>notice.set("Prompt copied".into()),Err(e)=>error.set(e)}});}},"Copy Prompt"}
                         if let Some(j)=job.clone(){
                             button {class:"customer_primary",title:"Copy prompt with selected job details",onclick:{let text=jobs::render_prompt(&prompt.prompt_text,&j);move |_|{let text=text.clone();spawn(async move{match copy_text(text).await{Ok(())=>notice.set("Job prompt copied".into()),Err(e)=>error.set(e)}});}},"Copy for Selected Job"}
@@ -491,12 +491,12 @@ fn PromptEditor(
         }
         }
         if !error().is_empty(){p {role:"alert","{error}"}}
-        div {class:"service_dialog_actions",button {disabled:busy()||image_busy(),onclick:move |_|on_close.call(()),"Cancel"}
+        div {class:"service_dialog_actions",button {disabled:busy()||image_busy(),onclick:move |_|on_close.call(()),crate::icons::ActionLabel { label:"Cancel" }}
             button {class:"customer_primary",disabled:busy()||image_busy(),onclick:move |_|{
                 if busy(){return;}let Some(actor)=session.read().clone() else{return;};let p=form();
                 if let Err(e)=jobs::validate_prompt(&p){error.set(e.to_string());return;}
                 let source=db_form.clone();busy.set(true);spawn(async move{let result=async{jobs::save_prompt(&connect(&source.database_config()?).await?,&actor,&p).await}.await;busy.set(false);match result{Ok(())=>on_saved.call(()),Err(e)=>error.set(format!("{e:#}"))}});
-            },if busy(){"Saving..."}else{"Save Prompt"}}
+            },if busy(){"Saving..."}else{crate::icons::ActionLabel { label:"Save Prompt" }}}
         }
     }}}
 }

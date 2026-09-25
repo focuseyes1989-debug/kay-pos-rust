@@ -29,6 +29,10 @@ The first updater-enabled baseline is 0.2.0 and needs one manual installation on
 
 ## Signing key
 
+Version 0.2.6 establishes another signing-key baseline after the 0.2.4/0.2.5 private key could not be recovered. Install 0.2.6 manually on existing clients, preserving configuration and pending files. The current key has a restricted-access Desktop backup in `KAY POS Signing Key Backup`; also keep an offline backup. Do not distribute private keys.
+
+Version 0.2.4 is a new signing-key baseline after the previous private key was lost. Clients on 0.2.0 through 0.2.3 require one manual EXE replacement from the official release. Never disable signature checks to bridge this change. Subsequent compatible releases use the new key. Preserve a secure offline backup of the new private key before distributing further updates.
+
 The public key is embedded from `crates/pos_desktop/assets/update-public.key`.
 The private key is outside the repository at `%LOCALAPPDATA%/KAY POS Release Keys/release.key`, with restricted directory ACLs. Back it up securely offline. Never upload it, include it in a client package, or silently regenerate it: existing clients will reject a different key.
 

@@ -54,7 +54,7 @@ pub fn LocationsPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
     let end = (start + 50).min(filtered.len());
     rsx! {
         section {class:"customers_page products_touch locations_touch",
-            header {class:"customers_header customers_touch_header",h2 {"Locations"}
+            header {class:"customers_header customers_touch_header",h2 {crate::icons::ActionLabel { label:"Locations" }}
                 div {class:"customers_actions",button {class:"customer_primary",onclick:move |_|editor.set(Some(Location::default())),"Add location"}}
             }
             div {class:"receipt_tabs location_tabs",role:"tablist",
@@ -71,8 +71,8 @@ pub fn LocationsPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
             }
             section {class:"products_items",
                 header {class:"products_items_header",h3 {if manage(){"Manage locations"}else{"Products & stock"}}
-                    if manage() {button {disabled:!data.finished(),onclick:move |_|data.restart(),"Refresh"}}
-                    else if data.finished() {small {{format!("{}-{} of {} stock records",if filtered.is_empty(){0}else{start+1},end,filtered.len())}}}
+                    button { hidden:true, "data-page-refresh":"true", tabindex:-1, aria_hidden:"true",disabled:!data.finished(),onclick:move |_|data.restart(),"Refresh"}
+                    if !manage() && data.finished() {small {{format!("{}-{} of {} stock records",if filtered.is_empty(){0}else{start+1},end,filtered.len())}}}
                 }
                 div {class:"products_manage_list",
                     if !data.finished() {div {class:"product_loading",role:"status",span {class:"loading_spinner"} strong {"Loading..."}}}
@@ -81,7 +81,7 @@ pub fn LocationsPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
                         if locations.is_empty() {p {"No locations found."}}
                         for location in &locations {
                             article {class:"location_stock_row",key:"{location.id}",div {strong {"{location.name}"} small {{format!("{} stock records",stock.iter().filter(|s|s.location.trim().eq_ignore_ascii_case(location.name.trim())).count())}}}
-                                div {class:"customers_actions",button {onclick:{let l=location.clone();move |_|editor.set(Some(l.clone()))},"Edit"} button {class:"product_delete",onclick:{let l=location.clone();move |_|deletion.set(Some(l.clone()))},"Delete"}}
+                                div {class:"customers_actions",button {onclick:{let l=location.clone();move |_|editor.set(Some(l.clone()))},crate::icons::ActionLabel { label:"Edit" }} button {class:"product_delete",onclick:{let l=location.clone();move |_|deletion.set(Some(l.clone()))},crate::icons::ActionLabel { label:"Delete" }}}
                             }
                         }
                     } else {
@@ -98,8 +98,8 @@ pub fn LocationsPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
         }
         if let Some(location)=editor() {LocationEditor {location,db_form:db_form.clone(),on_close:move |_|editor.set(None),on_saved:move |_|{editor.set(None);data.restart();},on_error:move |e|error.set(e)}}
         if let Some(location)=deletion() {div {class:"modal_backdrop",section {class:"customer_dialog",role:"dialog",aria_modal:"true",aria_label:"Delete location",h2 {"Delete location?"} p {"{location.name}"}
-            div {class:"customers_actions",button {disabled:busy(),onclick:move |_|deletion.set(None),"Cancel"}
-                button {class:"product_delete",disabled:busy(),onclick:move |_|{if busy(){return;}busy.set(true);let l=location.clone();let source=db_form.clone();spawn(async move {let result=async {locations::save(&connect(&source.database_config()?).await?,&l,true).await}.await;busy.set(false);match result {Ok(())=>{deletion.set(None);data.restart();},Err(e)=>error.set(format!("{e:#}"))}});},"Delete"}
+            div {class:"customers_actions",button {disabled:busy(),onclick:move |_|deletion.set(None),crate::icons::ActionLabel { label:"Cancel" }}
+                button {class:"product_delete",disabled:busy(),onclick:move |_|{if busy(){return;}busy.set(true);let l=location.clone();let source=db_form.clone();spawn(async move {let result=async {locations::save(&connect(&source.database_config()?).await?,&l,true).await}.await;busy.set(false);match result {Ok(())=>{deletion.set(None);data.restart();},Err(e)=>error.set(format!("{e:#}"))}});},crate::icons::ActionLabel { label:"Delete" }}
             }
         }}}
         if !error().is_empty() {MessageBox {title:"Location Error".to_string(),message:error(),on_close:move |_|error.set(String::new())}}
@@ -119,7 +119,7 @@ fn LocationEditor(
     rsx! {div {class:"modal_backdrop",section {class:"customer_dialog",role:"dialog",aria_modal:"true",aria_label:"Location",
         h2 {if location.id==0 {"Add location"}else{"Edit location"}}
         div {class:"customer_form",label {"Location name" input {value:"{name}",disabled:busy(),oninput:move |e|name.set(e.value()),onmounted:move |e|async move {let _=e.set_focus(true).await;}}}}
-        div {class:"customers_actions",button {disabled:busy(),onclick:move |_|on_close.call(()),"Cancel"}
+        div {class:"customers_actions",button {disabled:busy(),onclick:move |_|on_close.call(()),crate::icons::ActionLabel { label:"Cancel" }}
             button {class:"customer_primary",disabled:busy()||name().trim().is_empty(),onclick:move |_|{if busy(){return;}busy.set(true);let l=Location {id:location.id,name:name()};let source=db_form.clone();spawn(async move {let result=async {locations::save(&connect(&source.database_config()?).await?,&l,false).await}.await;busy.set(false);match result {Ok(())=>on_saved.call(()),Err(e)=>on_error.call(format!("{e:#}"))}});},if busy(){"Saving..."}else{"Save location"}}
         }
     }}}
