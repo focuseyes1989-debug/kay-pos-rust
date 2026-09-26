@@ -1,7 +1,7 @@
 param([Parameter(Mandatory=$true)][ValidatePattern('^\d+\.\d+\.\d+$')][string]$Version, [string]$NotesFile, [switch]$Publish)
 $ErrorActionPreference = 'Stop'
 if ($Version -ne '0.2.0' -and !$NotesFile) { throw 'Provide release notes for this version using -NotesFile.' }
-if ($NotesFile) { $customNotes = Get-Content -LiteralPath $NotesFile -Raw }
+if ($NotesFile) { $customNotes = [IO.File]::ReadAllText((Resolve-Path -LiteralPath $NotesFile)) }
 $repo = 'focuseyes1989-debug/kay-pos-updates'
 $root = Split-Path $PSScriptRoot -Parent
 $name = "kay-pos-$Version-x86_64-pc-windows-msvc.zip"
