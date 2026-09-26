@@ -5,6 +5,23 @@ use pos_core::{
 };
 use sqlx::{postgres::PgPoolOptions, PgPool};
 
+#[tokio::test]
+#[ignore="requires isolated P1_TEST_DATABASE_URL"]
+async fn customer_contact_updates_notifications_and_audit()->Result<()>{
+    anyhow::ensure!(std::env::var("P1_TEST_DATABASE_URL")?.contains("127.0.0.1:55487/"),"Isolated test database required");
+    let(pool,cashier,_)=fixture().await?;
+    let mut job=jobs::reserve(&pool,&cashier).await?;job.job_title="Print job".into();job.customer_name="Customer".into();job.customer_phone="09123456789".into();
+    jobs::save(&pool,&cashier,&job,true).await?;jobs::save(&pool,&cashier,&job,true).await?;
+    let old=reload(&pool,job.id).await?;assert_eq!(old.customer_phone,"09123456789");
+    let mut edited=old.clone();edited.customer_phone="09987654321".into();jobs::save(&pool,&cashier,&edited,false).await?;
+    assert!(jobs::save(&pool,&cashier,&old,false).await.is_err());
+    assert_eq!(jobs::list(&pool,"09987654321","",100).await?.len(),1);
+    let current=reload(&pool,job.id).await?;jobs::act(&pool,&cashier,&current,Action::Complete,"Ready").await?;
+    assert_eq!(sqlx::query_scalar::<_,String>("SELECT recipient FROM service_order_notifications").fetch_one(&pool).await?,"09987654321");
+    assert_eq!(sqlx::query_scalar::<_,i64>("SELECT COUNT(*) FROM user_activity_log").fetch_one(&pool).await?,3);
+    pool.close().await;Ok(())
+}
+
 async fn fixture() -> Result<(PgPool, Session, Session)> {
     let url = std::env::var("P1_TEST_DATABASE_URL")?;
     let bootstrap = PgPoolOptions::new()

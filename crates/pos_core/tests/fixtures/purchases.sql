@@ -1,0 +1,10 @@
+ALTER TABLE products ADD COLUMN name text DEFAULT 'Test product', ADD COLUMN sku text;
+ALTER TABLE product_variants ADD COLUMN cost float8 DEFAULT 0, ADD COLUMN size text, ADD COLUMN color text, ADD COLUMN sku text;
+ALTER TABLE stock_movements ADD COLUMN supplier_id int;
+CREATE TABLE suppliers(id serial PRIMARY KEY,name text NOT NULL,status text DEFAULT 'Active');
+CREATE TABLE locations(id serial PRIMARY KEY,name text UNIQUE);
+INSERT INTO suppliers(id,name) VALUES(1,'Test supplier'),(2,'Other supplier');
+INSERT INTO locations(name) VALUES('Shop'),('Store');
+CREATE TABLE purchase_orders(id serial PRIMARY KEY,po_no text UNIQUE,supplier_id int REFERENCES suppliers(id),order_date text,total_amount float8,status text DEFAULT 'pending',discount float8 DEFAULT 0,tax float8 DEFAULT 0,payment_status text DEFAULT 'Unpaid',received_by text,invoice_attachment text,notes text,created_at timestamp DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE purchase_order_items(id serial PRIMARY KEY,po_id int REFERENCES purchase_orders(id),product_id int,quantity float8,unit_price float8,total float8);
+CREATE TABLE supplier_payments(id serial PRIMARY KEY,supplier_id int REFERENCES suppliers(id),amount float8 NOT NULL,payment_date text NOT NULL,reference_no text,payment_type text,notes text,purchase_order_id int REFERENCES purchase_orders(id),created_at timestamp DEFAULT CURRENT_TIMESTAMP);

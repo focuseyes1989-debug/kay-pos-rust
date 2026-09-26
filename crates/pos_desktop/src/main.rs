@@ -14,6 +14,12 @@ mod categories;
 mod customer_display;
 mod customers;
 mod expenses;
+mod expense_management;
+mod discounts;
+mod administration;
+mod ai;
+mod held_sales;
+mod loyalty;
 mod inventory;
 mod locations;
 mod pending_checkout;
@@ -26,6 +32,10 @@ mod receipt_layout;
 mod receipt_preview;
 mod sale_summary;
 mod dashboard;
+mod reports;
+mod purchases;
+mod purchase_pending;
+mod compatibility;
 mod status_bar;
 mod stock_alerts;
 mod suppliers;
@@ -75,7 +85,12 @@ struct UiCategory {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum WorkspaceView {
+    Ai,
+    Activity,
+    Discounts,
     Dashboard,
+    Reports,
+    Purchases,
     Employees,
     ServiceOrders,
     SaleSummary,
@@ -188,6 +203,13 @@ fn App() -> Element {
     let mut query = use_signal(String::new);
     let mut category_query = use_signal(String::new);
     let mut cart = use_signal(Vec::<CartLine>::new);
+    let mut held_token=use_signal(||None::<String>);
+    use_effect(move || {
+        if cart.read().is_empty() {
+            checkout_customer.set(None);
+            checkout_sale_type.set("Cash".into());
+        }
+    });
     let mut message_box = use_signal(|| None::<String>);
     let mut active_view = use_signal(|| WorkspaceView::Sales);
     let mut new_expense = use_signal(|| false);
@@ -415,7 +437,7 @@ fn App() -> Element {
             style: appearance_colors::style(&app_settings.read()),
             if !matches!(&*pending.read(), Ok(None)) {
                 pending_checkout::Recovery { pending, form: db_form.read().clone(), saving: checkout_saving,
-                    on_resolved: move |saved| { cart.set(Vec::new()); show_checkout.set(false); receipt.set(saved); }
+                    on_resolved: move |saved: Option<ReceiptData>| { if saved.is_some()||held_token().is_none(){cart.set(Vec::new());} if saved.is_some(){held_token.set(None);} show_checkout.set(false); receipt.set(saved); }
                 }
             }
             header { class: "topbar",
@@ -545,16 +567,21 @@ fn App() -> Element {
                             crate::icons::ActionLabel { label:"Customers" }
                         }
                         button { class: if *active_view.read()==WorkspaceView::Suppliers {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Suppliers); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Suppliers" } }
+                        button { class: if *active_view.read()==WorkspaceView::Purchases {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Purchases); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Purchases" } }
                     }
                     div { class: "side_group",
                         span { "PRODUCTS & STOCK" }
                         button { class: if *active_view.read()==WorkspaceView::Products {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Products); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Products" } }
+                        button { class: if *active_view.read()==WorkspaceView::Discounts {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Discounts); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Discounts" } }
                         button { class: if *active_view.read()==WorkspaceView::Categories {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Categories); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Categories" } }
                         button { class: if *active_view.read()==WorkspaceView::Locations {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Locations); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Locations" } }
                         button { class: if *active_view.read()==WorkspaceView::Inventory {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Inventory); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Inventory" } }
                     }
                     div { class: "side_group",
                         span { "REPORTS" }
+                        button { class: if *active_view.read()==WorkspaceView::Ai {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Ai); show_side_menu.set(false); }, crate::icons::ActionLabel {label:"AI"} }
+                        button { class: if *active_view.read()==WorkspaceView::Activity {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Activity); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Activity Log" } }
+                        button { class: if *active_view.read()==WorkspaceView::Reports {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Reports); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Reports" } }
                         button { class: if *active_view.read()==WorkspaceView::Dashboard {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Dashboard); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Dashboard" } }
                         button { class: if *active_view.read()==WorkspaceView::SaleSummary {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::SaleSummary); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Sale Summary" } }
                     }
@@ -610,6 +637,16 @@ fn App() -> Element {
                 service_orders::ServiceOrdersPage {db_form:db_form.read().clone()}
             } else if *active_view.read() == WorkspaceView::Dashboard {
                 dashboard::DashboardPage { db_form: db_form.read().clone(), actor: actor.clone(), on_navigate: move |view| active_view.set(view) }
+            } else if *active_view.read() == WorkspaceView::Purchases {
+                purchases::PurchasesPage { db_form: db_form.read().clone(), actor: actor.clone() }
+            } else if *active_view.read() == WorkspaceView::Activity {
+                administration::ActivityPage { db_form: db_form.read().clone(), actor:actor.clone() }
+            } else if *active_view.read() == WorkspaceView::Ai {
+                ai::AiPage { db_form: db_form.read().clone(), actor:actor.clone() }
+            } else if *active_view.read() == WorkspaceView::Discounts {
+                discounts::DiscountsPage { db_form: db_form.read().clone(), actor: actor.clone() }
+            } else if *active_view.read() == WorkspaceView::Reports {
+                reports::ReportsPage { db_form: db_form.read().clone(), actor: actor.clone() }
             } else if *active_view.read() == WorkspaceView::SaleSummary {
                 sale_summary::SaleSummaryPage { db_form: db_form.read().clone(), on_sales: move |_| active_view.set(WorkspaceView::Sales) }
             } else if *active_view.read() == WorkspaceView::Inventory {
@@ -976,7 +1013,11 @@ fn App() -> Element {
                             strong { "Cart" }
                             small { "Tap products to add" }
                         }
-                        span { class: "count_badge", "{cart.read().len()}" }
+                        div { class: "cart_head_actions",
+                            held_sales::Controls {db_form:db_form.read().clone(),actor:actor.clone(),cart,customer:checkout_customer,payment:checkout_sale_type,active:held_token,
+                                blocked:checkout_saving()||show_checkout()||!matches!(&*pending.read(),Ok(None)),visible:true}
+                            span { class: "count_badge", "{cart.read().len()}" }
+                        }
                     }
                     div { class: "cart_lines",
                         if cart.read().is_empty() {
@@ -997,6 +1038,7 @@ fn App() -> Element {
                                 }
                                 div { class: "qty_actions",
                                     button {
+                                        disabled:held_token().is_some()&&cart.read().len()==1&&line.qty<=1.0,
                                         onclick: move |_| decrement_cart(&mut cart, idx),
                                         "-"
                                     }
@@ -1005,6 +1047,7 @@ fn App() -> Element {
                                         "+"
                                     }
                                     button {
+                                        disabled:held_token().is_some()&&cart.read().len()==1,
                                         onclick: move |_| remove_from_cart(&mut cart, idx),
                                         "Remove"
                                     }
@@ -1020,7 +1063,7 @@ fn App() -> Element {
                         }
                         div { class: "cart_actions",
                             button {
-                                disabled: cart.read().is_empty(),
+                                disabled: cart.read().is_empty()||held_token().is_some(),
                                 onclick: move |_| {
                                     cart.set(Vec::new());
                                     checkout_status.set(String::new());
@@ -1042,10 +1085,10 @@ fn App() -> Element {
                                     } else {
                                         String::new()
                                     });
-                                    checkout_sale_type.set(default_payment_type(&settings, &available_payment_types));
-                                    received.set(format!("{payable_total:.0}"));
+                                    if held_token().is_none(){checkout_sale_type.set(default_payment_type(&settings, &available_payment_types));}
+                                    received.set(if held_token().is_some()&&checkout_sale_type().eq_ignore_ascii_case("credit"){ "0".into() }else{format!("{payable_total:.0}")});
                                     show_checkout.set(true);
-                                    checkout_customer.set(None);
+                                    if held_token().is_none(){checkout_customer.set(None);}
                                 },
                                 span { "Checkout" }
                                 kbd { "F4" }
@@ -1087,12 +1130,13 @@ fn App() -> Element {
                         let customer_id = checkout_customer();
                         let checkout_db = db_form.read().clone();
                         let Some(actor) = session.read().clone() else { return; };
-                        let request = match pending.read().as_ref() {
+                        let mut request = match pending.read().as_ref() {
                             Ok(Some(value)) => value.clone(),
                             Ok(None) => pending_checkout::prepare(lines, payment, discount, sale_type, customer_id, &actor, &app_settings.read()),
                             Err(e) => { message_box.set(Some(e.clone())); return; }
                         };
                         if matches!(&*pending.read(), Ok(None)) {
+                            request.draft.held_token=held_token();
                             if let Err(e) = pending_checkout::save(&checkout_db, &request) { message_box.set(Some(format!("{e:#}"))); return; }
                         }
                         pending.set(Ok(Some(request.clone())));
@@ -1100,8 +1144,11 @@ fn App() -> Element {
                         checkout_status.set("Saving sale...".to_string());
                         spawn(async move {
                             let request_id = request.draft.invoice_no.clone();
+                            let had_hold=request.draft.held_token.is_some();
                             match pending_checkout::submit(checkout_db.clone(), request, actor).await {
                                 Ok(receipt_data) => {
+                                    if had_hold {if let Err(e)=held_sales::completed(&checkout_db){checkout_saving.set(false);message_box.set(Some(format!("Sale saved; held recovery cleanup failed: {e:#}")));return;}}
+                                    held_token.set(None);
                                     match pending_checkout::clear(&checkout_db, &request_id) {
                                         Ok(()) => pending.set(Ok(None)),
                                         Err(e) => { checkout_saving.set(false); message_box.set(Some(format!("Sale saved, but recovery file could not be cleared: {e}. Do not save a new sale."))); return; }
@@ -1234,7 +1281,8 @@ async fn load_catalog_from_database(
             name: category.name,
         })
         .collect::<Vec<_>>();
-    let products = pos_core::db::search_product_metadata(&pool, "", 0).await?;
+    let mut products = pos_core::db::search_product_metadata(&pool, "", 0).await?;
+    pos_core::discounts::attach(&pool, &mut products).await?;
 
     let mut category_names = vec![UiCategory {
         id: None,
@@ -1804,6 +1852,7 @@ fn SettingsOverview(
                 span { "Open the existing DB Settings dialog to update this Rust POS client connection." }
                 button { onclick: move |event| on_open_db.call(event), "Open DB Settings" }
             }
+            compatibility::CompatibilityPanel { db_form }
         }
     }
 }
@@ -3526,6 +3575,11 @@ impl CartLine {
     }
 
     fn unit_price(&self) -> f64 {
+        let normal = self.regular_unit_price();
+        self.product.promotion.as_ref().map(|p| normal.min(p.price(self.base_price()))).unwrap_or(normal)
+    }
+
+    fn regular_unit_price(&self) -> f64 {
         if let Some(price) = self.unit_price_override {
             return price;
         }

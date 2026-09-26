@@ -135,7 +135,7 @@ fn Login() -> Element {
 
 pub fn can_open(actor: &Session, view: WorkspaceView) -> bool {
     actor.allows(match view {
-        WorkspaceView::Sales | WorkspaceView::Receipts | WorkspaceView::ServiceOrders => Permission::Sell,
+        WorkspaceView::Sales | WorkspaceView::Receipts | WorkspaceView::ServiceOrders | WorkspaceView::Ai => Permission::Sell,
         WorkspaceView::Settings => Permission::Admin,
         _ => Permission::Manage,
     })

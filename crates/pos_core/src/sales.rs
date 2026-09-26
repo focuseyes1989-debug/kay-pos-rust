@@ -65,6 +65,7 @@ pub async fn complete_sale(
         return Ok(sale);
     }
 
+    if let Some(token)=&draft.held_token {crate::held_sales::lock_session(&mut tx,actor,token).await?;}
     let subtotal = draft
         .items
         .iter()
@@ -216,7 +217,9 @@ pub async fn complete_sale(
         }
         sqlx::query("UPDATE customers SET total_visit=COALESCE(total_visit,0)+1,total_spent=COALESCE(total_spent,0)+$1 WHERE id=$2").bind(total).bind(customer).execute(&mut *tx).await?;
     }
+    crate::loyalty::award(&mut tx,sale.id,&invoice_no,draft.customer_id,&draft.payment_type,total).await?;
     crate::sale_stock::lock_products(&mut tx, &draft.items).await?;
+    crate::discounts::validate_sale(&mut tx, &draft.items).await?;
     for item in &draft.items {
         let allocations =
             crate::sale_stock::deduct(&mut tx, item, &invoice_no, actor.username()).await?;
@@ -261,6 +264,8 @@ pub async fn complete_sale(
     .bind(sale.id)
     .execute(&mut *tx)
     .await?;
+    if let Some(token)=&draft.held_token {crate::held_sales::finish(&mut tx,token,sale.id).await?;}
+    crate::activity::record(&mut tx,actor,"rust.sale.complete",&format!("sale_id={}; invoice={invoice_no}",sale.id)).await?;
     tx.commit().await.context("failed to commit sale")?;
     Ok(sale)
 }
@@ -436,6 +441,7 @@ pub async fn refund_sale(pool: &PgPool, sale_id: i32, actor: &crate::auth::Sessi
         "Only completed receipts can be refunded"
     );
     let now = chrono::Local::now().naive_local();
+    crate::loyalty::refund(&mut tx,sale_id,customer,&invoice).await?;
     if payment.eq_ignore_ascii_case("credit") {
         let customer = customer.context("Credit receipt has no customer")?;
         // Match the customer-before-invoice locking order used by credit collection.
@@ -543,6 +549,7 @@ pub async fn refund_sale(pool: &PgPool, sale_id: i32, actor: &crate::auth::Sessi
         .bind(sale_id)
         .execute(&mut *tx)
         .await?;
+    crate::activity::record(&mut tx,actor,"rust.sale.refund",&format!("sale_id={sale_id}; invoice={invoice}")).await?;
     tx.commit().await.context("Failed to commit refund")?;
     Ok(())
 }

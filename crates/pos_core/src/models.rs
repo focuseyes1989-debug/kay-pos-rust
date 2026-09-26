@@ -26,6 +26,9 @@ pub struct PaymentType {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Product {
+    #[serde(default)]
+    #[sqlx(skip)]
+    pub promotion: Option<crate::discounts::Discount>,
     pub id: i32,
     pub name: String,
     #[serde(default)]
@@ -75,6 +78,8 @@ pub struct ProductPriceTier {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SaleItemDraft {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub promotion: Option<crate::discounts::Discount>,
     pub product_id: i32,
     pub variant_id: Option<i32>,
     pub product_name: String,
@@ -90,6 +95,8 @@ pub struct SaleItemDraft {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SaleDraft {
+    #[serde(default,skip_serializing_if="Option::is_none")]
+    pub held_token: Option<String>,
     pub invoice_no: String,
     pub customer_id: Option<i32>,
     pub payment_type: String,

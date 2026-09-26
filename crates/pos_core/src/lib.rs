@@ -1,10 +1,17 @@
 pub mod catalog;
 pub mod dashboard;
+pub mod reports;
+pub mod purchases;
+pub mod compatibility;
 pub mod categories;
 pub mod customer_credit;
 pub mod customers;
 pub mod db;
 pub mod expenses;
+pub mod discounts;
+pub mod expense_management;
+pub mod held_sales;
+pub mod loyalty;
 pub mod employees;
 pub mod inventory;
 pub mod inventory_reversal;
@@ -28,3 +35,6 @@ pub use models::{
 };
 pub use sales::{complete_sale, get_receipt_detail, list_receipts, refund_sale};
 pub mod auth;
+pub mod activity;
+pub mod ai;
+pub mod category_groups;

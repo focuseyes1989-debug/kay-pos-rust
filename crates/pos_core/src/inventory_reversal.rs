@@ -11,6 +11,11 @@ pub async fn reverse_stock_in(pool: &PgPool, product: i32, movement: i32, reason
     let (kind, qty, variant, location, notes, reference): (String,f64,Option<i32>,String,String,String) = sqlx::query_as("SELECT type,quantity::float8,variant_id,COALESCE(location,''),COALESCE(notes,''),COALESCE(reference,'') FROM stock_movements WHERE id=$1 AND product_id=$2 FOR UPDATE")
         .bind(movement).bind(product).fetch_one(&mut *tx).await?;
     ensure!(matches!(kind.as_str(), "in" | "stock_in"), "Only Stock In can be reversed here");
+    let purchase_links: bool = sqlx::query_scalar("SELECT to_regclass('rust_purchase_movements') IS NOT NULL").fetch_one(&mut *tx).await?;
+    if purchase_links {
+        let linked: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM rust_purchase_movements WHERE movement_id=$1)").bind(movement).fetch_one(&mut *tx).await?;
+        ensure!(!linked, "This stock receipt belongs to a purchase. A reviewed supplier return is required; stock-only reversal would leave the supplier balance incorrect.");
+    }
     ensure!(!notes.contains("[REVERSED]") && !reference.starts_with("REV-") && !reference.ends_with("-REV"), "This movement has already been reversed");
     ensure!(qty.is_finite() && qty > 0.0, "Invalid movement quantity");
     let old: f64 = if let Some(id)=variant {
@@ -57,6 +62,7 @@ pub async fn reverse_stock_in(pool: &PgPool, product: i32, movement: i32, reason
     }
     sqlx::query("UPDATE stock_movements SET notes=COALESCE(notes,'') || $1 WHERE id=$2")
         .bind(format!(" [REVERSED] by {}; movement #{reversal}; {}",actor.username(),reason.trim())).bind(movement).execute(&mut *tx).await?;
+    crate::activity::record(&mut tx,actor,"rust.inventory.reverse",&format!("product_id={product}; movement_id={movement}")).await?;
     tx.commit().await?;
     Ok(())
 }

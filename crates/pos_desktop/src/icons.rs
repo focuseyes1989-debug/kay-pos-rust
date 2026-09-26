@@ -13,7 +13,7 @@ fn source(name: &str) -> Option<&'static str> {
         "dashboard", "point_of_sale", "receipt", "products", "inventory", "category",
         "location_on", "person", "groups", "supplier", "payments", "credit_card",
         "analytics", "orders", "folder_open", "download_done", "upload_file", "tv_displays",
-        "calendar", "check_circle", "visibility", "backup", "shopping_cart")
+        "calendar", "check_circle", "visibility", "backup", "shopping_cart", "arrow_circle_left", "arrow_circle_right")
 }
 
 #[component]
@@ -26,7 +26,7 @@ pub fn Icon(name: String) -> Element {
 fn for_label(label: &str) -> Option<&'static str> {
     let label=label.trim().trim_start_matches('+').trim();
     Some(match label {
-        "Dashboard"=>"dashboard", "Sales"=>"point_of_sale", "Receipts"=>"receipt",
+        "AI"=>"analytics", "Dashboard"=>"dashboard", "Sales"=>"point_of_sale", "Receipts"=>"receipt",
         "Products"=>"products", "Inventory"=>"inventory", "Categories"=>"category",
         "Locations"=>"location_on", "Customers"=>"person", "Employees"=>"groups",
         "Suppliers"=>"supplier", "Expenses"=>"payments", "Sale Summary"=>"analytics",
@@ -37,7 +37,15 @@ fn for_label(label: &str) -> Option<&'static str> {
         "Print Receipt"|"Print"=>"print", "Export Excel"=>"file_export",
         "View Movements"|"View ledger"|"Ledger"=>"history",
         "Payment Collection"=>"payments", "Credit Sale"=>"credit_card",
-        "Outstanding Report"=>"analytics", "Choose File"=>"folder_open",
+        "Reports"|"Outstanding Report"=>"analytics", "Choose File"=>"folder_open",
+        "Check compatibility"=>"check_circle",
+        "Purchases"=>"orders", "Add purchase order"|"Add item"=>"add",
+        "Discounts"=>"payments", "Attachments"=>"folder_open", "Upload"=>"upload_file",
+        "Hold sale"=>"save", "Held sales"|"Points history"|"Activity Log"=>"history", "Resume sale"=>"shopping_cart",
+        "Category groups"=>"category", "Add group"=>"add",
+        "Download"=>"download_done", "Mark read"=>"check_circle", "Check alerts"=>"check_circle",
+        "Receive Order"=>"inventory", "Supplier payment"=>"payments",
+        "Save order"=>"save", "View details"=>"visibility",
         "Open Cashdrawer"=>"payments", "Show Customer Display"=>"tv_displays",
         "Sync Attendance"=>"refresh", "Test Connection"|"Test TCP Connection"=>"check_circle",
         "Check for Updates"=>"refresh", "Download & Install"=>"download_done",

@@ -4,6 +4,7 @@ use pos_core::{catalog, connect, db, Category, Product};
 
 fn blank() -> Product {
     Product {
+        promotion: None,
         id: 0,
         name: String::new(),
         description: None,

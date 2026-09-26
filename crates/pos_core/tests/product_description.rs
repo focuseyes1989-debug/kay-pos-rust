@@ -23,6 +23,7 @@ async fn description_round_trips_and_clears_without_changing_stock() -> Result<(
     "#).execute(&pool).await?;
     let text = "\u{1019}\u{103c}\u{1014}\u{103a}\u{1019}\u{102c}\nProduct details 'quoted' <plain text>";
     let mut product = Product {
+        promotion: None,
         id: 0, name: "Description test".into(), description: Some(text.into()),
         category_id: None, category_name: None, sku: Some("DESC-1".into()), barcode: None,
         price: 100.0, cost: 40.0, stock: 0.0, low_stock: 2.0, sold_by: Some("Each".into()),

@@ -5,6 +5,8 @@ use sqlx::{PgPool, Postgres, Transaction};
 
 #[derive(Clone, Debug, PartialEq, sqlx::FromRow)]
 pub struct Job {
+    pub customer_name: String,
+    pub customer_phone: String,
     pub id: i32,
     pub order_no: String,
     pub job_title: String,
@@ -21,7 +23,7 @@ pub struct Job {
     pub delivered_at: Option<NaiveDateTime>,
     pub updated_at: NaiveDateTime,
 }
-const JOB_FIELDS: &str = "id,order_no,COALESCE(job_title,'') AS job_title,COALESCE(complaint,'') AS complaint,COALESCE(internal_notes,'') AS internal_notes,status,received_at,expected_at,COALESCE(started_by,'') AS started_by,started_at,COALESCE(completed_by,'') AS completed_by,completed_at,COALESCE(delivered_by,'') AS delivered_by,delivered_at,updated_at";
+const JOB_FIELDS: &str = "id,order_no,COALESCE(customer_name,'') AS customer_name,COALESCE(customer_phone,'') AS customer_phone,COALESCE(job_title,'') AS job_title,COALESCE(complaint,'') AS complaint,COALESCE(internal_notes,'') AS internal_notes,status,received_at,expected_at,COALESCE(started_by,'') AS started_by,started_at,COALESCE(completed_by,'') AS completed_by,completed_at,COALESCE(delivered_by,'') AS delivered_by,delivered_at,updated_at";
 pub fn ready(status: &str) -> bool {
     matches!(status, "ready" | "completed" | "ready_for_pickup")
 }
@@ -57,7 +59,7 @@ async fn transaction(pool: &PgPool, actor: &Session) -> Result<Transaction<'stat
 }
 
 pub async fn list(pool: &PgPool, query: &str, status: &str, limit: i64) -> Result<Vec<Job>> {
-    let sql = format!("SELECT {JOB_FIELDS} FROM service_orders WHERE ($1='' OR job_title ILIKE $1 OR complaint ILIKE $1 OR internal_notes ILIKE $1 OR order_no ILIKE $1) AND ($2='' OR ($2='pending' AND status NOT IN ('in_progress','ready','completed','ready_for_pickup','delivered','cancelled')) OR ($2='ready_for_pickup' AND status IN ('ready','completed','ready_for_pickup')) OR status=$2) ORDER BY received_at DESC,id DESC LIMIT $3");
+    let sql = format!("SELECT {JOB_FIELDS} FROM service_orders WHERE ($1='' OR job_title ILIKE $1 OR complaint ILIKE $1 OR internal_notes ILIKE $1 OR order_no ILIKE $1 OR customer_name ILIKE $1 OR customer_phone ILIKE $1) AND ($2='' OR ($2='pending' AND status NOT IN ('in_progress','ready','completed','ready_for_pickup','delivered','cancelled')) OR ($2='ready_for_pickup' AND status IN ('ready','completed','ready_for_pickup')) OR status=$2) ORDER BY received_at DESC,id DESC LIMIT $3");
     let query = if query.trim().is_empty() {
         String::new()
     } else {
@@ -91,6 +93,8 @@ pub async fn reserve(pool: &PgPool, actor: &Session) -> Result<Job> {
             .await?;
         tx.commit().await?;
         return Ok(Job {
+            customer_name:String::new(),
+            customer_phone:String::new(),
             id,
             order_no,
             job_title: String::new(),
@@ -112,6 +116,8 @@ pub async fn reserve(pool: &PgPool, actor: &Session) -> Result<Job> {
 
 pub async fn save(pool: &PgPool, actor: &Session, job: &Job, new: bool) -> Result<()> {
     ensure!(!job.job_title.trim().is_empty(), "Enter a job name");
+    ensure!(job.customer_name.chars().count()<=200&&job.customer_phone.chars().count()<=80,"Customer contact is too long");
+    ensure!(job.expected_at.is_none_or(|date|date>=job.received_at),"Appointment cannot be before the received date");
     ensure!(
         job.job_title.chars().count() <= 500
             && job.complaint.len() <= 100_000
@@ -120,11 +126,11 @@ pub async fn save(pool: &PgPool, actor: &Session, job: &Job, new: bool) -> Resul
     );
     let mut tx = transaction(pool, actor).await?;
     if new {
-        let inserted = sqlx::query("INSERT INTO service_orders(id,order_no,job_title,complaint,internal_notes,status,received_at,expected_at,created_by,created_at,updated_at) VALUES($1,$2,$3,$4,$5,'received',$6,$7,$8,LOCALTIMESTAMP,LOCALTIMESTAMP) ON CONFLICT DO NOTHING")
-            .bind(job.id).bind(&job.order_no).bind(job.job_title.trim()).bind(&job.complaint).bind(&job.internal_notes).bind(job.received_at).bind(job.expected_at).bind(actor.username()).execute(&mut *tx).await?;
+        let inserted = sqlx::query("INSERT INTO service_orders(id,order_no,job_title,complaint,internal_notes,status,received_at,expected_at,created_by,created_at,updated_at,customer_name,customer_phone) VALUES($1,$2,$3,$4,$5,'received',$6,$7,$8,LOCALTIMESTAMP,LOCALTIMESTAMP,$9,$10) ON CONFLICT DO NOTHING")
+            .bind(job.id).bind(&job.order_no).bind(job.job_title.trim()).bind(&job.complaint).bind(&job.internal_notes).bind(job.received_at).bind(job.expected_at).bind(actor.username()).bind(&job.customer_name).bind(&job.customer_phone).execute(&mut *tx).await?;
         if inserted.rows_affected() == 0 {
-            let same: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM service_orders WHERE id=$1 AND order_no=$2 AND job_title=$3 AND complaint=$4 AND internal_notes=$5 AND received_at=$6 AND expected_at IS NOT DISTINCT FROM $7 AND created_by=$8)")
-                .bind(job.id).bind(&job.order_no).bind(job.job_title.trim()).bind(&job.complaint).bind(&job.internal_notes).bind(job.received_at).bind(job.expected_at).bind(actor.username()).fetch_one(&mut *tx).await?;
+            let same: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM service_orders WHERE id=$1 AND order_no=$2 AND job_title=$3 AND complaint=$4 AND internal_notes=$5 AND received_at=$6 AND expected_at IS NOT DISTINCT FROM $7 AND created_by=$8 AND COALESCE(customer_name,'')=$9 AND COALESCE(customer_phone,'')=$10)")
+                .bind(job.id).bind(&job.order_no).bind(job.job_title.trim()).bind(&job.complaint).bind(&job.internal_notes).bind(job.received_at).bind(job.expected_at).bind(actor.username()).bind(&job.customer_name).bind(&job.customer_phone).fetch_one(&mut *tx).await?;
             ensure!(
                 same,
                 "Job number already exists with different data. Refresh before continuing."
@@ -133,12 +139,13 @@ pub async fn save(pool: &PgPool, actor: &Session, job: &Job, new: bool) -> Resul
             history(&mut tx, job.id, None, "received", "Order created", actor).await?;
         }
     } else {
-        let changed=sqlx::query("UPDATE service_orders SET job_title=$1,complaint=$2,internal_notes=$3,expected_at=$4,updated_at=clock_timestamp() WHERE id=$5 AND updated_at=$6 AND status NOT IN ('delivered','cancelled')")
-            .bind(job.job_title.trim()).bind(&job.complaint).bind(&job.internal_notes).bind(job.expected_at).bind(job.id).bind(job.updated_at).execute(&mut *tx).await?;
+        let changed=sqlx::query("UPDATE service_orders SET job_title=$1,complaint=$2,internal_notes=$3,expected_at=$4,customer_name=$7,customer_phone=$8,updated_at=clock_timestamp() WHERE id=$5 AND updated_at=$6 AND status NOT IN ('delivered','cancelled')")
+            .bind(job.job_title.trim()).bind(&job.complaint).bind(&job.internal_notes).bind(job.expected_at).bind(job.id).bind(job.updated_at).bind(&job.customer_name).bind(&job.customer_phone).execute(&mut *tx).await?;
         ensure!(
             changed.rows_affected() == 1,
             "Job changed on another workstation or is closed. Refresh and reopen it."
         );
+        crate::activity::record(&mut tx,actor,"rust.service_order.edit",&format!("order_id={}",job.id)).await?;
     }
     tx.commit().await?;
     Ok(())
@@ -153,6 +160,7 @@ async fn history(
 ) -> Result<()> {
     sqlx::query("INSERT INTO service_order_status_history(service_order_id,from_status,to_status,note,changed_by,changed_at) VALUES($1,$2,$3,$4,$5,LOCALTIMESTAMP)")
         .bind(id).bind(from).bind(to).bind(note).bind(actor.username()).execute(&mut **tx).await?;
+    crate::activity::record(&mut **tx,actor,"rust.service_order.status",&format!("order_id={id}; from={from:?}; to={to}")).await?;
     Ok(())
 }
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -224,6 +232,7 @@ pub async fn act(
             .bind(job.id)
             .execute(&mut *tx)
             .await?;
+        crate::activity::record(&mut tx,actor,"rust.service_order.delete",&format!("order_id={}",job.id)).await?;
     } else {
         let target = match action {
             Action::Start => "in_progress",

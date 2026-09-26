@@ -12,6 +12,7 @@ async fn refund_stock_credit_and_rollback() -> anyhow::Result<()> {
     sqlx::raw_sql(r#"
         SET search_path TO pg_temp;
         CREATE TEMP TABLE users(id int,username text,role text,is_active int,password_hash text,salt text);
+        CREATE TEMP TABLE user_activity_log(id SERIAL PRIMARY KEY,user_id INTEGER,username TEXT,action TEXT,details TEXT,ip_address TEXT,created_at TIMESTAMP);
         CREATE TEMP TABLE sales(id int PRIMARY KEY, status text, payment_type text, invoice_no text, customer_id int);
         CREATE TEMP TABLE sale_items(id int, sale_id int, product_id int, variant_id int, qty float8, refunded_qty real DEFAULT 0, refund_reason text, location_id int, location text, batch_no text, expire_date text);
         CREATE TEMP TABLE products(id int PRIMARY KEY, stock float8, sold_by text, last_updated timestamp);

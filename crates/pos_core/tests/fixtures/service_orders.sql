@@ -1,4 +1,5 @@
 CREATE TABLE users(id SERIAL PRIMARY KEY,username TEXT UNIQUE,role TEXT,is_active INTEGER DEFAULT 1,password_hash TEXT,salt TEXT);
+CREATE TABLE user_activity_log(id SERIAL PRIMARY KEY,user_id INTEGER REFERENCES users(id),username TEXT NOT NULL,action TEXT NOT NULL,details TEXT,ip_address TEXT,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE service_orders(
  id SERIAL PRIMARY KEY,order_no TEXT UNIQUE NOT NULL,job_title TEXT,complaint TEXT,internal_notes TEXT,
  status TEXT NOT NULL DEFAULT 'received',received_at TIMESTAMP NOT NULL,expected_at TIMESTAMP,

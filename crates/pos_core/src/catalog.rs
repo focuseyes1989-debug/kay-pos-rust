@@ -302,6 +302,7 @@ mod tests {
     use super::*;
     fn product() -> Product {
         Product {
+            promotion: None,
             id: 0,
             name: "Test".into(),
             description: None,

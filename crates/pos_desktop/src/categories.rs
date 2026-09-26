@@ -37,11 +37,21 @@ fn ordered(rows: &[CategoryRecord]) -> Vec<(CategoryRecord, usize, String)> {
 
 #[component]
 pub fn CategoriesPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
+    let mut groups=use_signal(||false);
+    rsx!{section{class:"phase6_categories",
+        div{class:"receipt_tabs reports_tabs",role:"tablist",button{role:"tab",class:if !groups(){"active"}else{""},aria_selected:!groups(),onclick:move |_|groups.set(false),"Categories"}button{role:"tab",class:if groups(){"active"}else{""},aria_selected:groups(),onclick:move |_|groups.set(true),"Category groups"}}
+        if groups(){crate::administration::GroupsPage{db_form}}else{CategoryList{db_form,on_sales}}
+    }}
+}
+
+#[component]
+fn CategoryList(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
+    let session=use_context::<Signal<Option<pos_core::auth::Session>>>();
     let source = db_form.clone();
     let mut data = use_resource(move || {
         let source = source.clone();
         async move {
-            async { categories::list(&connect(&source.database_config()?).await?).await }
+            async { let actor=session().ok_or_else(||anyhow::anyhow!("Sign in again"))?;categories::list(&connect(&source.database_config()?).await?,&actor).await }
                 .await
                 .map_err(|e| format!("{e:#}"))
         }
@@ -104,7 +114,7 @@ pub fn CategoriesPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
         if let Some(record)=deletion() {
             div {class:"modal_backdrop",section {class:"customer_dialog",role:"dialog",aria_modal:"true",aria_label:"Delete category",h2 {"Delete category?"} p {"{record.name}"}
                 div {class:"customers_actions",button {disabled:busy(),onclick:move |_|deletion.set(None),crate::icons::ActionLabel { label:"Cancel" }}
-                    button {class:"product_delete",disabled:busy(),onclick:move |_|{if busy(){return;}busy.set(true);let source=db_form.clone();spawn(async move {let result=async {categories::delete(&connect(&source.database_config()?).await?,record.id).await}.await;busy.set(false);match result {Ok(())=>{deletion.set(None);data.restart();},Err(e)=>error.set(format!("{e:#}"))}});},crate::icons::ActionLabel { label:"Delete" }}
+                    button {class:"product_delete",disabled:busy(),onclick:move |_|{if busy(){return;}busy.set(true);let source=db_form.clone();spawn(async move {let result=async {let actor=session().ok_or_else(||anyhow::anyhow!("Sign in again"))?;categories::delete(&connect(&source.database_config()?).await?,&actor,record.id).await}.await;busy.set(false);match result {Ok(())=>{deletion.set(None);data.restart();},Err(e)=>error.set(format!("{e:#}"))}});},crate::icons::ActionLabel { label:"Delete" }}
                 }
             }}
         }
@@ -121,7 +131,10 @@ fn CategoryEditor(
     on_saved: EventHandler<()>,
     on_error: EventHandler<String>,
 ) -> Element {
-    let mut form = use_signal(|| record);
+    let session=use_context::<Signal<Option<pos_core::auth::Session>>>();
+    let source=db_form.clone();
+    let groups=use_resource(move||{let db=source.clone();async move{async{let actor=session().ok_or_else(||anyhow::anyhow!("Sign in again"))?;pos_core::category_groups::list(&connect(&db.database_config()?).await?,&actor).await}.await.map_err(|e:anyhow::Error|format!("{e:#}"))}});
+    let mut form = use_signal(|| record.clone());
     let mut busy = use_signal(|| false);
     rsx! {div {class:"modal_backdrop",section {class:"customer_dialog",role:"dialog",aria_modal:"true",aria_label:"Category",
         h2 {if form().id==0 {"Add category"}else{"Edit category"}}
@@ -132,11 +145,16 @@ fn CategoryEditor(
                 for row in rows.iter().filter(|r|r.id!=form().id) {option {value:"{row.id}",selected:form().parent_id==Some(row.id),"{row.name}"}}
             }}
             label {"Description" textarea {value:form().description,disabled:busy(),oninput:move |e|form.write().description=e.value()}}
+            label {"Category group" select {disabled:busy()||!groups.finished(),value:form().group_id.map(|id|id.to_string()).unwrap_or_default(),onchange:move |e|form.write().group_id=e.value().parse().ok(),
+                option{value:"",selected:form().group_id.is_none(),"No group"}
+                if let Some(Ok(rows))=groups.read().as_ref(){for g in rows.iter().filter(|g|g.is_active==1||Some(g.id)==form().group_id){option{value:"{g.id}",selected:Some(g.id)==form().group_id,"{g.name}"}}}
+            }}
+            if let Some(Err(e))=groups.read().as_ref(){p{role:"alert","{e}"}}
             label {"Status" select {value:form().status,disabled:busy(),onchange:move |e|form.write().status=e.value(),for status in ["active","inactive"] {option {value:status,selected:form().status==status,"{status}"}}}}
         }
         div {class:"customers_actions",
             button {disabled:busy(),onclick:move |_|on_close.call(()),crate::icons::ActionLabel { label:"Cancel" }}
-            button {class:"customer_primary",disabled:busy(),onclick:move |_|{if busy(){return;}let record=form();let source=db_form.clone();busy.set(true);spawn(async move {let result=async {categories::save(&connect(&source.database_config()?).await?,&record).await}.await;busy.set(false);match result {Ok(())=>on_saved.call(()),Err(e)=>on_error.call(format!("{e:#}"))}});},if busy(){"Saving..."}else{"Save category"}}
+            button {class:"customer_primary",disabled:busy(),onclick:move |_|{if busy(){return;}let expected=record.clone();let record=form();let source=db_form.clone();busy.set(true);spawn(async move {let result=async {let actor=session().ok_or_else(||anyhow::anyhow!("Sign in again"))?;categories::save(&connect(&source.database_config()?).await?,&actor,&record,&expected).await}.await;busy.set(false);match result {Ok(())=>on_saved.call(()),Err(e)=>on_error.call(format!("{e:#}"))}});},if busy(){"Saving..."}else{"Save category"}}
         }
     }}}
 }

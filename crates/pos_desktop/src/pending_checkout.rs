@@ -87,6 +87,7 @@ pub fn prepare(
 ) -> PendingCheckout {
     let subtotal = lines.iter().map(line_total).sum::<f64>();
     let draft = SaleDraft {
+        held_token:None,
         invoice_no: pos_core::auth::new_request_id(),
         customer_id,
         payment_type,
@@ -97,6 +98,7 @@ pub fn prepare(
         items: lines
             .iter()
             .map(|line| SaleItemDraft {
+                promotion: line.product.promotion.clone(),
                 product_id: line.product.id,
                 variant_id: line.variant.as_ref().map(|v| v.variant_id),
                 product_name: line.display_name(),
@@ -220,6 +222,7 @@ fn durable_request_cannot_be_overwritten_and_reloads_identically() -> Result<()>
     let value = PendingCheckout {
         lines: vec![],
         draft: SaleDraft {
+            held_token:None,
             invoice_no: pos_core::auth::new_request_id(),
             customer_id: None,
             payment_type: "Cash".into(),

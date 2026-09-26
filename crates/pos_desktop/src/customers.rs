@@ -26,6 +26,8 @@ pub fn CustomersPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
     let mut more = use_signal(|| false);
     let mut action = use_signal(String::new);
     let mut exporting = use_signal(|| false);
+    let mut points_history=use_signal(||None::<Customer>);
+    let session=use_context::<Signal<Option<pos_core::auth::Session>>>();
     let state = loaded.read();
     let search = applied_query().trim().to_lowercase();
     let rows = match state.as_ref() {
@@ -134,6 +136,7 @@ pub fn CustomersPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
                             div { dt { "Total spent" } dd { "{crate::format_ks(customer.total_spent)}" } }
                         }
                         div { class: "customer_detail_actions",
+                            button { onclick: move |_| points_history.set(selected()), crate::icons::ActionLabel { label:"Points history" } }
                             button { onclick: move |_| action.set("Ledger".into()), crate::icons::ActionLabel { label:"View ledger" } }
                             button { class: "customer_primary", onclick: move |_| action.set("Payment Collection".into()), "Payment Collection" }
                             button { onclick: move |_| editor.set(selected()), crate::icons::ActionLabel { label:"Edit" } }
@@ -159,6 +162,7 @@ pub fn CustomersPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
                 on_error: move |message| error.set(message)
             }
         }
+        if let Some(c)=points_history(){if let Some(actor)=session(){crate::loyalty::History{db_form:db_form.clone(),actor,customer_id:c.id,name:c.name,onclose:move |_|points_history.set(None)}}}
         if !error().is_empty() { MessageBox { title: "Customer Error".to_string(), message: error(), on_close: move |_| error.set(String::new()) } }
     }
 }
@@ -234,6 +238,7 @@ fn CustomerAction(
     on_error: EventHandler<String>,
 ) -> Element {
     use pos_core::customer_credit;
+    let session=use_context::<Signal<Option<pos_core::auth::Session>>>();
     let customer_id = if action == "Outstanding Report" {
         None
     } else {
@@ -361,8 +366,8 @@ fn CustomerAction(
                                 let result = async {
                                     let pool = connect(&form.database_config()?).await?;
                                     match kind.as_str() {
-                                        "Credit Sale" => customer_credit::create(&pool,id,get("Invoice"),get("Total"),get("Paid"),get("Date"),get("Due date"),get("Notes")).await,
-                                        "Payment Collection" => customer_credit::collect(&pool,id,if invoice == 0 { None } else { Some(invoice) },get("Amount"),get("Date"),&method,get("Reference"),get("Notes")).await,
+                                        "Credit Sale" => customer_credit::create(&pool,&session().ok_or_else(||anyhow::anyhow!("Sign in again"))?,id,get("Invoice"),get("Total"),get("Paid"),get("Date"),get("Due date"),get("Notes")).await,
+                                        "Payment Collection" => customer_credit::collect(&pool,&session().ok_or_else(||anyhow::anyhow!("Sign in again"))?,id,if invoice == 0 { None } else { Some(invoice) },get("Amount"),get("Date"),&method,get("Reference"),get("Notes")).await,
                                         "Delete" => customer_credit::delete(&pool,id,get("Admin username"),get("Admin password")).await,
                                         _ => Ok(()),
                                     }

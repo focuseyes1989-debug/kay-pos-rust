@@ -209,13 +209,24 @@ pub async fn change(pool: &PgPool, r: &Receipt, adjustment: bool, actor: &crate:
             sqlx::query("INSERT INTO variant_batch_changes(movement_id,product_id,variant_id,location,batch_no,expire_date,delta,expiry_unknown) VALUES($1,$2,$3,$4,$5,$6,$7,$8)").bind(id).bind(r.product_id).bind(vid).bind(r.location.trim()).bind(batch).bind(expiry).bind(delta as i32).bind(unknown).execute(&mut *tx).await?;
         }
     }
+    crate::activity::record(&mut tx,actor,if adjustment{"rust.inventory.adjust"}else{"rust.inventory.stock_out"},&format!("product_id={}; movement_id={id}",r.product_id)).await?;
     tx.commit().await?;
     Ok(())
 }
 
-pub async fn receive(pool: &PgPool, r: &Receipt) -> Result<()> {
-    r.validate()?;
+pub async fn receive(pool: &PgPool, r: &Receipt, actor:&crate::auth::Session) -> Result<()> {
     let mut tx = pool.begin().await?;
+    actor.authorize(&mut tx,crate::auth::Permission::Manage).await?;
+    sqlx::query("SET LOCAL lock_timeout='5s'").execute(&mut *tx).await?;
+    let mut r=r.clone();r.received_by=actor.username().into();
+    receive_in_transaction(&mut tx, &r).await?;
+    crate::activity::record(&mut tx,actor,"rust.inventory.receive",&format!("product_id={}; variant_id={:?}; quantity={}",r.product_id,r.variant_id,r.quantity)).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+pub(crate) async fn receive_in_transaction(mut tx: &mut sqlx::PgConnection, r: &Receipt) -> Result<i32> {
+    r.validate()?;
     let (stock,cost,mode):(f64,f64,String)=sqlx::query_as("SELECT COALESCE(stock,0)::float8,COALESCE(cost,0)::float8,COALESCE(sold_by,'Each') FROM products WHERE id=$1 FOR UPDATE").bind(r.product_id).fetch_one(&mut *tx).await?;
     ensure!(
         !mode.eq_ignore_ascii_case("Service") && !mode.eq_ignore_ascii_case("Restaurant"),
@@ -291,7 +302,7 @@ pub async fn receive(pool: &PgPool, r: &Receipt) -> Result<()> {
     };
     let movement:i32=sqlx::query_scalar("INSERT INTO stock_movements(product_id,variant_id,type,quantity,old_stock,new_stock,reason,reference,created_by,location,notes) VALUES($1,$2,'stock_in',$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id").bind(r.product_id).bind(r.variant_id).bind(qty).bind(old).bind(old+qty).bind(&r.reason).bind(reference).bind(actor).bind(location).bind(format!("{} [Batch {}]",r.notes,batch)).fetch_one(&mut *tx).await?;
     if let Some(supplier_id) = r.supplier_id {
-        let active: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM suppliers WHERE id=$1 AND LOWER(COALESCE(status,'Active'))='active')")
+        let active: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM suppliers WHERE id=$1 AND LOWER(COALESCE(NULLIF(trim(status),''),'Active'))='active')")
             .bind(supplier_id).fetch_one(&mut *tx).await?;
         ensure!(active, "Select an active supplier");
         sqlx::query("UPDATE stock_movements SET supplier_id=$1 WHERE id=$2")
@@ -300,8 +311,7 @@ pub async fn receive(pool: &PgPool, r: &Receipt) -> Result<()> {
     if let Some(vid) = r.variant_id {
         sqlx::query("INSERT INTO variant_batch_changes(movement_id,product_id,variant_id,location,batch_no,expire_date,delta,expiry_unknown) VALUES($1,$2,$3,$4,$5,$6,$7,0)").bind(movement).bind(r.product_id).bind(vid).bind(location).bind(batch).bind(&r.expiry).bind(r.quantity).execute(&mut *tx).await?;
     }
-    tx.commit().await?;
-    Ok(())
+    Ok(movement)
 }
 
 #[cfg(test)]

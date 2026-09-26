@@ -3,6 +3,7 @@ use sqlx::PgPool;
 
 #[derive(Clone, Debug, Default, PartialEq, sqlx::FromRow)]
 pub struct CategoryRecord {
+    pub group_id: Option<i32>,
     pub id: i32,
     pub name: String,
     pub parent_id: Option<i32>,
@@ -13,8 +14,10 @@ pub struct CategoryRecord {
     pub children: i64,
 }
 
-pub async fn list(pool: &PgPool) -> Result<Vec<CategoryRecord>> {
-    Ok(sqlx::query_as("SELECT c.id,c.name,c.parent_id,COALESCE(c.description,'') AS description,COALESCE(c.status,'active') AS status,COALESCE(c.is_system,0) AS is_system,(SELECT COUNT(*) FROM products p WHERE p.category_id=c.id OR p.category=c.name) AS products,(SELECT COUNT(*) FROM categories ch WHERE ch.parent_id=c.id) AS children FROM categories c ORDER BY c.sort_order,c.name,c.id").fetch_all(pool).await?)
+pub async fn list(pool: &PgPool, actor: &crate::auth::Session) -> Result<Vec<CategoryRecord>> {
+    let mut tx=pool.begin().await?;actor.authorize(&mut tx,crate::auth::Permission::Manage).await?;
+    let rows=sqlx::query_as("SELECT c.id,c.name,c.parent_id,c.group_id,COALESCE(c.description,'') AS description,COALESCE(c.status,'active') AS status,COALESCE(c.is_system,0) AS is_system,(SELECT COUNT(*) FROM products p WHERE p.category_id=c.id OR p.category=c.name) AS products,(SELECT COUNT(*) FROM categories ch WHERE ch.parent_id=c.id) AS children FROM categories c ORDER BY c.sort_order,c.name,c.id").fetch_all(&mut *tx).await?;
+    tx.commit().await?;Ok(rows)
 }
 
 pub fn validate(record: &CategoryRecord, rows: &[CategoryRecord]) -> Result<()> {
@@ -50,21 +53,29 @@ pub fn validate(record: &CategoryRecord, rows: &[CategoryRecord]) -> Result<()> 
     Ok(())
 }
 
-pub async fn save(pool: &PgPool, record: &CategoryRecord) -> Result<()> {
+pub async fn save(pool: &PgPool, actor: &crate::auth::Session, record: &CategoryRecord, expected: &CategoryRecord) -> Result<()> {
     let mut tx = pool.begin().await?;
+    actor.authorize(&mut tx,crate::auth::Permission::Manage).await?;
+    sqlx::query("SET LOCAL lock_timeout='5s'").execute(&mut *tx).await?;
     sqlx::query("LOCK TABLE categories, products IN SHARE ROW EXCLUSIVE MODE")
         .execute(&mut *tx)
         .await?;
-    let rows: Vec<CategoryRecord> = sqlx::query_as("SELECT id,name,parent_id,COALESCE(description,'') AS description,COALESCE(status,'active') AS status,COALESCE(is_system,0) AS is_system,0::bigint AS products,0::bigint AS children FROM categories").fetch_all(&mut *tx).await?;
+    let rows: Vec<CategoryRecord> = sqlx::query_as("SELECT id,name,parent_id,group_id,COALESCE(description,'') AS description,COALESCE(status,'active') AS status,COALESCE(is_system,0) AS is_system,0::bigint AS products,0::bigint AS children FROM categories").fetch_all(&mut *tx).await?;
     validate(record, &rows)?;
+    ensure!(record.id==expected.id,"Category identity changed");
+    if let Some(group)=record.group_id {
+        let active:Option<i32>=sqlx::query_scalar("SELECT COALESCE(is_active,1) FROM category_groups WHERE id=$1 FOR SHARE").bind(group).fetch_optional(&mut *tx).await?;
+        ensure!(active.is_some()&&(active==Some(1)||record.group_id==expected.group_id),"Choose an active category group");
+    }
     if record.id == 0 {
         sqlx::query(
-            "INSERT INTO categories(name,parent_id,description,status) VALUES($1,$2,$3,$4)",
+            "INSERT INTO categories(name,parent_id,description,status,group_id) VALUES($1,$2,$3,$4,$5)",
         )
         .bind(record.name.trim())
         .bind(record.parent_id)
         .bind(&record.description)
         .bind(&record.status)
+        .bind(record.group_id)
         .execute(&mut *tx)
         .await?;
     } else {
@@ -73,7 +84,8 @@ pub async fn save(pool: &PgPool, record: &CategoryRecord) -> Result<()> {
             .find(|r| r.id == record.id)
             .ok_or_else(|| anyhow::anyhow!("Category no longer exists"))?;
         ensure!(old.is_system == 0, "System categories cannot be changed");
-        sqlx::query("UPDATE categories SET name=$1,parent_id=$2,description=$3,status=$4,updated_at=CURRENT_TIMESTAMP WHERE id=$5").bind(record.name.trim()).bind(record.parent_id).bind(&record.description).bind(&record.status).bind(record.id).execute(&mut *tx).await?;
+        ensure!(old.name==expected.name&&old.parent_id==expected.parent_id&&old.group_id==expected.group_id&&old.description==expected.description&&old.status==expected.status,"Category changed on another PC. Refresh and reopen it.");
+        sqlx::query("UPDATE categories SET name=$1,parent_id=$2,description=$3,status=$4,group_id=$6,updated_at=CURRENT_TIMESTAMP WHERE id=$5").bind(record.name.trim()).bind(record.parent_id).bind(&record.description).bind(&record.status).bind(record.id).bind(record.group_id).execute(&mut *tx).await?;
         sqlx::query("UPDATE products SET category=$1 WHERE category_id=$2 OR category=$3")
             .bind(record.name.trim())
             .bind(record.id)
@@ -81,12 +93,15 @@ pub async fn save(pool: &PgPool, record: &CategoryRecord) -> Result<()> {
             .execute(&mut *tx)
             .await?;
     }
+    crate::activity::record(&mut tx,actor,"rust.category.save",&format!("category={}; group_id={:?}",record.name,record.group_id)).await?;
     tx.commit().await?;
     Ok(())
 }
 
-pub async fn delete(pool: &PgPool, id: i32) -> Result<()> {
+pub async fn delete(pool: &PgPool, actor: &crate::auth::Session, id: i32) -> Result<()> {
     let mut tx = pool.begin().await?;
+    actor.authorize(&mut tx,crate::auth::Permission::Manage).await?;
+    sqlx::query("SET LOCAL lock_timeout='5s'").execute(&mut *tx).await?;
     sqlx::query("LOCK TABLE categories, products IN SHARE ROW EXCLUSIVE MODE")
         .execute(&mut *tx)
         .await?;
@@ -105,6 +120,7 @@ pub async fn delete(pool: &PgPool, id: i32) -> Result<()> {
         .bind(id)
         .execute(&mut *tx)
         .await?;
+    crate::activity::record(&mut tx,actor,"rust.category.delete",&format!("category_id={id}")).await?;
     tx.commit().await?;
     Ok(())
 }

@@ -156,6 +156,7 @@ pub fn ServiceOrdersPage(db_form: DbForm) -> Element {
                         div {class:"service_detail_title",h3 {"{job.job_title}"} span {"{job.order_no}"}}
                         p {span {class:"service_status","data-status":jobs::status_label(&job.status),"{jobs::status_label(&job.status)}"}}
                         div {class:"service_detail_copy",
+                            div {h4 {"Customer"} p {"{job.customer_name}"} p {"{job.customer_phone}"}}
                             div {h4 {"Details"} p {"{job.complaint}"}}
                             div {h4 {"Notes"} p {"{job.internal_notes}"}}
                         }
@@ -233,6 +234,8 @@ fn JobEditor(
         div {class:"service_form",
             label {"Received" input {r#type:"datetime-local",disabled:saving()||!new,value:received(),oninput:move |e|received.set(e.value())}}
             label {"Job Name" input {autofocus:true,disabled:saving(),value:form().job_title,oninput:move |e|form.write().job_title=e.value()}}
+            label {"Customer name" input {disabled:saving(),value:form().customer_name,oninput:move |e|form.write().customer_name=e.value()}}
+            label {"Phone" input {r#type:"tel",disabled:saving(),value:form().customer_phone,oninput:move |e|form.write().customer_phone=e.value()}}
             label {"Details" textarea {rows:4,disabled:saving(),value:form().complaint,oninput:move |e|form.write().complaint=e.value()}}
             label {class:"service_check",input {r#type:"checkbox",checked:scheduled(),disabled:saving(),onchange:move |e|scheduled.set(e.checked())} "Set appointment"}
             input {aria_label:"Appointment",r#type:"datetime-local",disabled:saving()||!scheduled(),value:appointment(),oninput:move |e|appointment.set(e.value())}

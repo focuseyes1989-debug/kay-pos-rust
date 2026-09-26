@@ -1,0 +1,12 @@
+ALTER TABLE products ADD COLUMN price float8 DEFAULT 100;
+ALTER TABLE product_variants ADD COLUMN price float8 DEFAULT 100, ADD COLUMN wholesale_min_qty int DEFAULT 0, ADD COLUMN wholesale_price float8 DEFAULT 0;
+CREATE TABLE product_price_tiers(id serial PRIMARY KEY,product_id int,min_qty int,unit_price float8,active int DEFAULT 1);
+CREATE TABLE product_discounts(id serial PRIMARY KEY,product_id int REFERENCES products(id),discount_percent float8 NOT NULL DEFAULT 0,discount_type text DEFAULT 'percentage',manual_price float8 DEFAULT 0,start_date text NOT NULL,end_date text NOT NULL,active int DEFAULT 1,note text,created_at timestamp DEFAULT CURRENT_TIMESTAMP,updated_at timestamp DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE expense_categories(id serial PRIMARY KEY,name text UNIQUE,is_active int DEFAULT 1);
+CREATE TABLE expenses(id serial PRIMARY KEY,expense_no text UNIQUE,category text,description text,amount float8,expense_date text,payment_method text,reference_no text,notes text);
+CREATE TABLE expense_budgets(id serial PRIMARY KEY,category text,month int,year int,budget_amount float8,notes text,updated_at timestamp,UNIQUE(category,month,year));
+CREATE TABLE expense_notification_settings(id serial PRIMARY KEY,enable_notifications int DEFAULT 1,warning_threshold int DEFAULT 80,check_frequency text DEFAULT 'daily',last_checked timestamp,updated_at timestamp);
+CREATE TABLE expense_alerts_log(id serial PRIMARY KEY,category text,month int,year int,budget_amount float8,actual_amount float8,used_percentage float8,alert_type text,message text,is_read int DEFAULT 0,created_at timestamp DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE expense_attachments(id serial PRIMARY KEY,expense_id int REFERENCES expenses(id) ON DELETE CASCADE,filename text,file_path text,file_size int,mime_type text,uploaded_by text,created_at timestamp DEFAULT CURRENT_TIMESTAMP);
+INSERT INTO expense_categories(name) VALUES('Rent'),('Wages');
+INSERT INTO expense_notification_settings DEFAULT VALUES;

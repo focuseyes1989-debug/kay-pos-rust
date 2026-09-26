@@ -56,9 +56,29 @@ pub fn QuickExpense(db_form: DbForm, on_close: EventHandler<()>, on_saved: Event
 #[component]
 pub fn ExpensesPage(
     db_form: DbForm,
+    new_expense: Signal<bool>,
+    on_sales: EventHandler<()>,
+) -> Element {
+    let session=use_context::<Signal<Option<pos_core::auth::Session>>>();
+    let Some(actor)=session() else {return rsx!{}};
+    let mut tab=use_signal(||0usize);
+    use_effect(move||{if new_expense(){tab.set(0)}});
+    rsx!{section{class:"customers_page phase4_page phase4_expenses",
+        nav{class:"receipt_tabs",aria_label:"Expense views",
+            for (i,label) in ["Expenses","Budgets","Alerts"].iter().enumerate(){button{role:"tab",aria_selected:(tab()==i).to_string(),class:if tab()==i{"active"}else{""},onclick:move |_|tab.set(i),"{label}"}}
+        }
+        if tab()==0 {ExpenseHistory{db_form,new_expense,on_sales}}
+        else {crate::expense_management::BudgetPanel{key:"{tab()}",db_form,actor,alerts:tab()==2}}
+    }}
+}
+
+#[component]
+fn ExpenseHistory(
+    db_form: DbForm,
     mut new_expense: Signal<bool>,
     on_sales: EventHandler<()>,
 ) -> Element {
+    let session=use_context::<Signal<Option<pos_core::auth::Session>>>();
     let source = db_form.clone();
     let mut data = use_resource(move || {
         let form = source.clone();
@@ -66,7 +86,7 @@ pub fn ExpensesPage(
             let result = async {
                 let pool = connect(&form.database_config()?).await?;
                 Ok::<_, anyhow::Error>((
-                    expenses::list(&pool).await?,
+                    expenses::list(&pool,&session().ok_or_else(||anyhow::anyhow!("Sign in again"))?).await?,
                     expenses::categories(&pool).await?,
                     pos_core::db::list_payment_types(&pool).await?,
                 ))
@@ -88,6 +108,7 @@ pub fn ExpensesPage(
     let mut deleting = use_signal(|| None::<Expense>);
     let mut busy = use_signal(|| false);
     let mut applied = use_signal(|| (String::new(), String::new(), String::new()));
+    let mut attachments=use_signal(||None::<i32>);
     use_effect(move || {
         if new_expense() {
             editor.set(Some(new_record()));
@@ -150,9 +171,6 @@ pub fn ExpensesPage(
                     button { class: "customer_primary", onclick: move |_| editor.set(Some(new_record())), crate::icons::ActionLabel { label:"+ Add expense" } }
                 }
             }
-            div { class: "expense_history_header",
-                h3 { "Expense history" }
-            }
             div { class: "expense_filters expense_touch_filters",
                 label { "From" input { r#type: "date", value: "{from}", oninput: move |event| { from.set(event.value()); page.set(0); selected.set(None); } } }
                 label { "To" input { r#type: "date", value: "{to}", oninput: move |event| { to.set(event.value()); page.set(0); selected.set(None); } } }
@@ -173,30 +191,67 @@ pub fn ExpensesPage(
             if invalid_range { div { role: "alert", class: "customers_notice", "From date must not be after To date." } }
             if let Some(Err(message)) = state.as_ref() { div { role: "alert", class: "customers_notice", "{message}" } }
             if !notice().is_empty() { div { role: "status", class: "customers_notice", "{notice}" } }
-            div { class: "expense_touch_list",
-                for row in rows.iter().skip(current*25).take(25) {
-                    article { class: "expense_touch_item", key: "{row.id}",
-                        div { class: "expense_date_badge", strong { {row.expense_date.get(8..10).unwrap_or("--")} } small { {row.expense_date.get(..7).unwrap_or("")} } }
-                        div { class: "expense_item_text",
-                            span { class: "expense_item_category", "{row.category}" }
-                            strong { "{row.description}" }
-                            small { "{row.expense_no} · {row.reference_no}" }
-                            if !row.notes.is_empty() { details { summary { "More details" } p { "{row.notes}" } } }
+            div { class: "expense_columns",
+                section { class: "expense_list_panel panel",
+                    div { class: "transactions_head",
+                        div { strong { "Expense history" } small { "Select an expense to view details" } }
+                        span { class: "count_badge", "{rows.len()}" }
+                    }
+                    div { class: "expense_touch_list",
+                        for row in rows.iter().skip(current*25).take(25) {
+                            article {
+                                class: if selected().as_ref().is_some_and(|item|item.id==row.id) { "expense_touch_item active" } else { "expense_touch_item" },
+                                key: "{row.id}",
+                                tabindex: "0",
+                                role: "button",
+                                onclick: { let row=row.clone(); move |_| selected.set(Some(row.clone())) },
+                                div { class: "expense_date_badge", strong { {row.expense_date.get(8..10).unwrap_or("--")} } small { {row.expense_date.get(..7).unwrap_or("")} } }
+                                div { class: "expense_item_text",
+                                    span { class: "expense_item_category", "{row.category}" }
+                                    strong { "{row.description}" }
+                                    small { "{row.expense_no} · {row.reference_no}" }
+                                }
+                                div { class: "expense_item_amount", strong { "{money(row.amount)}" } small { "{crate::regional::current().symbol()}" } span { "{row.payment_method}" } }
+                            }
                         }
-                        div { class: "expense_item_amount", strong { "{money(row.amount)}" } small { "{crate::regional::current().symbol()}" } span { "{row.payment_method}" } }
-                        div { class: "customers_actions",
+                        if state.is_none() { p { class: "customers_notice", "Loading..." } }
+                        else if rows.is_empty() { p { class: "customers_notice", "No expenses found." } }
+                    }
+                    footer { class: "customers_pagination",
+                        button { disabled: current==0, onclick: move |_| { page.set(current.saturating_sub(1)); selected.set(None); }, "Previous" }
+                        span { "Page {current+1} of {pages}" }
+                        button { disabled: current+1>=pages, onclick: move |_| { page.set(current+1); selected.set(None); }, "Next" }
+                    }
+                }
+                if let Some(row)=selected() {
+                    section { class: "expense_detail_panel panel",
+                        div { class: "receipt_detail_head",
+                            div { strong { "{row.expense_no}" } small { "{row.expense_date} · {row.category}" } }
+                            button { onclick: move |_| selected.set(None), crate::icons::ActionLabel { label:"Close" } }
+                        }
+                        div { class: "expense_detail_body",
+                            div { class: "expense_detail_amount", span { "Amount" } strong { "{money(row.amount)} {crate::regional::current().symbol()}" } }
+                            dl {
+                                div { dt { "Description" } dd { "{row.description}" } }
+                                div { dt { "Payment method" } dd { "{row.payment_method}" } }
+                                div { dt { "Reference" } dd { if row.reference_no.is_empty() { "-" } else { "{row.reference_no}" } } }
+                                div { dt { "Notes" } dd { if row.notes.is_empty() { "-" } else { "{row.notes}" } } }
+                            }
+                        }
+                        div { class: "receipt_detail_actions expense_detail_actions",
+                            button { onclick: { let id=row.id; move |_| attachments.set(Some(id)) }, crate::icons::ActionLabel { label:"Attachments" } }
                             button { onclick: { let row=row.clone(); move |_| editor.set(Some(row.clone())) }, crate::icons::ActionLabel { label:"Edit" } }
                             button { class: "expense_delete", onclick: { let row=row.clone(); move |_| deleting.set(Some(row.clone())) }, crate::icons::ActionLabel { label:"Delete" } }
                         }
                     }
+                } else {
+                    section { class: "expense_detail_panel panel",
+                        div { class: "empty receipts_empty",
+                            strong { "Select an expense" }
+                            span { "Expense details will appear here." }
+                        }
+                    }
                 }
-                if state.is_none() { p { class: "customers_notice", "Loading..." } }
-                else if rows.is_empty() { p { class: "customers_notice", "No expenses found." } }
-            }
-            footer { class: "customers_pagination",
-                button { disabled: current==0, onclick: move |_| page.set(current.saturating_sub(1)), "Previous" }
-                span { "Page {current+1} of {pages}" }
-                button { disabled: current+1>=pages, onclick: move |_| page.set(current+1), "Next" }
             }
         }
         if let Some(expense)=editor() {
@@ -213,17 +268,20 @@ pub fn ExpensesPage(
                     p { "{row.expense_no} · {row.category} · {money(row.amount)} {crate::regional::current().symbol()}" }
                     div { class: "customers_actions",
                         button { disabled: busy(), onclick: move |_| deleting.set(None), crate::icons::ActionLabel { label:"Cancel" } }
-                        button { disabled: busy(), onclick: move |_| {
+                        button { disabled: busy(), onclick: {let db_form=db_form.clone();move |_| {
                             if busy() { return; } let source=db_form.clone(); busy.set(true);
                             spawn(async move {
-                                let result=async { expenses::delete(&connect(&source.database_config()?).await?,row.id).await }.await;
+                                let result=async { expenses::delete(&connect(&source.database_config()?).await?,row.id,&session().ok_or_else(||anyhow::anyhow!("Sign in again"))?).await }.await;
                                 busy.set(false);
                                 match result { Ok(())=> { deleting.set(None); notice.set("Expense deleted.".into()); data.restart(); }, Err(err)=>error.set(format!("{err:#}")) }
                             });
-                        }, if busy() { "Deleting..." } else { crate::icons::ActionLabel { label:"Delete" } } }
+                        }}, if busy() { "Deleting..." } else { crate::icons::ActionLabel { label:"Delete" } } }
                     }
                 }
             }
+        }
+        if let Some(id)=attachments(){
+            if let Some(actor)=session(){crate::expense_management::Attachments{db_form:db_form.clone(),actor,expense_id:id,onclose:move |_|attachments.set(None)}}
         }
         if !error().is_empty() { MessageBox { title: "Expense Error".to_string(), message: error(), on_close: move |_| error.set(String::new()) } }
     }
@@ -265,6 +323,7 @@ fn ExpenseEditor(
         }
     });
     let mut saving = use_signal(|| false);
+    let session=use_context::<Signal<Option<pos_core::auth::Session>>>();
     rsx! {
         div { class: "modal_backdrop",
             section { class: "customer_dialog", role: "dialog", aria_modal: "true", aria_label: "Expense",
@@ -296,7 +355,7 @@ fn ExpenseEditor(
                         if let Err(err)=expenses::validate(&expense) { on_error.call(err.to_string()); return; }
                         let source=db_form.clone(); saving.set(true);
                         spawn(async move {
-                            let result=async { expenses::save(&connect(&source.database_config()?).await?,&expense).await }.await;
+                            let result=async { expenses::save(&connect(&source.database_config()?).await?,&expense,&session().ok_or_else(||anyhow::anyhow!("Sign in again"))?).await }.await;
                             saving.set(false);
                             match result { Ok(())=>on_saved.call(()), Err(err)=>on_error.call(format!("{err:#}")) }
                         });

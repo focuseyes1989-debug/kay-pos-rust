@@ -72,6 +72,7 @@ fn valid_date(date: &str) -> Result<()> {
 
 pub async fn create(
     pool: &PgPool,
+    actor: &crate::auth::Session,
     customer: i32,
     invoice: &str,
     total: &str,
@@ -91,6 +92,7 @@ pub async fn create(
     valid_date(due)?;
     ensure!(due >= date, "Due date must not precede sale date");
     let mut tx = pool.begin().await?;
+    actor.authorize(&mut tx,crate::auth::Permission::Manage).await?;
     let (limit, balance): (Decimal, Decimal) = sqlx::query_as("SELECT COALESCE(credit_limit,0)::numeric, COALESCE(current_balance,0)::numeric FROM customers WHERE id=$1 FOR UPDATE").bind(customer).fetch_one(&mut *tx).await?;
     let enabled: Option<String> =
         sqlx::query_scalar("SELECT value FROM settings WHERE key='credit_limit_enabled'")
@@ -120,6 +122,7 @@ pub async fn create(
     .bind(customer)
     .execute(&mut *tx)
     .await?;
+    crate::activity::record(&mut tx,actor,"rust.credit.create",&format!("customer_id={customer}; invoice={invoice}")).await?;
     tx.commit().await?;
     Ok(())
 }
@@ -142,6 +145,7 @@ pub fn allocate(amount: Decimal, balances: &[(i32, Decimal)]) -> Result<Vec<(i32
 
 pub async fn collect(
     pool: &PgPool,
+    actor: &crate::auth::Session,
     customer: i32,
     invoice: Option<i32>,
     value: &str,
@@ -153,6 +157,7 @@ pub async fn collect(
     let amount = amount(value)?;
     valid_date(date)?;
     let mut tx = pool.begin().await?;
+    actor.authorize(&mut tx,crate::auth::Permission::Manage).await?;
     sqlx::query("SELECT id FROM customers WHERE id=$1 FOR UPDATE")
         .bind(customer)
         .fetch_one(&mut *tx)
@@ -177,6 +182,7 @@ pub async fn collect(
     .bind(customer)
     .execute(&mut *tx)
     .await?;
+    crate::activity::record(&mut tx,actor,"rust.credit.collect",&format!("customer_id={customer}; invoice_id={invoice:?}; amount={amount}")).await?;
     tx.commit().await?;
     Ok(())
 }

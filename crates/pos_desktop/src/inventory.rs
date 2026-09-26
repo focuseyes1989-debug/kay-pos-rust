@@ -292,7 +292,7 @@ fn ReceiveDialog(
                 let receipt=inventory::Receipt {product_id:product.id,variant_id:variant().parse().ok(),supplier_id:if mode()=="Stock In"{supplier().parse().ok()}else{None},quantity,unit_cost,location:location(),batch:batch(),expiry:if no_expire(){String::new()}else{expiry()},reason:if mode()=="Stock In"{"Stock received".into()}else{reason()},reference:if mode()=="Stock In"{String::new()}else{reference()},received_by:actor(),notes:notes(),expected_stock:product.stock,expected_location_stock};
                 let operation=mode();
                 if operation=="Stock In" {if let Err(e)=receipt.validate(){on_error.call(e.to_string());return;}}
-                busy.set(true);let source=db_form.clone();spawn(async move {let result=async {let pool=connect(&source.database_config()?).await?;if operation=="Stock In" {inventory::receive(&pool,&receipt).await}else{inventory::change(&pool,&receipt,operation=="Adjustment",&operator).await}}.await;busy.set(false);match result {Ok(())=>on_saved.call(()),Err(e)=>on_error.call(format!("{e:#}"))}});
+                busy.set(true);let source=db_form.clone();spawn(async move {let result=async {let pool=connect(&source.database_config()?).await?;if operation=="Stock In" {inventory::receive(&pool,&receipt,&operator).await}else{inventory::change(&pool,&receipt,operation=="Adjustment",&operator).await}}.await;busy.set(false);match result {Ok(())=>on_saved.call(()),Err(e)=>on_error.call(format!("{e:#}"))}});
             },if busy(){"Saving..."}else{"Save {mode}"}}
         }
     }}}

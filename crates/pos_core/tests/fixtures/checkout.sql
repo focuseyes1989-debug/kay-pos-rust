@@ -1,4 +1,5 @@
 CREATE TABLE users(id serial PRIMARY KEY, username text UNIQUE, role text, is_active int DEFAULT 1, password_hash text, salt text);
+CREATE TABLE user_activity_log(id SERIAL PRIMARY KEY,user_id INTEGER REFERENCES users(id),username TEXT NOT NULL,action TEXT NOT NULL,details TEXT,ip_address TEXT,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE settings(key text PRIMARY KEY, value text);
 CREATE TABLE sales(id serial PRIMARY KEY, invoice_no text UNIQUE, total float8, payment float8, change_amount float8, customer_id int, status text, payment_type text, discount_amount float8, cogs float8, gross_profit float8, net_profit float8, created_by text, created_at timestamp);
 CREATE TABLE sale_items(id serial PRIMARY KEY, sale_id int, product_id int, variant_id int, product_name text, qty float8, price float8, total float8, cost float8, wholesale_regular_price float8, wholesale_savings float8, wholesale_tier_min_qty int, wholesale_unit_label text, location_id int, location text, batch_no text, expire_date text, refunded_qty float8 DEFAULT 0, refund_reason text);

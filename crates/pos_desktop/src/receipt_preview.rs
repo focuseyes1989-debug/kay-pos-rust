@@ -4,6 +4,7 @@ use std::collections::HashMap;
 
 fn sample_receipt() -> ReceiptData {
     let product = Product {
+        promotion: None,
         id: 0, name: "Sample item".into(), description: None, category_id: None, category_name: None,
         sku: None, barcode: None, price: 2500.0, cost: 0.0, stock: 0.0,
         low_stock: 0.0, sold_by: Some("Each".into()), image_filename: None,
