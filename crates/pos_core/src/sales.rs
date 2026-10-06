@@ -266,6 +266,8 @@ pub async fn complete_sale(
     .await?;
     if let Some(token)=&draft.held_token {crate::held_sales::finish(&mut tx,token,sale.id).await?;}
     crate::activity::record(&mut tx,actor,"rust.sale.complete",&format!("sale_id={}; invoice={invoice_no}",sale.id)).await?;
+    crate::erp_sync::enqueue_sale_completed(&mut tx, sale.id).await?;
+    crate::erp_accounting::sale(&mut tx, sale.id).await?;
     tx.commit().await.context("failed to commit sale")?;
     Ok(sale)
 }
@@ -472,8 +474,9 @@ pub async fn refund_sale(pool: &PgPool, sale_id: i32, actor: &crate::auth::Sessi
         sqlx::query("UPDATE credit_sales SET status='refunded',balance_amount=0,notes=COALESCE(notes,'') || ' [REFUNDED: Rust POS receipt refund]' WHERE id=$1")
             .bind(credit_id).execute(&mut *tx).await?;
         if *paid > 0.0 {
-            sqlx::query("INSERT INTO credit_payments(credit_sale_id,customer_id,amount,payment_date,payment_method,note) VALUES($1,$2,$3::float8,$4,'refund','Rust POS receipt refund')")
-                .bind(credit_id).bind(customer).bind(-paid).bind(now.to_string()).execute(&mut *tx).await?;
+            let payment_id:i32=sqlx::query_scalar("INSERT INTO credit_payments(credit_sale_id,customer_id,amount,payment_date,payment_method,note) VALUES($1,$2,$3::float8,$4,'refund','Rust POS receipt refund') RETURNING id")
+                .bind(credit_id).bind(customer).bind(-paid).bind(now.to_string()).fetch_one(&mut *tx).await?;
+            crate::erp_accounting::customer_payment(&mut tx,payment_id).await?;
         }
         sqlx::query("INSERT INTO credit_adjustments(customer_id,credit_sale_id,amount,adjustment_type,reason,created_by) VALUES($1,$2,$3::float8,'refund','Receipt refund',$4)")
             .bind(customer).bind(credit_id).bind(-total).bind(actor.username()).execute(&mut *tx).await?;
@@ -550,6 +553,8 @@ pub async fn refund_sale(pool: &PgPool, sale_id: i32, actor: &crate::auth::Sessi
         .execute(&mut *tx)
         .await?;
     crate::activity::record(&mut tx,actor,"rust.sale.refund",&format!("sale_id={sale_id}; invoice={invoice}")).await?;
+    crate::erp_sync::enqueue_sale_refunded(&mut tx, sale_id).await?;
+    crate::erp_accounting::refund(&mut tx, sale_id).await?;
     tx.commit().await.context("Failed to commit refund")?;
     Ok(())
 }

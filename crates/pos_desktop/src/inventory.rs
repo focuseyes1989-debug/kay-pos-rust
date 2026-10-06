@@ -29,6 +29,10 @@ pub fn InventoryPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
     let mut receiving = use_signal(|| false);
     let mut error = use_signal(String::new);
     let mut revision = use_signal(|| 0u64);
+    use_effect(move || {
+        let values = (search(), category());
+        if *applied.peek() != values { applied.set(values); count.set(50); selected.set(None); }
+    });
     let state = data.read();
     let (products, categories, locations, suppliers) = state
         .as_ref()
@@ -57,9 +61,8 @@ pub fn InventoryPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
         section {class:"customers_page products_touch inventory_touch",
             header {class:"customers_header customers_touch_header",h2 {crate::icons::ActionLabel { label:"Inventory" }} div {class:"customers_actions",button { hidden:true, "data-page-refresh":"true", tabindex:-1, aria_hidden:"true",disabled:!data.finished(),onclick:move |_|{data.restart();revision+=1;},"Refresh"}}}
             div {class:"location_filters inventory_filters",
-                label {"Search inventory" input {placeholder:"Product name, SKU or barcode",value:"{search}",oninput:move |e|search.set(e.value()),onkeydown:move |e|if e.key()==Key::Enter{applied.set((search(),category()));count.set(50);}}}
+                label {"Search inventory" input {r#type:"search",placeholder:"Product name, SKU or barcode",value:"{search}",oninput:move |e|search.set(e.value()),onkeydown:move |e|if e.key()==Key::Enter{applied.set((search(),category()));count.set(50);}}}
                 label {"Category" select {value:"{category}",onchange:move |e|category.set(e.value()),option {value:"","All categories"} for c in categories {option {value:"{c.id}","{c.name}"}}}}
-                button {class:"customer_primary",onclick:move |_|{applied.set((search(),category()));count.set(50);},"Search"}
                 button {onclick:move |_|{search.set(String::new());category.set(String::new());applied.set((String::new(),String::new()));count.set(50);},"Reset"}
             }
             div {class:"inventory_columns",
@@ -93,7 +96,7 @@ pub fn InventoryPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
             }
         }
         if receiving() {if let Some(product)=current {div {class:"modal_backdrop",section {class:"customer_dialog movement_dialog",role:"dialog",aria_modal:"true",aria_label:"Stock movements",
-            header {class:"movement_dialog_header",div {h2 {"Stock Movements"} p {"{product.name}"}} button {title:"Close",aria_label:"Close stock movements",onclick:move |_|receiving.set(false),"×"}}
+            header {class:"movement_dialog_header",div {h2 {"Stock Movements"} p {"{product.name}"}} button {title:"Close",aria_label:"Close stock movements",onclick:move |_|receiving.set(false),crate::icons::Icon {name:"close"}}}
             MovementList {product_id:product.id,db_form:db_form.clone(),on_changed:move |_|{data.restart();revision+=1;}}
         }}}}
         if !error().is_empty(){MessageBox {title:"Inventory Error".to_string(),message:error(),on_close:move |_|error.set(String::new())}}

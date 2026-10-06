@@ -15,6 +15,22 @@ fn new_record() -> Expense {
     }
 }
 
+fn today() -> String {
+    chrono::Local::now().format("%Y-%m-%d").to_string()
+}
+
+fn category_totals(rows: &[Expense]) -> Vec<(String, Money, usize)> {
+    let mut groups = std::collections::BTreeMap::<String, (Money, usize)>::new();
+    for row in rows {
+        let entry = groups.entry(row.category.clone()).or_default();
+        entry.0 += row.amount;
+        entry.1 += 1;
+    }
+    let mut totals: Vec<_> = groups.into_iter().map(|(name, (amount, count))| (name, amount, count)).collect();
+    totals.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+    totals
+}
+
 #[component]
 pub fn QuickExpense(db_form: DbForm, on_close: EventHandler<()>, on_saved: EventHandler<()>) -> Element {
     let source = db_form.clone();
@@ -97,8 +113,9 @@ fn ExpenseHistory(
     });
     let mut query = use_signal(String::new);
     let mut category = use_signal(String::new);
-    let mut from = use_signal(String::new);
-    let mut to = use_signal(String::new);
+    let mut category_view = use_signal(|| false);
+    let mut from = use_signal(today);
+    let mut to = use_signal(today);
     let mut page = use_signal(|| 0usize);
     let mut selected = use_signal(|| None::<Expense>);
     let mut editor = use_signal(|| None::<Expense>);
@@ -107,7 +124,7 @@ fn ExpenseHistory(
     let mut exporting = use_signal(|| false);
     let mut deleting = use_signal(|| None::<Expense>);
     let mut busy = use_signal(|| false);
-    let mut applied = use_signal(|| (String::new(), String::new(), String::new()));
+    let mut applied = use_signal(|| { let date = today(); (date.clone(), date, String::new(), String::new()) });
     let mut attachments=use_signal(||None::<i32>);
     use_effect(move || {
         if new_expense() {
@@ -115,18 +132,25 @@ fn ExpenseHistory(
             new_expense.set(false);
         }
     });
+    use_effect(move || {
+        let q = query(); let c = category();
+        let a=from(); let b=to();
+        if !a.is_empty() && !b.is_empty() && a>b { return; }
+        let values=(a,b,q,c);
+        if *applied.peek()!=values { applied.set(values); page.set(0); selected.set(None); }
+    });
     let state = data.read();
     let (all, categories, methods) = match state.as_ref() {
         Some(Ok(data)) => data.clone(),
         _ => (vec![], vec![], vec![]),
     };
-    let (filter_from, filter_to, filter_query) = applied();
+    let (filter_from, filter_to, filter_query, filter_category) = applied();
     let search = filter_query.to_lowercase();
     let invalid_range = !from().is_empty() && !to().is_empty() && from() > to();
     let rows = all
         .iter()
         .filter(|row| {
-            (category().is_empty() || category() == row.category)
+            (filter_category.is_empty() || filter_category == row.category)
                 && (filter_from.is_empty() || row.expense_date >= filter_from)
                 && (filter_to.is_empty() || row.expense_date <= filter_to)
                 && format!(
@@ -139,6 +163,8 @@ fn ExpenseHistory(
         .cloned()
         .collect::<Vec<_>>();
     let total: Money = rows.iter().map(|row| row.amount).sum();
+    let category_summary = category_totals(&rows);
+    let largest_category = category_summary.first().map(|row| row.1).unwrap_or(Money::ZERO);
     let average = if rows.is_empty() {
         Money::ZERO
     } else {
@@ -172,26 +198,63 @@ fn ExpenseHistory(
                 }
             }
             div { class: "expense_filters expense_touch_filters",
-                label { "From" input { r#type: "date", value: "{from}", oninput: move |event| { from.set(event.value()); page.set(0); selected.set(None); } } }
-                label { "To" input { r#type: "date", value: "{to}", oninput: move |event| { to.set(event.value()); page.set(0); selected.set(None); } } }
-                div { class: "customers_actions expense_period_actions",
-                    for period in ["Today", "This month", "All time"] {
-                        button { onclick: move |_| {
-                            let now=chrono::Local::now(); let end=now.format("%Y-%m-%d").to_string();
-                            let start=if period=="Today" { end.clone() } else if period=="This month" { now.format("%Y-%m-01").to_string() } else { String::new() };
-                            let end=if period=="All time" { String::new() } else { end };
-                            from.set(start.clone()); to.set(end.clone()); applied.set((start,end,query())); page.set(0);
-                        }, "{period}" }
+                crate::date_range::DateRangePicker { allow_empty:true, from:from(), to:to(), onchange:move |(a,b):(String,String)|{from.set(a);to.set(b);page.set(0);selected.set(None);} }
+                label { "Category"
+                    select { aria_label: "Expense category", value: "{category}", onchange: move |event| category.set(event.value()),
+                        option { value: "", "All categories" }
+                        for name in filter_categories.iter().filter(|name| !name.trim().is_empty()) {
+                            option { value: "{name}", "{name}" }
+                        }
                     }
                 }
                 label { "Search" input { r#type: "search", placeholder: "Category, description or reference", value: "{query}", oninput: move |event| query.set(event.value()) } }
-                button { class: "customer_primary", disabled: invalid_range, onclick: move |_| { applied.set((from(),to(),query())); page.set(0); }, "Apply" }
-                button { onclick: move |_| { from.set(String::new()); to.set(String::new()); query.set(String::new()); category.set(String::new()); applied.set(Default::default()); page.set(0); data.restart(); }, "Reset" }
+                button { onclick: move |_| { let date=today(); from.set(date.clone()); to.set(date.clone()); query.set(String::new()); category.set(String::new()); applied.set((date.clone(),date,String::new(),String::new())); page.set(0); selected.set(None); data.restart(); }, "Reset" }
             }
             if invalid_range { div { role: "alert", class: "customers_notice", "From date must not be after To date." } }
             if let Some(Err(message)) = state.as_ref() { div { role: "alert", class: "customers_notice", "{message}" } }
             if !notice().is_empty() { div { role: "status", class: "customers_notice", "{notice}" } }
-            div { class: "expense_columns",
+            nav { class: "receipt_tabs expense_view_tabs", role: "tablist", aria_label: "Expense results",
+                button { role: "tab", id: "expense-category-tab", aria_controls: "expense-category-panel", aria_selected: category_view().to_string(), class: if category_view() { "active" } else { "" }, onclick: move |_| category_view.set(true), "Spending by Category" }
+                button { role: "tab", id: "expense-history-tab", aria_controls: "expense-history-panel", aria_selected: (!category_view()).to_string(), class: if !category_view() { "active" } else { "" }, onclick: move |_| category_view.set(false), "Expense History" }
+            }
+            if category_view() {
+            section { class: "expense_category_chart", id: "expense-category-panel", role: "tabpanel", aria_labelledby: "expense-category-tab",
+                header {
+                    div { strong { "Spending by category" } small { "Totals for the applied date range and filters · Select a category to view its expenses" } }
+                    if !filter_category.is_empty() {
+                        button { onclick: move |_| {
+                            category.set(String::new());
+                            let (a,b,q,_) = applied();
+                            applied.set((a,b,q,String::new()));
+                            page.set(0); selected.set(None);
+                        }, "All categories" }
+                    }
+                }
+                div { class: "expense_category_bars",
+                    for (name, amount, count) in &category_summary {
+                        {
+                            let width = if largest_category > Money::ZERO { (*amount / largest_category * Money::from(100)).round_dp(2) } else { Money::ZERO };
+                            let share = if total > Money::ZERO { (*amount / total * Money::from(100)).round_dp(1).normalize() } else { Money::ZERO };
+                            rsx! { button { class: "expense_category_bar", onclick: {
+                                let name=name.clone(); move |_| {
+                                    category.set(name.clone());
+                                    let (a,b,q,_) = applied();
+                                    applied.set((a,b,q,name.clone()));
+                                    page.set(0); selected.set(None);
+                                    category_view.set(false);
+                                }
+                            },
+                                span { class: "expense_category_name", "{name}" }
+                                span { class: "expense_category_track", aria_hidden: "true", span { style: "width:{width}%" } }
+                                span { class: "expense_category_value", strong { "{money(*amount)} {crate::regional::current().symbol()}" } small { "{count} expenses · {share}%" } }
+                            } }
+                        }
+                    }
+                    if category_summary.is_empty() { p { class: "customers_notice", "No expenses for the applied filters." } }
+                }
+            }
+            } else {
+            div { class: "expense_columns", id: "expense-history-panel", role: "tabpanel", aria_labelledby: "expense-history-tab",
                 section { class: "expense_list_panel panel",
                     div { class: "transactions_head",
                         div { strong { "Expense history" } small { "Select an expense to view details" } }
@@ -252,6 +315,7 @@ fn ExpenseHistory(
                         }
                     }
                 }
+            }
             }
         }
         if let Some(expense)=editor() {
@@ -363,6 +427,19 @@ fn ExpenseEditor(
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod category_summary_tests {
+    use super::*;
+
+    #[test]
+    fn combines_repeated_categories_and_sorts_by_total() {
+        let rows = [("Raw materials", 20000), ("Other", 5000), ("Raw materials", 100000)]
+            .into_iter().map(|(category, amount)| Expense { category:category.into(), amount:Money::from(amount), ..Default::default() }).collect::<Vec<_>>();
+        assert_eq!(category_totals(&rows), vec![("Raw materials".into(), Money::from(120000), 2), ("Other".into(), Money::from(5000), 1)]);
+        assert!(category_totals(&[]).is_empty());
     }
 }
 

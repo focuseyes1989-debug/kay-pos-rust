@@ -28,6 +28,10 @@ pub fn CustomersPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
     let mut exporting = use_signal(|| false);
     let mut points_history=use_signal(||None::<Customer>);
     let session=use_context::<Signal<Option<pos_core::auth::Session>>>();
+    use_effect(move || {
+        let value = query();
+        if *applied_query.peek() != value { applied_query.set(value); page.set(0); selected.set(None); }
+    });
     let state = loaded.read();
     let search = applied_query().trim().to_lowercase();
     let rows = match state.as_ref() {
@@ -85,7 +89,7 @@ pub fn CustomersPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
                         onkeydown: move |event| { if event.key()==Key::Enter { applied_query.set(query()); page.set(0); selected.set(None); } }
                     }
                 }
-                button { class: "customer_primary", onclick: move |_| { applied_query.set(query()); page.set(0); selected.set(None); }, "Search" }
+
                 button { onclick: move |_| { query.set(String::new()); applied_query.set(String::new()); page.set(0); selected.set(None); loaded.restart(); }, "Reset" }
             }
             if let Some(Err(message)) = state.as_ref() {
@@ -305,8 +309,7 @@ fn CustomerAction(
                 if state.is_none() { p { "Loading..." } }
                 if report {
                     div { class: "customer_form",
-                        label { "From" input { r#type: "date", value: "{from}", oninput: move |event| from.set(event.value()) } }
-                        label { "To" input { r#type: "date", value: "{to}", oninput: move |event| to.set(event.value()) } }
+                        crate::date_range::DateRangePicker { allow_empty:true, from:from(), to:to(), onchange:move |(a,b):(String,String)|{from.set(a);to.set(b);} }
                     }
                     if let Some(Ok((invoices,payments,_))) = state.as_ref() {
                         div { class: "customers_table_scroll",

@@ -16,7 +16,7 @@
 
   function closeAll(except = null) {
     document.querySelectorAll('.touch-combo.open').forEach(combo => {
-      if (combo !== except) combo.classList.remove('open');
+      if (combo !== except) {combo.classList.remove('open');combo.querySelector('input')?.setAttribute('aria-expanded','false');}
     });
   }
 
@@ -49,11 +49,14 @@
       button.textContent = optionText(option) || option.value || 'Blank';
       button.dataset.value = option.value;
       button.setAttribute('aria-selected', String(option.selected));
+      button.setAttribute('role', 'option');
       button.disabled = option.disabled;
       button.addEventListener('mousedown', event => event.preventDefault());
       button.addEventListener('click', () => {
         choose(select, option.value);
         combo.root.classList.remove('open');
+        combo.input.setAttribute('aria-expanded','false');
+        combo.suppressFocus=true;combo.input.focus();combo.suppressFocus=false;
       });
       combo.list.appendChild(button);
     }
@@ -66,34 +69,52 @@
   }
 
   function enhance(select) {
-    // This reactive screen owns its controls; injected siblings can survive rerenders.
-    if (select?.closest('.employees_page')) return;
+    if (select?._touchCombo && !select._touchCombo.root.isConnected) {
+      select._touchCombo.observer?.disconnect();
+      delete select.dataset[ENHANCED];
+      delete select._touchCombo;
+    }
     if (!select || select.dataset[ENHANCED] || select.dataset[SKIP] || select.multiple || Number(select.size || 0) > 1) return;
     select.dataset[ENHANCED] = '1';
 
     const root = document.createElement('div');
     root.className = 'touch-combo';
+    root._select = select;
     const input = document.createElement('input');
     input.type = 'search';
     input.autocomplete = 'off';
     input.spellcheck = false;
     input.className = 'touch-combo-input';
+    input.setAttribute('role','combobox');
+    input.setAttribute('aria-autocomplete','list');
+    input.setAttribute('aria-expanded','false');
+    input.setAttribute('aria-label',select.getAttribute('aria-label') || select.labels?.[0]?.textContent?.trim() || 'Select an option');
     input.placeholder = select.getAttribute('aria-label') || select.closest('label')?.childNodes?.[0]?.textContent?.trim() || 'Search';
     input.value = selectedText(select);
     const list = document.createElement('div');
     list.className = 'touch-combo-list';
     list.setAttribute('role', 'listbox');
+    list.id='kay-combo-'+(++enhance.counter);
+    input.setAttribute('aria-controls',list.id);
     root.append(input, list);
     select.after(root);
     select.classList.add('touch-combo-select');
     select._touchCombo = {root, input, list};
 
     input.addEventListener('focus', () => {
+      if (select._touchCombo.suppressFocus) return;
       if (select.disabled) return;
       closeAll(root);
       root.classList.add('open');
       input.select();
-      render(select, input.value);
+      render(select, '');
+    });
+    input.addEventListener('click', () => {
+      if (select.disabled || root.classList.contains('open')) return;
+      closeAll(root);
+      root.classList.add('open');
+      input.select();
+      render(select, '');
     });
     input.addEventListener('input', () => {
       root.classList.add('open');
@@ -105,6 +126,9 @@
         input.value = selectedText(select);
         return;
       }
+      if (event.key === 'Enter' && !root.classList.contains('open')) {
+        event.preventDefault();root.classList.add('open');render(select,'');return;
+      }
       if (event.key !== 'Enter') return;
       const first = list.querySelector('.touch-combo-option:not(:disabled)');
       if (first) {
@@ -114,9 +138,12 @@
       }
     });
     select.addEventListener('change', () => refresh(select));
-    new MutationObserver(() => refresh(select)).observe(select, {childList: true, subtree: true, attributes: true, attributeFilter: ['disabled']});
+    const observer = new MutationObserver(() => refresh(select));
+    observer.observe(select, {childList: true, subtree: true, attributes: true, attributeFilter: ['disabled','selected','value','label'],characterData:true});
+    select._touchCombo.observer=observer;
     refresh(select);
   }
+  enhance.counter=0;
 
   function enhanceWithin(root = document) {
     if (root.matches?.(SELECTOR)) enhance(root);
@@ -151,11 +178,15 @@
   document.addEventListener('DOMContentLoaded', () => {
     enhanceWithin();
     new MutationObserver(records => {
+      document.querySelectorAll('.touch-combo').forEach(combo=>{
+        if (!combo._select?.isConnected) {combo._select?._touchCombo?.observer?.disconnect();combo.remove();}
+      });
       for (const record of records) {
         for (const node of record.addedNodes) {
           if (node.nodeType === Node.ELEMENT_NODE) enhanceWithin(node);
         }
       }
+      enhanceWithin();
     }).observe(document.body, {childList: true, subtree: true});
   });
 

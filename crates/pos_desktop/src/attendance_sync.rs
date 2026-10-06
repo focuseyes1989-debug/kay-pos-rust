@@ -43,7 +43,7 @@ pub fn AttendanceSync(db_form: DbForm, on_synced: EventHandler<()>) -> Element {
         if open(){div {class:"modal_backdrop",section {class:"customer_dialog attendance_sync_dialog",role:"dialog",aria_modal:"true",aria_label:"Attendance Sync",
             h2 {"Attendance Sync"}
             label {r#for:"attendance_sync_device","Device"}
-            select {id:"attendance_sync_device","data-touch-combo-skip":"1",disabled:busy()||!devices.finished(),value:selected(),onchange:move |e|{selected.set(e.value());notice.set(String::new());},
+            select {id:"attendance_sync_device",disabled:busy()||!devices.finished(),value:selected(),onchange:move |e|{selected.set(e.value());notice.set(String::new());},
                 option {value:"","Select device"}
                 for device in &rows {option {value:"{device.id}","{device.device_no} · {device.name}"}}
             }

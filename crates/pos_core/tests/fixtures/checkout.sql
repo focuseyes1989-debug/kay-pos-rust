@@ -7,7 +7,7 @@ CREATE TABLE products(id int PRIMARY KEY, stock float8, cost float8 DEFAULT 0, s
 CREATE TABLE product_variants(id int PRIMARY KEY, product_id int, stock int, active int DEFAULT 1, updated_at timestamp);
 CREATE TABLE customers(id int PRIMARY KEY, current_balance float8, credit_limit float8, total_visit int DEFAULT 0, total_spent float8 DEFAULT 0);
 CREATE TABLE credit_sales(id serial PRIMARY KEY, sale_id int, invoice_no text, customer_id int, total_amount float8, paid_amount float8, balance_amount float8, sale_date text, due_date text, status text, notes text);
-CREATE TABLE credit_payments(credit_sale_id int, customer_id int, amount float8, payment_date text, payment_method text, note text);
+CREATE TABLE credit_payments(id serial PRIMARY KEY,credit_sale_id int, customer_id int, amount float8, payment_date text, payment_method text, reference_no text, note text);
 CREATE TABLE credit_adjustments(customer_id int, credit_sale_id int, amount float8, adjustment_type text, reason text, created_by text);
 CREATE TABLE stock_movements(id serial PRIMARY KEY, product_id int, variant_id int, type text, quantity float8, old_stock float8, new_stock float8, reason text, reference text, created_by text, location text, created_at timestamp DEFAULT CURRENT_TIMESTAMP, notes text);
 CREATE TABLE product_locations(id serial PRIMARY KEY, product_id int, location text, batch_no text, expire_date text, quantity float8, last_updated timestamp DEFAULT CURRENT_TIMESTAMP, UNIQUE(product_id,location,batch_no,expire_date));

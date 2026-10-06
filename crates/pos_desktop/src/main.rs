@@ -13,8 +13,10 @@ mod cash_drawer;
 mod categories;
 mod customer_display;
 mod customers;
+mod live_search;
 mod expenses;
 mod expense_management;
+mod erp_operations;
 mod discounts;
 mod administration;
 mod ai;
@@ -32,10 +34,10 @@ mod receipt_layout;
 mod receipt_preview;
 mod sale_summary;
 mod dashboard;
+mod date_range;
 mod reports;
 mod purchases;
 mod purchase_pending;
-mod compatibility;
 mod status_bar;
 mod stock_alerts;
 mod suppliers;
@@ -54,7 +56,7 @@ use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fs, path::PathBuf};
 use tokio::time::{sleep, Duration};
 
-const APP_CSS: &str = include_str!("../assets/app.css");
+const APP_CSS: &str = concat!(include_str!("../assets/app.css"), "\n", include_str!("../assets/myanmar-text.css"));
 const PRODUCT_BATCH_SIZE: usize = 60;
 
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
@@ -92,6 +94,7 @@ enum WorkspaceView {
     Reports,
     Purchases,
     Employees,
+    ErpOperations,
     ServiceOrders,
     SaleSummary,
     Inventory,
@@ -288,6 +291,64 @@ fn App() -> Element {
         });
     });
 
+    use_effect(move || {
+        let form = db_form.read().clone();
+        spawn(async move {
+            let Some(config) = pos_core::erp_sync::ErpSyncConfig::from_env()
+                .map_err(|error| eprintln!("ERP sync configuration error: {error:#}"))
+                .ok()
+                .flatten()
+            else {
+                return;
+            };
+            match form.database_config() {
+                Ok(db) => match connect(&db).await {
+                    Ok(pool) => pos_core::erp_sync::run_worker(pool, config).await,
+                    Err(error) => eprintln!("ERP sync database connection failed: {error:#}"),
+                },
+                Err(error) => eprintln!("ERP sync database configuration failed: {error:#}"),
+            }
+        });
+    });
+
+    use_effect(move || {
+        let form = db_form.read().clone();
+        spawn(async move {
+            let Some(config) = pos_core::erp_reconciliation::ReconciliationConfig::from_env()
+                .map_err(|error| eprintln!("ERP reconciliation configuration error: {error:#}"))
+                .ok()
+                .flatten()
+            else { return; };
+            match form.database_config() {
+                Ok(db) => match connect(&db).await {
+                    Ok(pool) => pos_core::erp_reconciliation::run_worker(pool, config).await,
+                    Err(error) => eprintln!("ERP reconciliation database connection failed: {error:#}"),
+                },
+                Err(error) => eprintln!("ERP reconciliation database configuration failed: {error:#}"),
+            }
+        });
+    });
+
+    use_effect(move || {
+        let form = db_form.read().clone();
+        spawn(async move {
+            let Some(config) = pos_core::erp_master::MasterSyncConfig::from_env()
+                .map_err(|error| eprintln!("ERP master sync configuration error: {error:#}"))
+                .ok()
+                .flatten()
+            else {
+                return;
+            };
+            match form.database_config() {
+                Ok(db) => match connect(&db).await {
+                    Ok(pool) => pos_core::erp_master::run_worker(pool, config).await,
+                    Err(error) => eprintln!("ERP master sync database connection failed: {error:#}"),
+                },
+                Err(error) => eprintln!("ERP master sync database configuration failed: {error:#}"),
+            }
+        });
+    });
+
     let filtered_products = {
         let query = query.read().to_lowercase();
         let selected_category_id = *selected_category.read();
@@ -462,9 +523,12 @@ fn App() -> Element {
                 }
                 nav { class: "top_navigation", aria_label: "Quick navigation",
                     button { class: "top_nav_link", aria_current: if *active_view.read()==WorkspaceView::Sales {"page"}else{"false"}, onclick: move |_| { show_side_menu.set(false); active_view.set(WorkspaceView::Sales); }, crate::icons::ActionLabel { label:"Sales" } }
-                    if can_manage { button { class: "top_nav_link", onclick: move |_| { show_side_menu.set(false); if *active_view.read()==WorkspaceView::Expenses {new_expense.set(true);}else{quick_expense.set(true);} }, "Add Expense" } }
-                    button { class: "top_nav_link", disabled: drawer_busy(), title: "Open cashdrawer (Ctrl+Shift+D)", onclick: move |_| open_cash_drawer.call(()), if drawer_busy() {"Opening..."}else{"Open Cashdrawer"} }
-                    button { class: "top_nav_link", title: "Customer display (Ctrl+Shift+C)", aria_pressed: customer_display_visible(),
+                    if can_manage { button { class: "top_nav_link", onclick: move |_| { show_side_menu.set(false); if *active_view.read()==WorkspaceView::Expenses {new_expense.set(true);}else{quick_expense.set(true);} }, crate::icons::ActionLabel {label:"Add Expense"} } }
+                    button { class: "top_nav_link", aria_current: if *active_view.read()==WorkspaceView::Ai {"page"}else{"false"}, onclick: move |_| { show_side_menu.set(false); active_view.set(WorkspaceView::Ai); }, crate::icons::ActionLabel { label:"Kay Assistant" } }
+                }
+                div { class: "top_actions",
+                    button { class: "top_refresh top_utility", aria_label:"Open cashdrawer", disabled: drawer_busy(), title: "Open cashdrawer (Ctrl+Shift+D)", onclick: move |_| open_cash_drawer.call(()), icons::Icon {name:"payments"} }
+                    button { class: "top_refresh top_utility", title: if customer_display_visible() {"Close customer display (Ctrl+Shift+C)"}else{"Show customer display (Ctrl+Shift+C)"}, aria_label: if customer_display_visible() {"Close customer display"}else{"Show customer display"}, aria_pressed: customer_display_visible(),
                         onclick: move |_| {
                             if customer_display_visible() { customer_display_enabled.set(false); }
                             else {
@@ -475,10 +539,8 @@ fn App() -> Element {
                                 else { message_box.set(Some("No secondary monitor detected. Connect an extended display first.".into())); }
                             }
                         },
-                        if customer_display_visible() {"Close Customer Display"}else{"Show Customer Display"}
+                        icons::Icon {name:"tv_displays"}
                     }
-                }
-                div { class: "top_actions",
                     button { id:"page-refresh", class:"top_refresh", title:"Refresh current page", aria_label:"Refresh current page", "data-blocked":checkout_saving().to_string(),
                         onclick:move |_| { let _ = document::eval("window.KayPageRefresh?.refresh()"); },
                         icons::Icon {name:"refresh"}
@@ -579,7 +641,7 @@ fn App() -> Element {
                     }
                     div { class: "side_group",
                         span { "REPORTS" }
-                        button { class: if *active_view.read()==WorkspaceView::Ai {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Ai); show_side_menu.set(false); }, crate::icons::ActionLabel {label:"AI"} }
+                        button { class: if *active_view.read()==WorkspaceView::Ai {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Ai); show_side_menu.set(false); }, crate::icons::ActionLabel {label:"Kay Assistant"} }
                         button { class: if *active_view.read()==WorkspaceView::Activity {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Activity); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Activity Log" } }
                         button { class: if *active_view.read()==WorkspaceView::Reports {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Reports); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Reports" } }
                         button { class: if *active_view.read()==WorkspaceView::Dashboard {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Dashboard); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Dashboard" } }
@@ -588,6 +650,7 @@ fn App() -> Element {
                     if actor.allows(pos_core::auth::Permission::Admin) {
                     div { class: "side_group",
                         span { "SETTINGS" }
+                        if pos_core::ERP_ENABLED {button { class: if *active_view.read()==WorkspaceView::ErpOperations {"side_active"}else{""}, onclick:move |_|{active_view.set(WorkspaceView::ErpOperations);show_side_menu.set(false);},crate::icons::ActionLabel { label:"ERP Operations" } }}
                         button {
                             class: if *active_view.read() == WorkspaceView::Settings { "side_active" } else { "" },
                             onclick: move |_| {
@@ -642,7 +705,7 @@ fn App() -> Element {
             } else if *active_view.read() == WorkspaceView::Activity {
                 administration::ActivityPage { db_form: db_form.read().clone(), actor:actor.clone() }
             } else if *active_view.read() == WorkspaceView::Ai {
-                ai::AiPage { db_form: db_form.read().clone(), actor:actor.clone() }
+                ai::AiPage { db_form: db_form.read().clone(), actor:actor.clone(), on_navigate:move |view|active_view.set(view) }
             } else if *active_view.read() == WorkspaceView::Discounts {
                 discounts::DiscountsPage { db_form: db_form.read().clone(), actor: actor.clone() }
             } else if *active_view.read() == WorkspaceView::Reports {
@@ -663,6 +726,8 @@ fn App() -> Element {
                 expenses::ExpensesPage { db_form: db_form.read().clone(), new_expense, on_sales: move |_| active_view.set(WorkspaceView::Sales) }
             } else if *active_view.read() == WorkspaceView::Customers {
                 customers::CustomersPage { db_form: db_form.read().clone(), on_sales: move |_| active_view.set(WorkspaceView::Sales) }
+            } else if pos_core::ERP_ENABLED && *active_view.read() == WorkspaceView::ErpOperations {
+                erp_operations::ErpOperationsPage { db_form: db_form.read().clone(), actor: actor.clone() }
             } else if *active_view.read() == WorkspaceView::Settings {
                 SettingsCenterPage {
                     query: settings_query.read().clone(),
@@ -890,8 +955,9 @@ fn App() -> Element {
                         span { class: "count_badge", "{categories.read().len()}" }
                     }
                     label { class: "category_search",
-                        span { "⌕" }
+
                         input {
+                            r#type: "search",
                             placeholder: "Search categories",
                             value: "{category_query}",
                             oninput: move |event| category_query.set(event.value())
@@ -921,8 +987,9 @@ fn App() -> Element {
                         button { hidden:true, "data-page-refresh":"true", tabindex:-1, aria_hidden:"true", disabled: !sales_catalog.finished(), onclick: move |_| sales_catalog.restart(), "Refresh" }
                     }
                     label { class: "catalog_search",
-                        span { "⌕" }
+
                         input {
+                            r#type: "search",
                             id: "sales_product_search",
                             autofocus: true,
                             placeholder: "Search product, SKU or scan barcode (F2)",
@@ -1714,8 +1781,9 @@ fn SettingsCenterPage(
                     small { "Setting Center" }
                 }
                 label { class: "settings_search",
-                    span { "⌕" }
+
                     input {
+                        r#type: "search",
                         placeholder: "Search settings...",
                         value: "{query}",
                         oninput: move |event| on_query.call(event.value())
@@ -1743,7 +1811,7 @@ fn SettingsCenterPage(
                     if active_page == "updates" {
                         updates::SettingsUpdates {}
                     } else if active_page == "overview" {
-                        SettingsOverview { db_form: db_form.clone(), db_status: db_status.clone(), settings: settings.clone(), on_open_db }
+                        SettingsOverview { db_form: db_form.clone(), db_status: db_status.clone(), settings: settings.clone() }
                     } else if active_page == "payments" {
                         PaymentTypesSettings {
                             payment_types: payment_types.clone(),
@@ -1808,7 +1876,6 @@ fn SettingsOverview(
     db_form: DbForm,
     db_status: String,
     settings: HashMap<String, String>,
-    on_open_db: EventHandler<MouseEvent>,
 ) -> Element {
     let shop_name = setting_value(&settings, "shop_name", "KAY POS");
     let currency = setting_value(&settings, "currency_symbol", "Ks");
@@ -1847,12 +1914,6 @@ fn SettingsOverview(
                 value: tax,
                 action: "settings.tax_rate".to_string()
             }
-            div { class: "settings_action_card",
-                strong { "PostgreSQL Connection" }
-                span { "Open the existing DB Settings dialog to update this Rust POS client connection." }
-                button { onclick: move |event| on_open_db.call(event), "Open DB Settings" }
-            }
-            compatibility::CompatibilityPanel { db_form }
         }
     }
 }
@@ -2428,32 +2489,21 @@ fn ReceiptsPage(
             small { class: "receipts_note", "Summary for the selected date range, across all receipt tabs." }
 
             div { class: "receipt_filters panel",
-                label {
-                    span { "From" }
-                    input {
-                        r#type: "date",
-                        value: "{from_date}",
-                        oninput: move |event| on_from_date.call(event.value())
-                    }
-                }
-                label {
-                    span { "To" }
-                    input {
-                        r#type: "date",
-                        value: "{to_date}",
-                        oninput: move |event| on_to_date.call(event.value())
-                    }
+                date_range::DateRangePicker {
+                    from:from_date.clone(), to:to_date.clone(),
+                    onchange:move |(a,b):(String,String)|{on_from_date.call(a);on_to_date.call(b);}
                 }
                 label { class: "receipt_search_box",
                     span { "Search" }
                     input {
                         placeholder: "Invoice or customer",
+                        r#type: "search",
                         value: "{search}",
                         oninput: move |event| on_search.call(event.value())
                     }
                 }
                 button { hidden:true, "data-page-refresh":"true", tabindex:-1, aria_hidden:"true", disabled:status.starts_with("Loading"), onclick:move |event|on_refresh.call(event), "Refresh" }
-                button { class: "primary", onclick: move |event| on_refresh.call(event), "Apply filters" }
+
             }
 
             div { class: "receipts_body",
@@ -2497,7 +2547,7 @@ fn ReceiptsPage(
                             if receipt_rows.is_empty() {
                                 div { class: "empty receipts_empty",
                                     strong { "No receipts loaded" }
-                                    span { "Open Receipts from the side menu or click Apply filters." }
+                                    span { "Open Receipts from the side menu or refresh to load receipts." }
                                 }
                             } else {
                                 for (receipt, is_selected) in receipt_rows {
@@ -2578,6 +2628,7 @@ fn ReceiptDetailPanel(
     on_close: EventHandler<MouseEvent>,
     on_print: EventHandler<ReceiptDetail>,
     on_refund: EventHandler<i32>,
+    #[props(default = false)] read_only: bool,
 ) -> Element {
     if let Some(detail) = detail {
         let summary = detail.summary.clone();
@@ -2649,7 +2700,7 @@ fn ReceiptDetailPanel(
                     div { span { "Paid" } strong { "{format_ks(summary.payment)}" } }
                     div { span { "Change" } strong { "{format_ks(summary.change_amount)}" } }
                 }
-                div { class: "receipt_detail_actions",
+                if !read_only {div { class: "receipt_detail_actions",
                     button {
                         class: "refund_button",
                         disabled: status == "refunded",
@@ -2657,7 +2708,7 @@ fn ReceiptDetailPanel(
                         "Refund"
                     }
                     button { onclick: move |_| on_print.call(printable_detail.clone()), crate::icons::ActionLabel { label:"Print Receipt" } }
-                }
+                }}
             }
         }
     } else {

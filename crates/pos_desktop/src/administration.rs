@@ -13,6 +13,14 @@ pub fn ActivityPage(db_form: DbForm, actor: Session) -> Element {
     let mut query = use_signal(String::new);
     let mut applied = use_signal(|| (today.clone(), today.clone(), String::new()));
     let mut page = use_signal(|| 0i64);
+    let settled_query = crate::live_search::use_debounced_search(query);
+    use_effect(move || {
+        let q = settled_query();
+        let f=from(); let t=to();
+        if pos_core::sale_summary::dates(&f,&t).is_err() { return; }
+        let values=(f,t,q);
+        if *applied.peek()!=values { applied.set(values); page.set(0); }
+    });
     let mut data = use_resource(move || {
         let db = db_form.clone();
         let actor = actor.clone();
@@ -37,10 +45,8 @@ pub fn ActivityPage(db_form: DbForm, actor: Session) -> Element {
     rsx! {section{class:"customers_page phase6_page",
         header{class:"customers_header",h2{ActionLabel{label:"Activity Log"}}button{hidden:true,"data-page-refresh":"true",disabled:!data.finished(),onclick:move |_|data.restart(),"Refresh"}}
         div{class:"phase6_filters",
-            label{"From" input{r#type:"date",value:"{from}",oninput:move|e|from.set(e.value())}}
-            label{"To" input{r#type:"date",value:"{to}",oninput:move|e|to.set(e.value())}}
+            crate::date_range::DateRangePicker { from:from(), to:to(), onchange:move |(a,b):(String,String)|{from.set(a);to.set(b);} }
             label{"Search" input{r#type:"search",placeholder:"User, action or details",value:"{query}",oninput:move|e|query.set(e.value())}}
-            button{disabled:!data.finished(),onclick:move |_|{page.set(0);applied.set((from(),to(),query()));data.restart();},"Apply"}
         }
         match data.read().as_ref(){None=>rsx!{p{"Loading..."}},Some(Err(e))=>rsx!{p{role:"alert","{e}"}},Some(Ok(rows))=>rsx!{
             div{class:"customers_table_scroll",table{class:"customers_table",thead{tr{th{"Date"}th{"User"}th{"Action"}th{"Details"}th{"IP address"}}}tbody{

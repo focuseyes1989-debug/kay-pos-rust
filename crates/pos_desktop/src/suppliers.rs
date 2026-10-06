@@ -39,6 +39,10 @@ pub fn SuppliersPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
     let mut editor = use_signal(|| None::<Supplier>);
     let mut error = use_signal(String::new);
     let mut notice = use_signal(String::new);
+    use_effect(move || {
+        let values = (query(), filter());
+        if *applied.peek() != values { applied.set(values); page.set(0); selected.set(None); }
+    });
     let state = loaded.read();
     let (search, status) = applied();
     let search = search.trim().to_lowercase();
@@ -67,13 +71,12 @@ pub fn SuppliersPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
                 }
             }
             div { class: "customers_touch_search",
-                label { "Search" input { placeholder: "Name, company or phone", value: "{query}", oninput: move |event|query.set(event.value()),
+                label { "Search" input {r#type:"search", placeholder: "Name, company or phone", value: "{query}", oninput: move |event|query.set(event.value()),
                     onkeydown: move |event| { if event.key()==Key::Enter { applied.set((query(),filter())); selected.set(None); page.set(0); } }
                 } }
                 label { "Status" select { value: "{filter}", onchange: move |event|filter.set(event.value()),
                     option { value: "", "All suppliers" } option { "Active" } option { "Inactive" }
                 } }
-                button { class: "customer_primary", onclick: move |_| { applied.set((query(),filter())); selected.set(None); page.set(0); }, "Search" }
                 button { onclick: move |_| { query.set(String::new()); filter.set(String::new()); applied.set(Default::default()); selected.set(None); page.set(0); loaded.restart(); }, "Reset" }
             }
             if !notice().is_empty() { p { role: "status", "{notice}" } }

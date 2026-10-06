@@ -173,6 +173,8 @@ pub fn EmployeesPage(db_form: DbForm) -> Element {
     let mut range = use_signal(|| (from(), to()));
     let mut query = use_signal(String::new);
     let mut status = use_signal(String::new);
+    let mut attendance_employee = use_signal(String::new);
+    let mut attendance_record = use_signal(String::new);
     let mut branch = use_signal(String::new);
     let mut department = use_signal(String::new);
     let mut position = use_signal(String::new);
@@ -230,7 +232,10 @@ pub fn EmployeesPage(db_form: DbForm) -> Element {
                     } else {
                         "status"
                     };
-                    matches
+                    let attendance_matches = section()!=Section::Attendance || (
+                        (attendance_employee().is_empty() || employees::text(v,"employee_id")==attendance_employee()) && attendance_record_matches(v,&attendance_record())
+                    );
+                    (matches || employees::text(v,"employee_no").to_lowercase().contains(&term)) && attendance_matches
                         && (status().is_empty() || employees::text(v, stat) == status())
                         && (branch().is_empty() || employees::text(v, "branch") == branch())
                         && (department().is_empty()
@@ -268,7 +273,11 @@ pub fn EmployeesPage(db_form: DbForm) -> Element {
     });
     rsx! {
         section {class:"employees_page",
-            header {class:"employees_header",h2 {"Employee Management"} button { hidden:true, "data-page-refresh":"true", tabindex:-1, aria_hidden:"true",disabled:!data.finished(),onclick:move |_|{selected.set(None);data.restart();},"Refresh"}}
+            header {class:"employees_header",h2 {"Employee Management"}
+                if section()==Section::Employees {
+                    button {class:"customer_primary",disabled:!can_manage||loaded.is_none(),title:if can_manage {"Create employee profile"}else{"manage_employees permission or pending request recovery required"},onclick:move |_|edit.set(Some(Edit{section:Section::Employees,action:"save".into(),record:json!({})})),"+ Add Employee"}
+                }
+                button { hidden:true, "data-page-refresh":"true", tabindex:-1, aria_hidden:"true",disabled:!data.finished(),onclick:move |_|{selected.set(None);data.restart();},"Refresh"}}
             match recovery.read().clone() {
                 Err(e)=>rsx!{p {role:"alert","Employee recovery file could not be read: {e}. Resolve it before making changes."}},
                 Ok(Some(pending))=>rsx!{div {role:"alert",p {"Unresolved employee request: sign in as {pending.username} to recover it before making changes."}
@@ -292,29 +301,30 @@ pub fn EmployeesPage(db_form: DbForm) -> Element {
             }
             if matches!(section(),Section::Shifts|Section::Assignments|Section::Advances|Section::Commission){
                 div {class:"receipt_tabs employee_subtabs",for tab in if matches!(section(),Section::Shifts|Section::Assignments){vec![Section::Shifts,Section::Assignments]}else{vec![Section::Advances,Section::Commission]}{
-                    button {class:if section()==tab{"active"}else{""},onclick:move |_|{section.set(tab);selected.set(None);status.set(String::new());page.set(0);},"{tab.title()}"}
+                    button {class:if section()==tab{"active"}else{""},onclick:move |_|{section.set(tab);selected.set(None);status.set(String::new());attendance_employee.set(String::new());attendance_record.set(String::new());page.set(0);},"{tab.title()}"}
                 }}
             }
             div {class:"employee_filters",
                 input {r#type:"search",aria_label:"Search employees and records",placeholder:"Name, employee ID or details",value:"{query}",oninput:move |e|{query.set(e.value());page.set(0);}}
-                if !status_options.is_empty(){select {aria_label:"Status",value:"{status}",onchange:move |e|{status.set(e.value());page.set(0);},option {value:"","All statuses"} for option in status_options {option {value:"{option}","{option}"}}}}
+                if section()==Section::Attendance {
+                    select {aria_label:"Attendance employee",value:attendance_employee(),onchange:move |e|{attendance_employee.set(e.value());page.set(0);selected.set(None);},option {value:"","All Employees"}
+                        if let Some(p)=loaded.as_ref(){for employee in &p.employees {option {value:employees::text(employee,"id"),{format!("{} · {}",employees::text(employee,"employee_no"),employees::text(employee,"full_name"))}}}}
+                    }
+                    select {aria_label:"Attendance records",value:attendance_record(),onchange:move |e|{attendance_record.set(e.value());page.set(0);selected.set(None);},
+                        for (value,label) in [("","All Records"),("missing_in","Missing Check-in"),("missing_out","Missing Check-out"),("before","Check-in before Shift"),("after","Check-in after Shift")] {option {value,"{label}"}}
+                    }
+                    select {aria_label:"Attendance status",value:status(),onchange:move |e|{status.set(e.value());page.set(0);selected.set(None);},option {value:"","All Statuses"}
+                        for label in ["Present","Late","Incomplete","Absent","Half-day","Leave"] {option {value:label,"{label}"}}
+                    }
+                }
+                if section()!=Section::Attendance && !status_options.is_empty(){select {aria_label:"Status",value:"{status}",onchange:move |e|{status.set(e.value());page.set(0);},option {value:"","All statuses"} for option in status_options {option {value:"{option}","{option}"}}}}
                 if matches!(section(),Section::Employees|Section::Performance){select {aria_label:"Branch",value:"{branch}",onchange:move |e|{branch.set(e.value());page.set(0);},option {value:"","All branches"} for option in options("branch"){option {value:"{option}","{option}"}}}}
                 if section()==Section::Employees {
                     select {aria_label:"Position",value:"{position}",onchange:move |e|{position.set(e.value());page.set(0);},option {value:"","All positions"} for option in options("position"){option {value:"{option}","{option}"}}}
                     select {aria_label:"Department",value:"{department}",onchange:move |e|{department.set(e.value());page.set(0);},option {value:"","All departments"} for option in options("department"){option {value:"{option}","{option}"}}}
                 }
                 if matches!(section(),Section::Attendance|Section::Payroll|Section::Leave|Section::Advances|Section::Performance|Section::Cash){
-                    label {"From" input {r#type:"date",value:"{from}",oninput:move |e|from.set(e.value())}}
-                    label {"To" input {r#type:"date",value:"{to}",oninput:move |e|to.set(e.value())}}
-                    button {onclick:move |_|{range.set((from(),to()));page.set(0);selected.set(None);},"Apply"}
-                    if section()==Section::Attendance {
-                        for (preset,label) in [("today","Today"),("week","This week"),("month","This month")] {
-                            button {aria_pressed:range()==pos_core::attendance_sync::date_range(chrono::Local::now().date_naive(),preset),onclick:move |_|{
-                                let dates=pos_core::attendance_sync::date_range(chrono::Local::now().date_naive(),preset);
-                                from.set(dates.0.clone());to.set(dates.1.clone());range.set(dates);page.set(0);selected.set(None);
-                            },"{label}"}
-                        }
-                    }
+                    crate::date_range::DateRangePicker { from:from(), to:to(), onchange:move |(a,b):(String,String)|{from.set(a.clone());to.set(b.clone());range.set((a,b));page.set(0);selected.set(None);} }
                 }
             }
             div {class:"employee_actions",
@@ -322,7 +332,7 @@ pub fn EmployeesPage(db_form: DbForm) -> Element {
                     crate::attendance_sync::AttendanceSync {db_form:db_form.clone(),on_synced:move |_|data.restart()}
                 }
                 if can_manage && section()!=Section::Performance {
-                    button {class:"customer_primary",onclick:move |_|edit.set(Some(Edit{section:section(),action:"save".into(),record:json!({})})),match section(){Section::Cash=>"Open Session",Section::Payroll=>"Create Payroll",Section::Leave=>"New Request",Section::Advances=>"Salary Advance",Section::Assignments=>"Assign Shift",Section::Documents=>"Add Document",Section::Attendance=>"Record Attendance",Section::Shifts=>"New Shift",Section::Commission=>"New Rule",_=>"Add Employee"}}
+                    if section()!=Section::Employees {button {class:"customer_primary",onclick:move |_|edit.set(Some(Edit{section:section(),action:"save".into(),record:json!({})})),match section(){Section::Cash=>"Open Session",Section::Payroll=>"Create Payroll",Section::Leave=>"New Request",Section::Advances=>"Salary Advance",Section::Assignments=>"Assign Shift",Section::Documents=>"Add Document",Section::Attendance=>"Record Attendance",Section::Shifts=>"New Shift",Section::Commission=>"New Rule",_=>"Add Employee"}}}
                     if section().editable(){button {disabled:current.is_none(),onclick:{let current=current.clone();move |_|if let Some(row)=&current{edit.set(Some(Edit{section:section(),action:"save".into(),record:row.clone()}));}},crate::icons::ActionLabel { label:"Edit" }}}
                     for (action,label) in match section(){Section::Payroll=>vec![("pay","Mark Paid")],Section::Leave=>vec![("review","Review Leave")],Section::Advances=>vec![("repay","Record Repayment")],Section::Cash=>vec![("close","Close Session")],Section::Assignments=>vec![("delete","Delete Assignment")],_=>vec![]} {
                         button {disabled:current.is_none() || current.as_ref().is_some_and(|v|match action{"pay"=>employees::text(v,"status")!="Draft","close"=>employees::text(v,"status")!="Open","repay"=>employees::text(v,"status")=="Repaid",_=>false}),onclick:{let current=current.clone();move |_|if let Some(row)=&current{edit.set(Some(Edit{section:section(),action:action.into(),record:row.clone()}));}},"{label}"}
@@ -342,7 +352,20 @@ pub fn EmployeesPage(db_form: DbForm) -> Element {
                         }
                     }}
                 }}
-                if rows.is_empty(){p {"No records found"}}
+                if rows.is_empty(){
+                    if section()==Section::Attendance {
+                        p {"ရွေးထားသောကာလ / filter နှင့် ကိုက်ညီသည့် attendance မှတ်တမ်း မရှိပါ။"}
+                        if let Some(latest)=loaded.as_ref().and_then(|page|page.summary["latest_attendance"].as_str()).map(str::to_owned) {
+                            p {"နောက်ဆုံး attendance ရက်: {latest}"}
+                            button {onclick:move |_|{
+                                if let Ok(day)=chrono::NaiveDate::parse_from_str(&latest,"%Y-%m-%d") {
+                                    let start=(day-chrono::Duration::days(30)).to_string();
+                                    from.set(start.clone());to.set(latest.clone());range.set((start,latest.clone()));query.set(String::new());status.set(String::new());attendance_employee.set(String::new());attendance_record.set(String::new());selected.set(None);page.set(0);
+                                }
+                            },"နောက်ဆုံးမှတ်တမ်းများ ကြည့်ရန်"}
+                        }else{p {"Attendance Sync ဖြင့် device မှ data ရယူပါ သို့မဟုတ် Record Attendance ဖြင့် မှတ်တမ်းတင်ပါ။"}}
+                    }else{p {"No records found"}}
+                }
                 footer {class:"employee_pagination",button {disabled:current_page==0,onclick:move |_|page.set(current_page.saturating_sub(1)),"Previous"} span {"Page {current_page+1} / {rows.len().div_ceil(30).max(1)}"} button {disabled:(current_page+1)*30>=rows.len(),onclick:move |_|page.set(current_page+1),"Next"}}
             }}
             if let Some(editing)=edit(){if let Some(loaded)=loaded.clone() {
@@ -395,7 +418,7 @@ fn EmployeeEditor(
             if editing.record["id"].is_number() {
                 format!("Edit {}", editing.section.title())
             } else {
-                format!("New {}", editing.section.title())
+                if editing.section==Section::Employees {"Add Employee · Employee Profile".into()}else{format!("New {}", editing.section.title())}
             }
         }
         "pay" => "Confirm Payroll Payment".into(),
@@ -538,5 +561,21 @@ mod tests {
         let result = normalize_photo(bytes.get_ref()).unwrap();
         let decoded = image::load_from_memory(&result).unwrap();
         assert_eq!((decoded.width(), decoded.height()), (600, 400));
+    }
+}
+
+fn attendance_record_matches(row: &Value, filter: &str) -> bool {
+    let check_in=employees::text(row,"check_in");
+    match filter {
+        "missing_in"=>check_in.trim().is_empty(),
+        "missing_out"=>employees::text(row,"check_out").trim().is_empty(),
+        "before"|"after"=>{
+            let parse=|value:&str|chrono::NaiveTime::parse_from_str(value,"%H:%M:%S").or_else(|_|chrono::NaiveTime::parse_from_str(value,"%H:%M")).ok();
+            match (parse(&check_in),parse(&employees::text(row,"shift_start"))) {
+                (Some(check),Some(start))=>if filter=="before"{check<start}else{check>start},
+                _=>false,
+            }
+        }
+        _=>true,
     }
 }

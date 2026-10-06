@@ -5,6 +5,10 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
+[features]
+default = []
+erp-integration = []
+
 [dependencies]
 pbkdf2 = "0.12"
 sha2 = "0.10"
@@ -17,6 +21,7 @@ chrono.workspace = true
 rust_decimal.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+reqwest.workspace = true
 sqlx.workspace = true
 rustzk = "=1.1.0"
 

@@ -42,6 +42,12 @@ async fn fixture() -> Result<(PgPool, Session, Session)> {
     ))
     .execute(&pool)
     .await?;
+    sqlx::raw_sql(include_str!("../../../migrations/010_erp_outbox.sql"))
+        .execute(&pool)
+        .await?;
+    sqlx::raw_sql(include_str!("../../../migrations/013_erp_accounting.sql"))
+        .execute(&pool)
+        .await?;
     let mut hash = [0u8; 32];
     sqlx::raw_sql(include_str!("../../../migrations/002_short_numbers.sql"))
         .execute(&pool).await?;

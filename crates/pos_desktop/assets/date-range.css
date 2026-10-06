@@ -1,0 +1,48 @@
+/* Shared range filter. Popover top layer prevents clipping inside page/table scroll panels. */
+.shell .date_range_picker { display:flex; flex-direction:column; gap:6px; min-width:0; flex:0 1 280px; color:var(--ink); }
+.shell .date_range_label { color:var(--muted); font-size:12px; line-height:1.35; }
+.shell .date_range_picker button.date_range_trigger { display:flex; align-items:center; gap:9px; width:100%; min-width:0; height:44px; padding:9px 12px; border:1px solid var(--line); border-radius:7px; background:var(--panel); color:var(--ink); font:500 13px/1.4 "Segoe UI",sans-serif; white-space:nowrap; text-align:left; box-shadow:0 1px 2px #00000005; }
+.shell .date_range_picker .date_range_trigger .ui_svg_icon { width:17px; height:17px; }
+.shell .date_range_picker .date_range_trigger > span:not(.date_range_chevron) { overflow:hidden; text-overflow:ellipsis; }
+.shell .date_range_chevron { display:flex; align-items:center; flex-shrink:0; margin-left:auto; color:var(--muted); }
+.shell .date_range_picker .date_range_trigger .date_range_chevron .ui_svg_icon { width:16px; height:16px; }
+.shell .date_range_picker .date_range_trigger:hover:not(:disabled) { border-color:var(--accent); background:var(--panel); color:var(--ink); }
+.shell .date_range_picker .date_range_trigger[aria-expanded="true"] { border-color:var(--accent); box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 15%,transparent); }
+.shell .date_range_picker .date_range_popup { position:fixed; inset:auto; margin:0; width:374px; max-width:calc(100vw - 20px); max-height:calc(100vh - 20px); overflow:auto; padding:12px; border:1px solid var(--line); border-radius:10px; background:var(--panel); color:var(--ink); box-shadow:0 12px 36px #0f172a26,0 3px 8px #0f172a0c; font:13px/1.4 "Segoe UI",sans-serif; }
+.shell .date_range_picker .date_range_popup:popover-open { display:grid; grid-template-columns:112px minmax(0,1fr); gap:12px; }
+.shell .date_range_picker .date_range_popup::backdrop { background:transparent; }
+.shell .date_range_picker .date_range_popup button { appearance:none; margin:0; min-width:0; min-height:0; height:auto; border:0; box-shadow:none; border-radius:5px; padding:0; background:transparent; color:inherit; font:inherit; cursor:pointer; }
+.shell .date_range_presets { display:flex; flex-direction:column; gap:2px; padding-right:8px; border-right:1px solid var(--line); }
+.shell .date_range_picker .date_range_popup .date_range_preset { height:30px; padding:4px 8px; text-align:left; white-space:nowrap; }
+.shell .date_range_picker .date_range_popup .date_range_preset:hover,.shell .date_range_picker .date_range_popup .date_range_preset[aria-pressed="true"] { background:color-mix(in srgb,var(--accent) 9%,var(--panel)); color:var(--accent); }
+.shell .date_range_picker .date_range_popup .date_range_reset { margin-top:auto; height:32px; padding:4px 8px; color:var(--accent); text-align:left; }
+.shell .date_range_calendar { min-width:0; }
+.shell .date_range_month { display:flex; align-items:center; height:32px; margin-bottom:12px; gap:2px; }
+.shell .date_range_month strong { margin-right:auto; font-size:13px; font-weight:600; }
+.shell .date_range_picker .date_range_popup .date_range_month button { width:28px; height:32px; font-size:22px; }
+.shell .date_range_month button:hover { background:var(--bg); }
+.shell .date_range_weekdays,.shell .date_range_days { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); }
+.shell .date_range_weekdays span { display:grid; place-items:center; height:30px; color:var(--muted); font-size:12px; }
+.shell .date_range_picker .date_range_popup .date_range_day { display:grid; place-items:center; height:32px; border-radius:0; position:relative; isolation:isolate; }
+.shell .date_range_day > span { display:grid; place-items:center; width:28px; height:28px; border-radius:50%; }
+.shell .date_range_picker .date_range_popup .date_range_day.outside_month { color:color-mix(in srgb,var(--muted) 65%,var(--panel)); }
+.shell .date_range_picker .date_range_popup .date_range_day.in_range { background:color-mix(in srgb,var(--accent) 15%,var(--panel)); }
+.shell .date_range_day.range_start { border-radius:16px 0 0 16px; }
+.shell .date_range_day.range_end { border-radius:0 16px 16px 0; }
+.shell .date_range_day.range_start.range_end { border-radius:16px; }
+.shell .date_range_picker .date_range_popup .date_range_day.endpoint > span { background:var(--accent); color:#fff; font-weight:600; }
+.shell .date_range_day:hover > span { box-shadow:inset 0 0 0 1px var(--accent); }
+.shell .date_range_day[aria-current="date"]:not(.endpoint) > span { color:var(--accent); font-weight:600; }
+.shell .date_range_hint { margin-top:9px; min-height:28px; display:flex; align-items:center; font-size:11px; color:var(--muted); }
+.shell .date_range_picker button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; z-index:1; }
+.shell .date_range_picker button:disabled { cursor:default; opacity:.55; }
+.shell .receipt_filters { grid-template-columns:minmax(220px,280px) minmax(180px,1fr); }
+.shell .purchase_filters { grid-template-columns:minmax(180px,2fr) minmax(160px,1.5fr) minmax(120px,1fr) minmax(220px,280px) auto; }
+@media(max-width:1100px) { .shell .purchase_filters { grid-template-columns:repeat(3,minmax(0,1fr)); } }
+@media(max-width:700px) { .shell .receipt_filters,.shell .purchase_filters { grid-template-columns:repeat(2,minmax(0,1fr)); } .shell .receipt_filters .date_range_picker { grid-column:1 / -1; } }
+@media(max-width:430px) { .shell .date_range_picker .date_range_popup { padding:10px; } .shell .date_range_picker .date_range_popup:popover-open { grid-template-columns:102px minmax(0,1fr); gap:8px; } .shell .date_range_picker { flex-basis:100%; } .shell .purchase_filters { grid-template-columns:minmax(0,1fr); } }
+@media(max-width:350px) { .shell .date_range_picker .date_range_popup:popover-open { grid-template-columns:90px minmax(0,1fr); } .shell .date_range_picker .date_range_popup .date_range_preset { font-size:12px; padding-inline:4px; } .shell .date_range_day > span { width:24px; height:24px; } .shell .date_range_month strong { font-size:12px; } .shell .date_range_picker .date_range_popup .date_range_month button { width:24px; } }
+
+.shell .expense_touch_filters { grid-template-columns:minmax(220px,280px) minmax(160px,220px) minmax(180px,1fr) auto; }
+@media(max-width:1000px) { .shell .expense_touch_filters { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media(max-width:430px) { .shell .expense_touch_filters { grid-template-columns:minmax(0,1fr); } }

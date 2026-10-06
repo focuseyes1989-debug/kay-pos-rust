@@ -487,6 +487,18 @@ pub async fn execute(pool: &PgPool, actor: &Session, c: &Command) -> Result<i32>
     sqlx::query("INSERT INTO rust_purchase_requests(request_id,username,payload_hash,result_id) VALUES($1,$2,$3,$4)").bind(&c.request_id).bind(actor.username()).bind(crate::auth::fingerprint(&serde_json::to_vec(c)?)).bind(result).execute(&mut *tx).await?;
     let kind=match &c.action{Action::Save{..}=>"save",Action::Receive{..}=>"receive",Action::Cancel{..}=>"cancel",Action::Pay(_)=>"payment"};
     crate::activity::record(&mut tx,actor,&format!("rust.purchase.{kind}"),&format!("result_id={result}; request={}",c.request_id)).await?;
+    match &c.action {
+        Action::Save { .. } => crate::erp_procurement::enqueue_order(&mut tx, result, "purchase.order.upserted").await?,
+        Action::Cancel { .. } => crate::erp_procurement::enqueue_order(&mut tx, result, "purchase.order.cancelled").await?,
+        Action::Receive { .. } => {
+            crate::erp_procurement::enqueue_goods_received(&mut tx, result).await?;
+            crate::erp_accounting::purchase_receipt(&mut tx, result).await?;
+        }
+        Action::Pay(_) => {
+            crate::erp_procurement::enqueue_supplier_payment(&mut tx, result).await?;
+            crate::erp_accounting::supplier_payment(&mut tx, result).await?;
+        }
+    }
     tx.commit()
         .await
         .context("Purchase outcome uncertain; retry the same request")?;

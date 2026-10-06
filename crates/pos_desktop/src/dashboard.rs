@@ -1,6 +1,40 @@
 use crate::{DbForm, WorkspaceView, format_ks};
 use dioxus::prelude::*;
-use chrono::Datelike;
+
+fn bar_width(amount: f64, maximum: f64) -> f64 {
+    if !amount.is_finite() || !maximum.is_finite() || maximum <= 0.0 { return 0.0; }
+    (amount / maximum * 100.0).clamp(0.0, 100.0)
+}
+
+fn amount_chart(rows: &[pos_core::dashboard::Row], daily: bool) -> Element {
+    let maximum = rows.iter().map(|r| r.amount).fold(0.0, f64::max);
+    rsx! {
+        div { class: "dashboard_chart_rows",
+            for row in rows {
+                div { class: "dashboard_chart_row",
+                    span { class: "dashboard_chart_label", "{row.label}"
+                        if daily { small { "{row.count} receipts" } }
+                    }
+                    div { class: "dashboard_chart_track", aria_hidden: "true", span { style: "width:{bar_width(row.amount,maximum)}%" } }
+                    strong { "{format_ks(row.amount)}" }
+                }
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod chart_tests {
+    use super::*;
+    #[test]
+    fn chart_widths_handle_empty_and_invalid_amounts() {
+        assert_eq!(bar_width(25.0,100.0),25.0);
+        assert_eq!(bar_width(0.0,0.0),0.0);
+        assert_eq!(bar_width(-5.0,100.0),0.0);
+        assert_eq!(bar_width(200.0,100.0),100.0);
+        assert_eq!(bar_width(f64::NAN,100.0),0.0);
+    }
+}
 
 #[component]
 pub fn DashboardPage(db_form: DbForm, actor: pos_core::auth::Session, on_navigate: EventHandler<WorkspaceView>) -> Element {
@@ -23,18 +57,21 @@ pub fn DashboardPage(db_form: DbForm, actor: pos_core::auth::Session, on_navigat
     let loading=!data.finished();
     let state=data.read();
     rsx! {
+        style { {include_str!("../assets/dashboard.css")} }
         section { class:"customers_page dashboard_page",
-            header { class:"customers_header", h2 {crate::icons::ActionLabel { label:"Dashboard" }}
+            header { class:"customers_header dashboard_header", div { h2 {crate::icons::ActionLabel { label:"Dashboard" }} p { "Your business at a glance" } }
                 button { hidden:true,"data-page-refresh":"true",tabindex:-1,aria_hidden:"true",disabled:loading,onclick:move |_|data.restart(),"Refresh" }
             }
             div {class:"dashboard_filters",
-                label {"From" input {r#type:"date",value:from(),oninput:move |e|from.set(e.value())}}
-                label {"To" input {r#type:"date",value:to(),oninput:move |e|to.set(e.value())}}
-                button {class:"customer_primary",disabled:loading,onclick:move |_|{
-                    match pos_core::sale_summary::dates(&from(),&to()) {Ok(_)=>{error.set(String::new());range.set((from(),to()));},Err(_)=>error.set("Enter a valid date range.".into())}
-                },"Apply"}
-                for (label,start) in [("Today",today),("This week",today-chrono::Duration::days(today.weekday().num_days_from_monday() as i64)),("This month",today.with_day(1).unwrap())] {
-                    button {disabled:loading,onclick:move |_|{from.set(start.to_string());to.set(today.to_string());range.set((start.to_string(),today.to_string()));error.set(String::new());},"{label}"}
+                crate::date_range::DateRangePicker { from:from(), to:to(), disabled:!data.finished(), onchange:move |(a,b):(String,String)|{from.set(a.clone());to.set(b.clone());error.set(String::new());range.set((a,b));} }
+                div { class:"dashboard_date_shortcuts",
+                    for (label,days) in [("Today",0i64),("Last 7 days",6),("Last 30 days",29)] {
+                        button { disabled:loading, onclick:move |_| {
+                            let end=chrono::Local::now().date_naive();
+                            let start=(end-chrono::Duration::days(days)).to_string(); let end=end.to_string();
+                            from.set(start.clone()); to.set(end.clone()); range.set((start,end)); error.set(String::new());
+                        }, "{label}" }
+                    }
                 }
             }
             if !error().is_empty() {p {role:"alert","{error}"}}
@@ -42,9 +79,33 @@ pub fn DashboardPage(db_form: DbForm, actor: pos_core::auth::Session, on_navigat
             else if let Some(Err(message))=state.as_ref() {p {role:"alert","{message}"}}
             else if let Some(Ok((summary,alerts)))=state.as_ref() {
                 div {class:"dashboard_section_heading",h3 {"Period activity"} small {"{range().0} / {range().1} · Updated {summary.loaded_at}"}}
-                div {class:"dashboard_metrics",
-                    for row in &summary.period {
-                        article {class:"dashboard_metric",small {"{row.label}"} strong {"{format_ks(row.amount)}"} small {"{row.count} records"}}
+                div {class:"dashboard_metrics dashboard_primary_metrics",
+                    for label in ["Completed sales","Received at checkout","Recorded expenses","Credit sales"] {
+                        if let Some(row)=summary.period.iter().find(|r|r.label==label) {
+                            article {class:"dashboard_metric", "data-metric":label,
+                                small {"{row.label}"} strong {"{format_ks(row.amount)}"}
+                                small {"{row.count} records"}
+                            }
+                        }
+                    }
+                }
+                div {class:"dashboard_charts",
+                    section {class:"dashboard_chart_card",
+                        header { div {h3 {"Daily sales"} small {"Completed receipts · Selected period"}} }
+                        if summary.daily.is_empty() {div {class:"dashboard_chart_empty", "No completed sales in this period."}}
+                        else { {amount_chart(&summary.daily,true)} }
+                    }
+                    section {class:"dashboard_chart_card dashboard_comparison",
+                        header {div {h3 {"Period totals"} small {"Compare sales, expenses and supplier purchases"}}}
+                        {amount_chart(&summary.period.iter().filter(|r|matches!(r.label.as_str(),"Completed sales"|"Recorded expenses"|"Supplier purchases (ledger)"|"Supplier payments")).cloned().collect::<Vec<_>>(),false)}
+                    }
+                }
+                details {class:"dashboard_more_metrics",
+                    summary {"More period details"}
+                    div {class:"dashboard_metrics",
+                        for row in summary.period.iter().filter(|r|!matches!(r.label.as_str(),"Completed sales"|"Received at checkout"|"Recorded expenses"|"Credit sales")) {
+                            article {class:"dashboard_metric",small {"{row.label}"} strong {"{format_ks(row.amount)}"} small {"{row.count} records"}}
+                        }
                     }
                 }
                 div {class:"dashboard_links",
@@ -52,7 +113,7 @@ pub fn DashboardPage(db_form: DbForm, actor: pos_core::auth::Session, on_navigat
                         button {onclick:move |_|on_navigate.call(view),crate::icons::ActionLabel {label}}
                     }
                 }
-                h3 {"Current balances & operations"}
+                div {class:"dashboard_section_heading",h3 {"Current balances & operations"} small {"Current totals across all dates"}}
                 div {class:"dashboard_metrics",
                     article {class:"dashboard_metric",small {"Customer receivables"} strong {"{format_ks(summary.customers.iter().map(|r|r.amount).sum())}"} small {"{summary.customers.len()} customers"}}
                     article {class:"dashboard_metric",small {"Supplier payable (ledger)"} strong {"{format_ks(summary.suppliers.iter().map(|r|r.amount.max(0.0)).sum())}"}}
@@ -63,10 +124,10 @@ pub fn DashboardPage(db_form: DbForm, actor: pos_core::auth::Session, on_navigat
                     }
                 }
                 div {class:"dashboard_tables",
-                    section {h3 {"Daily sales"}
+                    section {h3 {"Daily sales details"}
                         if summary.daily.is_empty() {p {"No sales in this period."}}
                         div {class:"dashboard_scroll",table {class:"customers_table",thead {tr {th {"Date"} th {crate::icons::ActionLabel { label:"Receipts" }} th {crate::icons::ActionLabel { label:"Sales" }}}} tbody {
-                            for row in &summary.daily {tr {td {"{row.label}"} td {"{row.count}"} td {"{format_ks(row.amount)}" meter {min:0,max:summary.daily.iter().map(|r|r.amount).fold(1.0,f64::max),value:row.amount,aria_label:"Sales on {row.label}"}}}}
+                            for row in &summary.daily {tr {td {"{row.label}"} td {"{row.count}"} td {"{format_ks(row.amount)}"}}}
                         }}}
                     }
                     for (title,rows) in [("Customer outstanding",&summary.customers),("Supplier ledger balances",&summary.suppliers)] {

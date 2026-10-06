@@ -21,12 +21,17 @@
   document.addEventListener('input', event => {
     if (event.target.matches('.touch-combo-input')) position(event.target);
   });
+  document.addEventListener('click',event=>{
+    const root=event.target.closest?.('.touch-combo');
+    if(root)position(root.querySelector('input'));
+  });
   document.addEventListener('keydown', event => {
     const root = event.target.closest('.touch-combo');
     if (!root) return;
     const buttons = [...root.querySelectorAll('.touch-combo-option:not(:disabled)')];
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
+      root.classList.add('open');position(root.querySelector('input'));
       const index = buttons.indexOf(document.activeElement);
       buttons[(index + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length]?.focus();
     }
@@ -34,6 +39,8 @@
       root.classList.remove('open');
       root.querySelector('input').setAttribute('aria-expanded', 'false');
     }
+    if(event.key==='Escape'){const combo=root._select?._touchCombo;if(combo)combo.suppressFocus=true;root.querySelector('input').focus();if(combo)combo.suppressFocus=false;}
+    position(root.querySelector('input'));
   });
   const close = () => document.querySelectorAll('.touch-combo.open').forEach(root => {
     root.classList.remove('open');

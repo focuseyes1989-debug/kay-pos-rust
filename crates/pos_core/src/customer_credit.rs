@@ -173,7 +173,8 @@ pub async fn collect(
         .bind(customer).bind(invoice).fetch_all(&mut *tx).await?;
     for (id, applied) in allocate(amount, &balances)? {
         sqlx::query("UPDATE credit_sales SET paid_amount=COALESCE(paid_amount,0)+$1::numeric, balance_amount=balance_amount-$1::numeric, status=CASE WHEN balance_amount::numeric-$1::numeric<=0 THEN 'paid' ELSE 'partial' END WHERE id=$2").bind(applied).bind(id).execute(&mut *tx).await?;
-        sqlx::query("INSERT INTO credit_payments (credit_sale_id,customer_id,amount,payment_date,payment_method,reference_no,note) VALUES ($1,$2,$3::numeric,$4,$5,$6,$7)").bind(id).bind(customer).bind(applied).bind(date).bind(method).bind(reference).bind(note).execute(&mut *tx).await?;
+        let payment_id:i32=sqlx::query_scalar("INSERT INTO credit_payments (credit_sale_id,customer_id,amount,payment_date,payment_method,reference_no,note) VALUES ($1,$2,$3::numeric,$4,$5,$6,$7) RETURNING id").bind(id).bind(customer).bind(applied).bind(date).bind(method).bind(reference).bind(note).fetch_one(&mut *tx).await?;
+        crate::erp_accounting::customer_payment(&mut tx,payment_id).await?;
     }
     sqlx::query(
         "UPDATE customers SET current_balance=COALESCE(current_balance,0)-$1::numeric WHERE id=$2",

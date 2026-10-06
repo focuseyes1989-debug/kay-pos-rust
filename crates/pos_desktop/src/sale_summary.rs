@@ -67,11 +67,7 @@ pub fn SaleSummaryPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
     rsx! {section {class:"customers_page products_touch summary_touch",
         header {class:"customers_header customers_touch_header",h2 {crate::icons::ActionLabel { label:"Sale Summary" }} div {class:"customers_actions",button { hidden:true, "data-page-refresh":"true", tabindex:-1, aria_hidden:"true",disabled:!data.finished(),onclick:move |_|data.restart(),"Refresh"}}}
         div {class:"summary_filters",
-            label {"From" input {r#type:"date",value:"{from}",oninput:move |e|from.set(e.value())}}
-            label {"To" input {r#type:"date",value:"{to}",oninput:move |e|to.set(e.value())}}
-            button {class:"customer_primary",onclick:move |_|match sale_summary::dates(&from(),&to()){Ok(_)=>{error.set(String::new());range.set((from(),to()));},Err(e)=>error.set(e.to_string())},"Apply filters"}
-            button {onclick:move |_|{let date=chrono::Local::now().date_naive().to_string();from.set(date.clone());to.set(date.clone());range.set((date.clone(),date));error.set(String::new());},"Today"}
-            button {onclick:move |_|{let end=chrono::Local::now().date_naive();let start=end-chrono::Duration::days(6);from.set(start.to_string());to.set(end.to_string());range.set((start.to_string(),end.to_string()));error.set(String::new());},"Last 7 days"}
+            crate::date_range::DateRangePicker { from:from(), to:to(), disabled:!data.finished(), onchange:move |(a,b):(String,String)|{from.set(a.clone());to.set(b.clone());error.set(String::new());range.set((a,b));} }
         }
         if !error().is_empty(){p {role:"alert","{error}"}}
         if !data.finished(){div {class:"product_loading",role:"status",span {class:"loading_spinner"} strong {"Loading..."}}}

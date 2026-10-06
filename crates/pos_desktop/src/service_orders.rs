@@ -40,7 +40,7 @@ pub fn ServiceOrdersPage(db_form: DbForm) -> Element {
     let session = use_context::<Signal<Option<Session>>>();
     let mut tab = use_signal(|| false);
     let mut query = use_signal(String::new);
-    let mut applied = use_signal(String::new);
+    let applied = crate::live_search::use_debounced_search(query);
     let mut status = use_signal(String::new);
     let mut limit = use_signal(|| 100i64);
     let mut visible_rows = use_signal(Vec::<Job>::new);
@@ -69,6 +69,7 @@ pub fn ServiceOrdersPage(db_form: DbForm) -> Element {
         }
     });
     let mut selected = use_signal(|| None::<i32>);
+    use_effect(move || { let _ = applied(); limit.set(100); selected.set(None); });
     let mut editor = use_signal(|| None::<(Job, bool)>);
     let mut confirmation = use_signal(|| None::<(Job, Action)>);
     let mut busy = use_signal(|| false);
@@ -105,11 +106,11 @@ pub fn ServiceOrdersPage(db_form: DbForm) -> Element {
             if tab() {PromptLibrary {db_form:db_form.clone(),job:current.clone()}}
             else {
                 div {class:"service_filters",
-                    input {aria_label:"Search jobs",placeholder:"Job name, details, notes or number",value:query(),oninput:move |e|query.set(e.value()),onkeydown:move |e|if e.key()==Key::Enter{applied.set(query());limit.set(100);}}
+                    input {r#type:"search",aria_label:"Search jobs",placeholder:"Job name, details, notes or number",value:query(),oninput:move |e|query.set(e.value())}
                     select {aria_label:"Job status",value:status(),onchange:move |e|{status.set(e.value());limit.set(100);},
                         for (value,label) in [("","All statuses"),("pending","Pending"),("in_progress","In Progress"),("ready_for_pickup","Ready for Pickup"),("delivered","Delivered"),("cancelled","Cancelled")] {option {value,"{label}"}}
                     }
-                    button {onclick:move |_|{applied.set(query());limit.set(100);},"Search"}
+
                     button { hidden:true, "data-page-refresh":"true", tabindex:-1, aria_hidden:"true",disabled:busy(),onclick:move |_|{data.restart();revision+=1;},"Refresh"}
                 }
                 div {class:"service_job_messages",
@@ -327,7 +328,7 @@ fn PromptLibrary(db_form: DbForm, job: Option<Job>) -> Element {
     let page=prompt_page().min(pages-1);
     rsx! {
         div {class:"service_filters",
-            input {aria_label:"Search prompts",placeholder:"Search prompts",value:query(),oninput:move |e|query.set(e.value())}
+            input {r#type:"search",aria_label:"Search prompts",placeholder:"Search prompts",value:query(),oninput:move |e|query.set(e.value())}
             select {aria_label:"Prompt category",value:category(),onchange:move |e|category.set(e.value()),option {value:"","All categories"} for c in categories {option {value:c.clone(),"{c}"}}}
             label {class:"service_check",input {r#type:"checkbox",checked:inactive(),onchange:move |e|inactive.set(e.checked())} "Include inactive"}
             button { hidden:true, "data-page-refresh":"true", tabindex:-1, aria_hidden:"true",disabled:loading(),onclick:move |_|{data.restart();selected.set(None);},"Refresh"}
@@ -366,7 +367,16 @@ fn PromptLibrary(db_form: DbForm, job: Option<Job>) -> Element {
                 if let Some(prompt)=selected(){
                     h3 {"{prompt.title}"} small {"{prompt.category}"}
                     if prompt.image_data.starts_with("data:image/") {img {class:"service_prompt_image",src:prompt.image_data.clone(),alt:prompt.image_name.clone()}}
-                    p {class:"service_preserve","{prompt.prompt_text}"}
+                    label {class:"service_prompt_text_field",
+                        span {"Prompt"}
+                        textarea {
+                            class:"service_prompt_text",
+                            readonly:true,
+                            rows:8,
+                            value:prompt.prompt_text.clone(),
+                            aria_label:"Prompt text"
+                        }
+                    }
                 }else{p {class:"service_empty","Select a design prompt"}}
                 }
                 if let Some(prompt)=selected(){
@@ -439,11 +449,11 @@ fn PromptThumbnail(db_form:DbForm,id:i32,title:String)->Element {
 }
 
 async fn copy_text(text: String) -> Result<(), String> {
-    let encoded = serde_json::to_string(&text).map_err(|e| e.to_string())?;
-    document::eval(&format!("await navigator.clipboard.writeText({encoded});"))
-        .await
-        .map_err(|e| format!("Could not copy prompt: {e}"))?;
-    Ok(())
+    let mut clipboard = arboard::Clipboard::new()
+        .map_err(|e| format!("Could not open the system clipboard: {e}"))?;
+    clipboard
+        .set_text(text)
+        .map_err(|e| format!("Could not copy prompt: {e}"))
 }
 #[component]
 fn PromptEditor(

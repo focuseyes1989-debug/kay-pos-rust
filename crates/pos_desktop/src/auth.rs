@@ -48,7 +48,9 @@ pub fn Root() -> Element {
 #[component]
 fn Login() -> Element {
     let mut session = use_context::<Signal<Option<Session>>>();
-    let mut username = use_signal(String::new);
+    let remembered = use_hook(|| load_remembered_username().unwrap_or_default());
+    let mut remember = use_signal(|| !remembered.is_empty());
+    let mut username = use_signal(|| remembered.clone());
     let mut password = use_signal(String::new);
     let mut busy = use_signal(|| false);
     let mut error = use_signal(String::new);
@@ -93,6 +95,7 @@ fn Login() -> Element {
                 busy.set(true);
                 error.set(String::new());
                 let name = username();
+                let keep_username = remember();
                 let secret = password();
                 password.set(String::new());
                 spawn(async move {
@@ -101,7 +104,11 @@ fn Login() -> Element {
                         pos_core::auth::login(&pool, &name, &secret).await
                     }.await;
                     match result {
-                        Ok(actor) => session.set(Some(actor)),
+                        Ok(actor) => {
+                            if let Err(e)=save_remembered_username(if keep_username {Some(actor.username())}else{None}) {
+                                error.set(format!("Cannot save Remember me: {e}"));
+                            } else {session.set(Some(actor));}
+                        },
                         Err(e) => {
                             error.set(format!("Sign in failed: {e:#}"));
                             sleep(Duration::from_secs(2)).await;
@@ -116,6 +123,13 @@ fn Login() -> Element {
                 }
                 label { "Username" input { autofocus: true, autocomplete: "username", disabled: busy(), value: username(), oninput: move |e| username.set(e.value()) } }
                 label { "Password" input { r#type: "password", autocomplete: "current-password", disabled: busy(), value: password(), oninput: move |e| password.set(e.value()) } }
+                label {class:"login_remember",
+                    input {r#type:"checkbox",checked:remember(),disabled:busy(),onchange:move |e|{
+                        let enabled=e.checked();remember.set(enabled);
+                        if !enabled {if let Err(e)=save_remembered_username(None){error.set(format!("Cannot clear Remember me: {e}"));}}
+                    }}
+                    span {"Remember me"}
+                }
                 if !error().is_empty() { p { role: "alert", "{error}" } }
                 button { class: "primary", r#type: "submit", disabled: busy(), if busy() { "Signing in..." } else { crate::icons::ActionLabel { label:"Sign in" } } }
                 button { class: "login_connection", r#type: "button", disabled: busy(), onclick: move |_| configure.set(true), "Database connection" }
@@ -136,7 +150,44 @@ fn Login() -> Element {
 pub fn can_open(actor: &Session, view: WorkspaceView) -> bool {
     actor.allows(match view {
         WorkspaceView::Sales | WorkspaceView::Receipts | WorkspaceView::ServiceOrders | WorkspaceView::Ai => Permission::Sell,
-        WorkspaceView::Settings => Permission::Admin,
+        WorkspaceView::Settings | WorkspaceView::ErpOperations => Permission::Admin,
         _ => Permission::Manage,
     })
+}
+
+fn remembered_username_path()->anyhow::Result<PathBuf> {
+    Ok(PathBuf::from(std::env::var_os("LOCALAPPDATA").ok_or_else(||anyhow::anyhow!("LOCALAPPDATA unavailable"))?).join("KAY POS Rust").join("remembered-username.json"))
+}
+fn load_remembered_username()->anyhow::Result<String> {
+    let path=remembered_username_path()?;
+    if !path.exists(){return Ok(String::new());}
+    Ok(serde_json::from_slice::<String>(&fs::read(path)?)?)
+}
+fn save_remembered_username(username:Option<&str>)->anyhow::Result<()> {
+    save_remembered_username_at(&remembered_username_path()?,username)
+}
+fn save_remembered_username_at(path:&std::path::Path,username:Option<&str>)->anyhow::Result<()> {
+    use std::io::Write;
+    if let Some(username)=username {
+        let parent=path.parent().ok_or_else(||anyhow::anyhow!("Invalid remember path"))?;
+        fs::create_dir_all(parent)?;
+        let mut file=tempfile::NamedTempFile::new_in(parent)?;
+        file.write_all(&serde_json::to_vec(username)?)?;
+        file.as_file().sync_all()?;
+        file.persist(path).map_err(|e|e.error)?;
+    }else{match fs::remove_file(path){Ok(())=>{},Err(e) if e.kind()==std::io::ErrorKind::NotFound=>{},Err(e)=>return Err(e.into())}}
+    Ok(())
+}
+#[cfg(test)]
+mod remember_tests {
+    #[test]
+    fn only_username_is_stored_and_uncheck_removes_it() {
+        let dir=tempfile::tempdir().unwrap();let path=dir.path().join("remember.json");
+        super::save_remembered_username_at(&path,Some("မောင်မောင်")).unwrap();
+        let bytes=std::fs::read(&path).unwrap();assert_eq!(serde_json::from_slice::<String>(&bytes).unwrap(),"မောင်မောင်");
+        super::save_remembered_username_at(&path,Some("cashier")).unwrap();
+        assert_eq!(serde_json::from_slice::<String>(&std::fs::read(&path).unwrap()).unwrap(),"cashier");
+        super::save_remembered_username_at(&path,None).unwrap();assert!(!path.exists());
+        super::save_remembered_username_at(&path,None).unwrap();
+    }
 }

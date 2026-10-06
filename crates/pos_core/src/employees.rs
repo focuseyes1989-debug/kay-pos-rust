@@ -613,9 +613,18 @@ pub async fn list(
     } else {
         vec![]
     };
+    let attendance_shifts = if section==Section::Attendance {
+        json_rows(&mut conn,"SELECT json_build_object('employee_id',a.employee_id,'effective_from',a.effective_from,'effective_to',a.effective_to,'start_time',s.start_time)::text FROM employee_shifts a JOIN shifts s ON s.id=a.shift_id ORDER BY a.effective_from DESC,a.id DESC").await?
+    }else{vec![]};
     for row in &mut rows {
         let revision = crate::auth::fingerprint(row.to_string().as_bytes());
         row["revision"] = json!(revision);
+        if section==Section::Attendance {
+            let date=text(row,"attendance_date");
+            if let Some(shift)=attendance_shifts.iter().find(|a|a["employee_id"]==row["employee_id"] && text(a,"effective_from")<=date && (text(a,"effective_to").is_empty() || text(a,"effective_to")>=date)) {
+                row["shift_start"] = shift["start_time"].clone();
+            }
+        }
         if let Some(emp) = employees.iter().find(|e| e["id"] == row["employee_id"]) {
             row["full_name"] = emp["full_name"].clone();
             row["employee_no"] = emp["employee_no"].clone();
@@ -631,6 +640,9 @@ pub async fn list(
         }
     }
     let mut summary = json!({});
+    if section == Section::Attendance {
+        summary["latest_attendance"] = json!(sqlx::query_scalar::<_,Option<String>>("SELECT MAX(attendance_date) FROM attendance").fetch_one(&mut *conn).await?);
+    }
     summary["active"] = json!(employees
         .iter()
         .filter(|e| text(e, "employment_status") == "Active")

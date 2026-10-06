@@ -13,7 +13,7 @@ fn source(name: &str) -> Option<&'static str> {
         "dashboard", "point_of_sale", "receipt", "products", "inventory", "category",
         "location_on", "person", "groups", "supplier", "payments", "credit_card",
         "analytics", "orders", "folder_open", "download_done", "upload_file", "tv_displays",
-        "calendar", "check_circle", "visibility", "backup", "shopping_cart", "arrow_circle_left", "arrow_circle_right")
+        "calendar", "chevron_down", "check_circle", "visibility", "backup", "shopping_cart", "arrow_circle_left", "arrow_circle_right")
 }
 
 #[component]
@@ -26,11 +26,11 @@ pub fn Icon(name: String) -> Element {
 fn for_label(label: &str) -> Option<&'static str> {
     let label=label.trim().trim_start_matches('+').trim();
     Some(match label {
-        "AI"=>"analytics", "Dashboard"=>"dashboard", "Sales"=>"point_of_sale", "Receipts"=>"receipt",
+        "AI"|"Kay Assistant"=>"analytics", "Dashboard"=>"dashboard", "Sales"=>"point_of_sale", "Receipts"=>"receipt",
         "Products"=>"products", "Inventory"=>"inventory", "Categories"=>"category",
         "Locations"=>"location_on", "Customers"=>"person", "Employees"=>"groups",
         "Suppliers"=>"supplier", "Expenses"=>"payments", "Sale Summary"=>"analytics",
-        "Service Order"|"Service Orders"=>"orders", "Settings Center"=>"settings",
+        "Service Order"|"Service Orders"|"ERP Operations"=>"orders", "Settings Center"=>"settings",
         "Sign out"=>"logout", "Sign in"=>"login", "Refresh"=>"refresh",
         "Search"|"Apply filters"=>"search", "Reset"|"Reverse"=>"undo",
         "Edit"=>"edit", "Cancel"=>"cancel", "Close"|"×"|"✕"=>"close",
@@ -59,6 +59,9 @@ fn for_label(label: &str) -> Option<&'static str> {
 
 #[component]
 pub fn ActionLabel(label: String) -> Element {
+    if label.trim() == "Close" {
+        return rsx! { span { class:"ui_action_label ui_close_label", role:"img", aria_label:"Close", Icon {name:"close"} } };
+    }
     let text = display_label(&label);
     rsx! { span {class:"ui_action_label",
         if let Some(name)=for_label(&label) { Icon {name} }

@@ -86,6 +86,10 @@ pub fn PurchasesPage(db_form: DbForm, actor: Session) -> Element {
     let mut notice = use_signal(|| initial.1);
     let source = db_form.clone();
     let user = actor.clone();
+    use_effect(move || {
+        let values=(from(),to());
+        if pos_core::sale_summary::dates(&values.0,&values.1).is_ok() && *dates.peek()!=values { dates.set(values); page.set(0); }
+    });
     let mut data = use_resource(move || {
         let source = source.clone();
         let user = user.clone();
@@ -185,9 +189,7 @@ pub fn PurchasesPage(db_form: DbForm, actor: Session) -> Element {
             label {"Search" input {r#type:"search",value:query(),placeholder:"Order or supplier",oninput:move |e|{query.set(e.value());page.set(0);}}}
             label {"Supplier" select {value:supplier().to_string(),onchange:move |e|{supplier.set(e.value().parse().unwrap_or(0));page.set(0);},option{value:"0","All suppliers"} if let Some(d)=loaded {for s in &d.suppliers {option{value:s.id.to_string(),"{s.name}"}}}}}
             if tab()!=2 {label {"Status" select {value:status(),onchange:move |e|{status.set(e.value());page.set(0);},option{value:"","All statuses"} for label in if tab()==0{vec!["pending","received","cancelled"]}else{vec!["Unpaid","Partial","Paid"]}{option{value:label,"{label}"}}}}}
-            label {"From" input {r#type:"date",value:from(),oninput:move |e|from.set(e.value())}}
-            label {"To" input {r#type:"date",value:to(),oninput:move |e|to.set(e.value())}}
-            button {disabled:loading,onclick:move |_|{match pos_core::sale_summary::dates(&from(),&to()){Ok(_)=>{dates.set((from(),to()));page.set(0);refresh+=1;},Err(_)=>notice.set("Enter a valid date range".into())}},"Apply"}
+            crate::date_range::DateRangePicker { from:from(), to:to(), onchange:move |(a,b):(String,String)|{from.set(a);to.set(b);} }
         }
         div {class:"receipt_tabs reports_tabs",role:"tablist",for (i,label) in ["Purchase Orders","Purchase History","Supplier Ledger"].iter().enumerate(){button{role:"tab",aria_selected:tab()==i,class:if tab()==i{"active"}else{""},onclick:move |_|{tab.set(i);status.set(String::new());page.set(0);},"{label}"}}}
         if !notice().is_empty(){p{role:"status","{notice}"}}

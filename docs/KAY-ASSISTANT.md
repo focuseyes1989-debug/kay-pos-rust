@@ -1,0 +1,19 @@
+# Kay Assistant conversation features
+
+The assistant continues to use offline deterministic intent routing and parameterized PostgreSQL queries. It does not require a language model or an external AI service.
+
+- Period followups keep the last successful request's topic, category, receipt amount and payment filters. “အဲဒီ Receipt တွေပြပါ” turns a category sales result into its receipts while keeping its dates.
+- Category/product names can produce up to five explicit candidate choices. Myanmar mark ordering, apostrophes and spacing are normalized for suggestions. Approximate name matching scans the first 1,000 distinct names; suggestions disclose this limit. Existing product substring/SKU/barcode searches continue to work. Failed answers and unconfirmed suggestions are not conversation context.
+- Sales, category sales and expenses support period comparison. “ဒီလနဲ့ ပြီးခဲ့တဲ့လ အရောင်း နှိုင်းယှဉ်ပေးပါ” compares month-to-date with the full previous calendar month; the answer explains the potentially unequal day counts. Without an explicit previous month, the baseline is the immediately preceding interval of equal length. Profit and current inventory comparisons are rejected. Percent change is undefined when the baseline is zero.
+- Category and expense comparison totals cover all matching entries, independently of the visible 50-row result limit. Comparisons reuse existing refund checks and source/calculation notes. The two answers are retrieved in successive read-only snapshots, so ongoing sales can affect their respective snapshot times.
+- Receipt, product, inventory, expense category and customer rows open read-only detail dialogs. Expense details show up to 50 matching records. Duplicate product/customer names are shown with IDs, not silently resolved to the first record. Current customer balance is included only under Credit permissions. All detail queries check permissions, and audit authorization must succeed before displaying their results.
+- The answer displays dates, filters, aggregate amount when available and an expandable calculation/refund explanation. Empty data is distinct from errors and pending name clarification.
+
+Examples: “ဒီနေ့ Service ရောင်းရငွေ ပြပါ”, “မနေ့ကရော?”, “အဲဒီ Receipt တွေပြပါ”, “ဒီလနဲ့ ပြီးခဲ့တဲ့လ အသုံးစရိတ် နှိုင်းယှဉ်ပေးပါ”, “ဘယ် expense category အများဆုံးလဲ?”
+
+No update release is produced as part of these source changes.
+
+
+Date phrases: ယနေ့/ယခုနေ့/အခုနေ့; မနေ့/မနေ့က; ဒီတစ်ပတ်/ဒီတပတ်/ယခုအပတ်/အခုအပတ်; အရင်အပတ်/အရင်တစ်ပတ်/ပြီးခဲ့သောအပတ်; ဒီလ/ယခုလ/အခုလ; အရင်လ/ပြီးခဲ့တဲ့လ/ပြီးခဲ့သောလ; ဒီနှစ်/အခုနှစ်/ယခုနှစ်; အရင်နှစ်/ပြီးခဲ့တဲ့နှစ်/ပြီးခဲ့သောနှစ်. Current periods end today; previous periods cover the full calendar period; weeks start Monday. လွန်ခဲ့သော ၃ ရက်က / လွန်ခဲ့တဲ့10ရက်က mean one specific day, not a trailing range. Both Myanmar and ASCII digits work. Explicit dates accept day/month/year, day.month.year, and ISO year-month-day (four-digit years). Invalid dates and excessive offsets return validation errors. Follow-ups retain category, payment and receipt amount. Examples: ယခုလ Service ရောင်းရငွေ ပြပါ; လွန်ခဲ့သော ၃ ရက်က 10000 ကျပ် receipts ပြပါ; 5/10/2026 ရက်နေ့ အရောင်း ပြပါ; အရင်နှစ်ရော?
+
+Customer and employee name searches: `customer Daw Win Maw details`, `ဝန်ထမ်း မောင်မောင် အချက်အလက် ပြပါ`, `employee EMP-0005`, `customer 091234567`, `customer Daw Win Maw အကြွေး ပြပါ`. List queries use bound literal substring matching (maximum 50 results); duplicate names remain separate rows. Click Customer or Employee ID to open a permission-checked detail dialog. Names, phone and Employee ID can be searched; approximate name suggestions require explicit selection and scan up to 1,000 distinct names. Profile results describe current records, not historical profiles; credit queries retain credit permissions. Employee detail excludes payroll and national ID.

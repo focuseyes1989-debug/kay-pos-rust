@@ -1,4 +1,4 @@
-use anyhow::{ensure, Result};
+use anyhow::{ensure, Context, Result};
 use rust_decimal::Decimal;
 use sqlx::PgPool;
 
@@ -51,6 +51,7 @@ pub async fn delete(pool: &PgPool, id: i32,actor:&crate::auth::Session) -> Resul
             "This expense belongs to payroll and cannot be deleted here"
         );
     }
+    crate::erp_accounting::expense_saved(&mut tx, id).await?;
     sqlx::query("DELETE FROM expense_attachments WHERE expense_id=$1")
         .bind(id)
         .execute(&mut *tx)
@@ -60,6 +61,7 @@ pub async fn delete(pool: &PgPool, id: i32,actor:&crate::auth::Session) -> Resul
         .execute(&mut *tx)
         .await?;
     crate::activity::record(&mut tx,actor,"rust.expense.delete",&format!("expense_id={id}")).await?;
+    crate::erp_accounting::expense_deleted(&mut tx, id).await?;
     tx.commit().await?;
     Ok(())
 }
@@ -99,18 +101,15 @@ pub async fn save(pool: &PgPool, expense: &Expense,actor:&crate::auth::Session) 
             .fetch_one(&mut *tx)
             .await?;
     ensure!(valid, "Expense category no longer exists");
-    let result = if expense.id == 0 {
-        sqlx::query("INSERT INTO expenses (expense_no,category,description,amount,expense_date,payment_method,reference_no,notes) VALUES ($1,$2,$3,$4::numeric,$5,$6,$7,$8)")
-            .bind(&expense.expense_no).bind(&expense.category).bind(&expense.description).bind(expense.amount).bind(&expense.expense_date).bind(&expense.payment_method).bind(&expense.reference_no).bind(&expense.notes).execute(&mut *tx).await?
+    let saved_id: i32 = if expense.id == 0 {
+        sqlx::query_scalar("INSERT INTO expenses (expense_no,category,description,amount,expense_date,payment_method,reference_no,notes) VALUES ($1,$2,$3,$4::numeric,$5,$6,$7,$8) RETURNING id")
+            .bind(&expense.expense_no).bind(&expense.category).bind(&expense.description).bind(expense.amount).bind(&expense.expense_date).bind(&expense.payment_method).bind(&expense.reference_no).bind(&expense.notes).fetch_one(&mut *tx).await?
     } else {
-        sqlx::query("UPDATE expenses SET category=$2,description=$3,amount=$4::numeric,expense_date=$5,payment_method=$6,reference_no=$7,notes=$8 WHERE id=$1")
-            .bind(expense.id).bind(&expense.category).bind(&expense.description).bind(expense.amount).bind(&expense.expense_date).bind(&expense.payment_method).bind(&expense.reference_no).bind(&expense.notes).execute(&mut *tx).await?
+        sqlx::query_scalar("UPDATE expenses SET category=$2,description=$3,amount=$4::numeric,expense_date=$5,payment_method=$6,reference_no=$7,notes=$8 WHERE id=$1 RETURNING id")
+            .bind(expense.id).bind(&expense.category).bind(&expense.description).bind(expense.amount).bind(&expense.expense_date).bind(&expense.payment_method).bind(&expense.reference_no).bind(&expense.notes).fetch_optional(&mut *tx).await?.context("Expense no longer exists. Refresh the list.")?
     };
-    ensure!(
-        result.rows_affected() == 1,
-        "Expense no longer exists. Refresh the list."
-    );
-    crate::activity::record(&mut tx,actor,"rust.expense.save",&format!("expense_id={}; expense_no={}",expense.id,expense.expense_no)).await?;
+    crate::activity::record(&mut tx,actor,"rust.expense.save",&format!("expense_id={saved_id}; expense_no={}",expense.expense_no)).await?;
+    crate::erp_accounting::expense_saved(&mut tx, saved_id).await?;
     tx.commit().await?;
     Ok(())
 }

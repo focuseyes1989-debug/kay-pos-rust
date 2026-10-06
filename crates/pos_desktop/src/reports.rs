@@ -72,14 +72,7 @@ pub fn ReportsPage(db_form: DbForm, actor: Session) -> Element {
             },ActionLabel{label:"Export Excel"}}
         }
         div {class:"dashboard_filters",
-            label {"From" input {r#type:"date",value:from(),oninput:move |e|from.set(e.value())}}
-            label {"To" input {r#type:"date",value:to(),oninput:move |e|to.set(e.value())}}
-            button {class:"customer_primary",disabled:loading,onclick:move |_|{
-                match pos_core::sale_summary::dates(&from(),&to()) {Ok(_)=>{notice.set(String::new());page.set(0);range.set((from(),to()));data.restart();},Err(_)=>notice.set("Enter a valid date range.".into())}
-            },"Apply"}
-            for (label,start) in [("Today",today),("This week",today-chrono::Duration::days(today.weekday().num_days_from_monday() as i64)),("This month",today.with_day(1).unwrap())] {
-                button {disabled:loading,onclick:move |_|{from.set(start.to_string());to.set(today.to_string());range.set((start.to_string(),today.to_string()));page.set(0);notice.set(String::new());data.restart();},"{label}"}
-            }
+            crate::date_range::DateRangePicker { from:from(), to:to(), disabled:!data.finished(), onchange:move |(a,b):(String,String)|{from.set(a.clone());to.set(b.clone());notice.set(String::new());page.set(0);range.set((a,b));data.restart();} }
         }
         div {class:"receipt_tabs reports_tabs",role:"tablist",aria_label:"Reports",
             for (i,label) in ["Sales","Expenses","Profit & Loss","Financial Summary","Receivables","Payables"].iter().enumerate() {

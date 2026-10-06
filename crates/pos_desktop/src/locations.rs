@@ -25,6 +25,10 @@ pub fn LocationsPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
     let mut deletion = use_signal(|| None::<Location>);
     let mut busy = use_signal(|| false);
     let mut error = use_signal(String::new);
+    use_effect(move || {
+        let values = (search(), filter());
+        if *applied.peek() != values { applied.set(values); page.set(0); }
+    });
     let state = data.read();
     let (locations, stock) = state
         .as_ref()
@@ -63,9 +67,8 @@ pub fn LocationsPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
             }
             if !manage() {
                 div {class:"location_filters",
-                    label {"Search" input {placeholder:"Product name or SKU",value:"{search}",oninput:move |e|search.set(e.value()),onkeydown:move |e|if e.key()==Key::Enter {applied.set((search(),filter()));page.set(0);}}}
+                    label {"Search" input {r#type:"search",placeholder:"Product name or SKU",value:"{search}",oninput:move |e|search.set(e.value()),onkeydown:move |e|if e.key()==Key::Enter {applied.set((search(),filter()));page.set(0);}}}
                     label {"Location" select {value:"{filter}",onchange:move |e|filter.set(e.value()),option {value:"","All locations"} for name in names {option {value:"{name}","{name}"}}}}
-                    button {class:"customer_primary",onclick:move |_|{applied.set((search(),filter()));page.set(0);},"Search"}
                     button {onclick:move |_|{search.set(String::new());filter.set(String::new());applied.set((String::new(),String::new()));page.set(0);},"Reset"}
                 }
             }

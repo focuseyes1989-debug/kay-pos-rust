@@ -93,7 +93,7 @@ pub fn ProductsPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
             section { class:"products_items",
                 header { class:"products_items_header", h3 { "Items" } small { "{rows.len().min(count())} loaded · {rows.len()} items" } }
                 div { class:"products_filters",
-                    label { "Search" input { placeholder:"Product, SKU or barcode",value:"{query}",oninput:move |e| { query.set(e.value());count.set(50); } } }
+                    label { "Search" input {r#type:"search", placeholder:"Product, SKU or barcode",value:"{query}",oninput:move |e| { query.set(e.value());count.set(50); } } }
                     label { "Category" select { value:"{category}",onchange:move |e|{category.set(e.value());count.set(50);},option { value:"","All categories" } for c in &categories { option { value:"{c.id}","{c.name}" } } } }
                     label { "Product type" select { value:"{mode}",onchange:move |e|{mode.set(e.value());count.set(50);},option { value:"","All types" } for item in ["Each","Service","Variants","Wholesale"] { option { "{item}" } } } }
                     button { onclick:move |_|{query.set(String::new());category.set(String::new());mode.set(String::new());count.set(50);},"Reset" }

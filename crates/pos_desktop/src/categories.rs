@@ -88,7 +88,7 @@ fn CategoryList(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
                 }
                     button {class:"customer_primary",disabled:!data.finished(),onclick:move |_|editor.set(Some(CategoryRecord {status:"active".into(),..Default::default()})),crate::icons::ActionLabel { label:"+ Add category" }}
                 }
-                div {class:"category_manage_search",input {aria_label:"Search categories",placeholder:"Search categories",value:"{search}",oninput:move |e|search.set(e.value())}
+                div {class:"category_manage_search",input {r#type:"search",aria_label:"Search categories",placeholder:"Search categories",value:"{search}",oninput:move |e|search.set(e.value())}
                     button {disabled:search().is_empty(),onclick:move |_|search.set(String::new()),"Clear search"}
                 }
                 div {class:"products_manage_list",

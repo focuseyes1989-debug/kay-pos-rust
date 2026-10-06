@@ -104,6 +104,23 @@
 .service_prompts_page .service_prompt_detail { grid-column:2; grid-row:1 / -1; min-height:0; padding:0; display:flex; flex-direction:column; overflow:hidden; }
 .service_prompt_detail_body { flex:1; min-height:0; overflow:auto; padding:16px; }
 .service_prompt_detail_body > .service_empty { height:100%; margin:0; display:flex; align-items:center; justify-content:center; }
+.service_prompt_text_field { display:grid; gap:7px; margin-top:14px; }
+.service_prompt_text_field > span { color:var(--muted); font-size:12px; font-weight:600; }
+.shell .service_page .service_prompt_text {
+  box-sizing:border-box;
+  width:100%;
+  min-height:170px;
+  padding:12px 14px;
+  resize:vertical;
+  cursor:text;
+  text-align:left;
+  white-space:pre-wrap;
+  overflow-wrap:anywhere;
+  line-height:1.75;
+  user-select:text;
+  background:color-mix(in srgb,var(--ink) 2%,var(--panel));
+}
+.shell .service_page .service_prompt_text:focus { border-color:var(--shop-focus,#2563eb); outline:2px solid color-mix(in srgb,var(--shop-focus,#2563eb) 22%,transparent); outline-offset:1px; }
 .service_prompt_footer { flex:none; margin:0; padding:12px; border-top:1px solid var(--line); gap:8px; }
 .service_dialog.service_prompt_editor { width:min(1000px,calc(100vw - 40px)); }
 .service_prompt_editor_columns { display:grid; grid-template-columns:minmax(0,3fr) minmax(260px,2fr); gap:24px; }

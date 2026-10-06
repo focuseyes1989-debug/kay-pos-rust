@@ -11,15 +11,17 @@ async fn refund_stock_credit_and_rollback() -> anyhow::Result<()> {
         .await?;
     sqlx::raw_sql(r#"
         SET search_path TO pg_temp;
+        CREATE TEMP TABLE settings(key text,value text);
         CREATE TEMP TABLE users(id int,username text,role text,is_active int,password_hash text,salt text);
         CREATE TEMP TABLE user_activity_log(id SERIAL PRIMARY KEY,user_id INTEGER,username TEXT,action TEXT,details TEXT,ip_address TEXT,created_at TIMESTAMP);
         CREATE TEMP TABLE sales(id int PRIMARY KEY, status text, payment_type text, invoice_no text, customer_id int);
         CREATE TEMP TABLE sale_items(id int, sale_id int, product_id int, variant_id int, qty float8, refunded_qty real DEFAULT 0, refund_reason text, location_id int, location text, batch_no text, expire_date text);
+        CREATE TEMP TABLE rust_erp_outbox(id bigserial PRIMARY KEY,event_key text UNIQUE,event_type text,aggregate_type text,aggregate_id text,payload jsonb,status text DEFAULT 'pending',attempts int DEFAULT 0,next_attempt_at timestamp DEFAULT CURRENT_TIMESTAMP,locked_until timestamp,last_error text,created_at timestamp DEFAULT CURRENT_TIMESTAMP,sent_at timestamp);
         CREATE TEMP TABLE products(id int PRIMARY KEY, stock float8, sold_by text, last_updated timestamp);
         CREATE TEMP TABLE product_variants(id int PRIMARY KEY, product_id int, stock int, updated_at timestamp);
         CREATE TEMP TABLE customers(id int PRIMARY KEY, current_balance float8);
         CREATE TEMP TABLE credit_sales(id int PRIMARY KEY, sale_id int, invoice_no text, customer_id int, total_amount float8, paid_amount float8, balance_amount float8, status text, notes text);
-        CREATE TEMP TABLE credit_payments(credit_sale_id int, customer_id int, amount float8, payment_date text, payment_method text, note text);
+        CREATE TEMP TABLE credit_payments(id serial PRIMARY KEY,credit_sale_id int, customer_id int, amount float8, payment_date text, payment_method text, reference_no text, note text);
         CREATE TEMP TABLE credit_adjustments(customer_id int, credit_sale_id int, amount float8, adjustment_type text, reason text, created_by text);
         CREATE TEMP TABLE stock_movements(product_id int, variant_id int, type text, quantity float8, old_stock float8, new_stock float8, reason text, reference text, created_by text, location text, created_at timestamp);
         CREATE TEMP TABLE product_locations(id int, product_id int, location text, batch_no text, expire_date text, quantity float8, last_updated timestamp DEFAULT CURRENT_TIMESTAMP, UNIQUE(product_id,location,batch_no,expire_date));
@@ -31,6 +33,21 @@ async fn refund_stock_credit_and_rollback() -> anyhow::Result<()> {
         INSERT INTO credit_sales VALUES(2,NULL,'TEST-2',1,500,200,300,'partial',NULL),(3,3,'TEST-3',1,700,0,700,'pending',NULL);
         INSERT INTO sale_items(id,sale_id,product_id,variant_id,qty,refunded_qty) VALUES(1,1,1,NULL,5,2),(2,1,2,NULL,1,0),(3,1,3,30,2,0),(4,2,2,NULL,1,0),(5,3,999,NULL,1,0);
     "#).execute(&pool).await?;
+    sqlx::raw_sql(include_str!("../../../migrations/013_erp_accounting.sql"))
+        .execute(&pool)
+        .await?;
+    let journal = r#"[
+        {"account_key":"cash","account_code":"1000","account_name":"Cash","debit":"100","credit":"0","memo":"Sale"},
+        {"account_key":"sales_revenue","account_code":"4000","account_name":"Revenue","debit":"0","credit":"100","memo":"Sale"}
+    ]"#;
+    for id in [1, 2] {
+        sqlx::query("INSERT INTO rust_erp_accounting_documents(event_key,event_type,source_type,source_id,document_date,total_debit,total_credit,lines) VALUES($1,'sale.completed','sale',$2,'2026-01-01',100,100,$3::jsonb)")
+            .bind(format!("sale:{id}"))
+            .bind(id)
+            .bind(journal)
+            .execute(&pool)
+            .await?;
+    }
     let mut hash = [0u8; 32];
     pbkdf2::pbkdf2_hmac::<sha2::Sha256>(b"test-only", b"salt", 100000, &mut hash);
     sqlx::query("INSERT INTO users VALUES(1,'manager','manager',1,$1,$2)")

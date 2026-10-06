@@ -47,10 +47,10 @@ pub fn StockAlerts(form: DbForm) -> Element {
         if open(){div {class:"modal_backdrop",
             section {class:"stock_alert_dialog",role:"dialog",aria_modal:"true",aria_label:"Stock notifications",
                 header {h2 {"Stock notifications"}
-                    button {aria_label:"Close stock notifications",title:"Close",onclick:move |_|open.set(false),"×"}
+                    button {aria_label:"Close stock notifications",title:"Close",onclick:move |_|open.set(false),crate::icons::Icon {name:"close"}}
                 }
                 div {class:"stock_alert_filters",
-                    input {aria_label:"Search stock alerts",placeholder:"Product, variant or SKU",value:query(),oninput:move |e|query.set(e.value())}
+                    input {r#type:"search",aria_label:"Search stock alerts",placeholder:"Product, variant or SKU",value:query(),oninput:move |e|query.set(e.value())}
                     select {aria_label:"Stock status",value:severity(),onchange:move |e|severity.set(e.value()),
                         option {value:"","All ({all.len()})"} option {value:"low","Low stock ({low})"} option {value:"out","Out of stock ({out})"}
                     }
