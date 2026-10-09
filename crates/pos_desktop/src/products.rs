@@ -55,6 +55,7 @@ pub fn ProductsPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
     let mut mode = use_signal(String::new);
     let mut count = use_signal(|| 50usize);
     let mut editor = use_signal(|| None::<Product>);
+    let mut barcode_product = use_signal(|| None::<Product>);
     let mut deletion = use_signal(|| None::<Product>);
     let mut busy = use_signal(|| false);
     let mut error = use_signal(String::new);
@@ -84,12 +85,7 @@ pub fn ProductsPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
     rows.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
     rsx! {
         section { class:"customers_page products_touch",
-            header { class:"customers_header customers_touch_header", h2 { crate::icons::ActionLabel { label:"Products" } }
-                div { class:"customers_actions",
-                    button { hidden:true, "data-page-refresh":"true", tabindex:-1, aria_hidden:"true", disabled: loading, onclick:move |_|data.restart(),"Refresh" }
-                    button { class:"customer_primary",onclick:move |_|editor.set(Some(blank())),crate::icons::ActionLabel { label:"+ Add Item" } }
-                }
-            }
+            button { hidden:true, "data-page-refresh":"true", tabindex:-1, aria_hidden:"true", disabled: loading, onclick:move |_|data.restart(),"Refresh" }
             section { class:"products_items",
                 header { class:"products_items_header", h3 { "Items" } small { "{rows.len().min(count())} loaded · {rows.len()} items" } }
                 div { class:"products_filters",
@@ -97,6 +93,7 @@ pub fn ProductsPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
                     label { "Category" select { value:"{category}",onchange:move |e|{category.set(e.value());count.set(50);},option { value:"","All categories" } for c in &categories { option { value:"{c.id}","{c.name}" } } } }
                     label { "Product type" select { value:"{mode}",onchange:move |e|{mode.set(e.value());count.set(50);},option { value:"","All types" } for item in ["Each","Service","Variants","Wholesale"] { option { "{item}" } } } }
                     button { onclick:move |_|{query.set(String::new());category.set(String::new());mode.set(String::new());count.set(50);},"Reset" }
+                    button { class:"customer_primary",onclick:move |_|editor.set(Some(blank())),crate::icons::ActionLabel { label:"+ Add Item" } }
                 }
                 div { class:"products_manage_list", aria_busy: loading,
                     if loading {
@@ -109,11 +106,12 @@ pub fn ProductsPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
                     if let Some(Err(message))=state.as_ref() { p { role:"alert","{message}" } }
                     if matches!(state.as_ref(),Some(Ok(_))) && rows.is_empty() { p { "No products found." } }
                     for p in rows.iter().take(count()) {
-                        article { class:"product_manage_row",key:"{p.id}",
+                        article { class:"product_manage_row",key:"{p.id}", "data-search-value":p.name.clone(),"data-search-detail":format!("{} · {} · Stock: {}",p.sku.as_deref().unwrap_or("—"),crate::format_ks(p.price),crate::format_qty(crate::available_product_stock(p))),"data-search-match":format!("{} {} {}",p.name,p.sku.as_deref().unwrap_or(""),p.barcode.as_deref().unwrap_or("")),
                             div { class:"product_manage_image", crate::CatalogImage { key:"{p.id}", id:p.id, name:p.name.clone() } }
                             div { class:"product_manage_identity", div { strong { "{p.name}" } span { class:"product_mode", "data-kind":kind(p), "{kind(p)}" } } small { "{p.category_name.as_deref().unwrap_or_default()} · {p.sku.as_deref().or(p.barcode.as_deref()).unwrap_or_default()}" } }
                             div { class:"product_manage_price", strong { "{crate::format_ks(p.price)}" } small { if crate::is_service_product(p) { "No stock tracking" } else { "Stock: " {crate::format_qty(if crate::is_variant_product(p) { p.variants.iter().map(|v|v.stock).sum() } else {p.stock})} } } }
                             div { class:"customers_actions",
+                                button { onclick:{let p=p.clone();move |_|barcode_product.set(Some(p.clone()))}, crate::icons::ActionLabel { label:"Barcode Print" } }
                                 button { onclick:{let p=p.clone();move |_|editor.set(Some(p.clone()))},crate::icons::ActionLabel { label:"Edit" } }
                                 button { class:"product_delete",onclick:{let p=p.clone();move |_|deletion.set(Some(p.clone()))},crate::icons::ActionLabel { label:"Delete" } }
                             }
@@ -124,6 +122,7 @@ pub fn ProductsPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
                 }
             }
         }
+        if let Some(product)=barcode_product() { crate::barcode_print::BarcodePrint {product,db_form:db_form.clone(),on_close:move |_|barcode_product.set(None)} }
         if let Some(product)=editor() { ProductEditor { product,categories,db_form:db_form.clone(),on_close:move |_|editor.set(None),on_saved:move |_|{editor.set(None);data.restart();},on_error:move |message|error.set(message) } }
         if let Some(p)=deletion() {
             div { class:"modal_backdrop",section { class:"customer_dialog",role:"dialog",aria_modal:"true",aria_label:"Delete product",h2 { "Delete product?" } p { "{p.name}" }

@@ -58,9 +58,9 @@ pub fn StockAlerts(form: DbForm) -> Element {
                 }
                 if !error().is_empty(){p {role:"alert","{error}"}}
                 div {class:"stock_alert_list",
-                    table {thead {tr {th {"Product / Variant"} th {"SKU"} th {"Stock"} th {"Low at"} th {"Status"}}}
+                    table {thead {tr {th {"Product / Variant"} th {"Stock"} th {"Low at"} th {"Status"}}}
                         tbody {for row in filtered.iter(){tr {key:"{row.product_id}-{row.variant_id:?}",
-                            td {"{row.name}"} td {"{row.sku}"} td {"{row.stock}"} td {"{row.threshold}"}
+                            td {"{row.name}"} td {"{row.stock}"} td {"{row.threshold}"}
                             td {span {class:if row.stock<=0.0{"stock_alert_out"}else{"stock_alert_low"},if row.stock<=0.0{"Out of stock"}else{"Low stock"}}}
                         }}}
                     }

@@ -72,7 +72,7 @@ pub fn InventoryPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
                     else {
                         if rows.is_empty(){p {"No products found."}}
                         for p in rows.iter().take(count()) {
-                            button {class:if selected()==Some(p.id){"inventory_product selected"}else{"inventory_product"},onclick:{let id=p.id;move |_|selected.set(Some(id))},
+                            button {class:if selected()==Some(p.id){"inventory_product selected"}else{"inventory_product"}, "data-search-value":p.name.clone(),"data-search-detail":format!("{} · {} · Stock: {}",p.sku.as_deref().unwrap_or("—"),crate::format_ks(p.price),crate::format_qty(crate::available_product_stock(p))),"data-search-match":format!("{} {} {}",p.name,p.sku.as_deref().unwrap_or(""),p.barcode.as_deref().unwrap_or("")),onclick:{let id=p.id;move |_|selected.set(Some(id))},
                                 span {class:"product_manage_image",crate::CatalogImage {key:"{p.id}",id:p.id,name:p.name.clone()}}
                                 span {class:"inventory_identity",span {class:"inventory_product_title",strong {"{p.name}"} span {class:"product_mode","data-kind":if crate::is_service_product(p){"Service"}else if crate::is_variant_product(p){"Variants"}else{"Each"},if crate::is_service_product(p){"Service"}else if crate::is_variant_product(p){"Variants"}else{"Each"}}} small {"{p.sku.as_deref().unwrap_or_default()}"}}
                                 span {class:"inventory_balance",strong {if crate::is_service_product(p){"Service"}else{{crate::format_qty(p.stock)}" pcs"}} small {class:if p.stock<=0.0{"inventory_empty_stock"}else if p.stock<=p.low_stock{"inventory_low_stock"}else{"inventory_in_stock"},if crate::is_service_product(p){"No stock tracking"}else if p.stock<=0.0{"Out of stock"}else if p.stock<=p.low_stock{"Low stock"}else{"In stock"}}}
@@ -83,8 +83,9 @@ pub fn InventoryPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
                 }
                 section {class:"inventory_detail",
                     if let Some(p)=current.clone() {
-                        div {class:"inventory_detail_toolbar",button {onclick:move |_|receiving.set(true),crate::icons::ActionLabel { label:"View Movements" }}}
-                        header {class:"inventory_detail_heading",h3 {"{p.name}"}}
+                        header {class:"inventory_detail_heading",h3 {"{p.name}"}
+                            button {onclick:move |_|receiving.set(true),crate::icons::ActionLabel { label:"View Movements" }}
+                        }
                         p {class:"inventory_current_stock","Current stock: " {crate::format_qty(p.stock)} " pcs · Cost: " {crate::format_ks(p.cost)}}
                         if crate::is_service_product(&p) {p {"No stock tracking"}}
                         else {for detail_key in [format!("{}-{}",p.id,revision())] {

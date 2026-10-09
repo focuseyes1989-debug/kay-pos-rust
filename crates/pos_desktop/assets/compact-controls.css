@@ -1,0 +1,41 @@
+/* Shared compact controls. Keep 14px Myanmar text at 1.8 line height with
+   4px vertical padding: the full line box fits inside a 36px border box. */
+:root {--control-height:36px;}
+body input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="hidden"]):not([type="file"]),
+body select {
+ box-sizing:border-box;height:var(--control-height)!important;min-height:var(--control-height)!important;
+ font-size:14px!important;line-height:1.8!important;padding-top:4px!important;padding-bottom:4px!important;
+}
+body .shell .touch-combo input.touch-combo-input {height:var(--control-height)!important;min-height:var(--control-height)!important;padding-top:4px!important;padding-bottom:4px!important;}
+body button:not(.product_card):not(.expense_category_bar):not(.inventory_product):not(.customer_list_item):not(.supplier_list_item):not(.category):not(.receipt_drag_handle):not([aria-label^="Close"]):not(.side_close):not(.dialog_close_icon):not(:has(.ui_close_label)):not(.top_refresh):not(.top_utility):not(.menu_button):not(.shop_preview_icon_hover):not(.stock_transfer_refresh):not(.date_range_calendar button) {
+ box-sizing:border-box;min-height:var(--control-height)!important;height:auto!important;padding-top:4px!important;padding-bottom:4px!important;font-size:14px;
+}
+body .shell .touch-combo-list button.touch-combo-option {min-height:var(--control-height)!important;padding-top:4px!important;padding-bottom:4px!important;height:auto!important;}
+body .shell :is(.settings_search,.catalog_search,.category_search) {min-height:var(--control-height)!important;height:var(--control-height)!important;padding-block:0!important;}
+body .shell :is(.settings_search,.catalog_search,.category_search) input {min-height:var(--control-height)!important;height:var(--control-height)!important;border:0;}
+body .shell .categories button.category {min-height:44px;padding-block:6px;}
+body textarea {box-sizing:border-box;min-height:72px;padding-top:6px!important;padding-bottom:6px!important;font-size:14px;}
+/* Small color swatches and icon-only controls retain their own square targets. */
+
+/* Receipt search includes a label above its control; preserve both rows. */
+body .shell .receipt_filters { align-items:end; }
+body .shell .receipt_filters .receipt_search_box { height:auto; min-height:0; display:flex; flex-direction:column; gap:6px; }
+body .shell .receipt_filters .receipt_search_box > span { font-size:12px; line-height:1.35; color:var(--muted); }
+
+/* One icon treatment for pagination across all pages and dialogs. */
+body .shell button:is([aria-label="Previous page"],[aria-label="Next page"]) {
+ display:inline-flex;align-items:center;justify-content:center;flex:0 0 36px;
+ width:36px!important;min-width:36px!important;max-width:36px;height:36px!important;
+ padding:0!important;border:1px solid var(--line);border-radius:6px;
+ background:var(--panel);color:var(--ink);
+}
+body .shell button:is([aria-label="Previous page"],[aria-label="Next page"]) .ui_svg_icon { width:20px;height:20px; }
+body .shell button:is([aria-label="Previous page"],[aria-label="Next page"]):hover:not(:disabled) { color:var(--shop-icon-hover,var(--accent)); }
+body .shell button:is([aria-label="Previous page"],[aria-label="Next page"]):disabled { opacity:.4;cursor:default; }
+
+/* Keep one inset around search icons; wrappers must not add a second inset. */
+body .shell input[type="search"]:not(.touch-combo-input) {
+ background-position:8px center!important;
+ padding-left:30px!important;
+}
+body .shell :is(.settings_search,.catalog_search,.category_search) { padding-inline:0!important; }

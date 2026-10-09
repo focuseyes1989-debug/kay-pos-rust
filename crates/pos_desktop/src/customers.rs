@@ -51,8 +51,15 @@ pub fn CustomersPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
     rsx! {
         section { class: "customers_page customers_touch",
             button { hidden:true, "data-page-refresh":"true", disabled:!loaded.finished(), onclick:move |_|loaded.restart() }
-            header { class: "customers_header customers_touch_header",
-                div { small { class: "customer_eyebrow", "CUSTOMER MANAGEMENT" } h2 { crate::icons::ActionLabel { label:"Customers" } } }
+            div { class: "customers_touch_search",
+                label { "Search customers"
+                    input { r#type: "search", placeholder: "Customer name, phone or email", value: "{query}",
+                        oninput: move |event| query.set(event.value()),
+                        onkeydown: move |event| { if event.key()==Key::Enter { applied_query.set(query()); page.set(0); selected.set(None); } }
+                    }
+                }
+
+                button { onclick: move |_| { query.set(String::new()); applied_query.set(String::new()); page.set(0); selected.set(None); loaded.restart(); }, "Reset" }
                 div { class: "customers_actions",
                     button { class: "customer_primary", onclick: move |_| editor.set(Some(Customer::default())), crate::icons::ActionLabel { label:"+ Add customer" } }
                     div { class: "customer_more", onkeydown: move |event| { if event.key() == Key::Escape { more.set(false); } },
@@ -81,16 +88,7 @@ pub fn CustomersPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
                         }
                     }
                 }
-            }
-            div { class: "customers_touch_search",
-                label { "Search customers"
-                    input { r#type: "search", placeholder: "Customer name, phone or email", value: "{query}",
-                        oninput: move |event| query.set(event.value()),
-                        onkeydown: move |event| { if event.key()==Key::Enter { applied_query.set(query()); page.set(0); selected.set(None); } }
-                    }
-                }
 
-                button { onclick: move |_| { query.set(String::new()); applied_query.set(String::new()); page.set(0); selected.set(None); loaded.restart(); }, "Reset" }
             }
             if let Some(Err(message)) = state.as_ref() {
                 div { role: "alert", class: "customers_notice", "{message}" }
@@ -103,6 +101,7 @@ pub fn CustomersPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
                         for customer in rows.iter().skip(current * 25).take(25) {
                             button { key: "{customer.id}", class: if selected().as_ref().map(|c| c.id) == Some(customer.id) { "customer_list_item selected" } else { "customer_list_item" },
                                 aria_pressed: selected().as_ref().map(|c| c.id) == Some(customer.id),
+                                "data-search-value":customer.name.clone(),"data-search-detail":format!("{} · #{}",customer.phone,customer.id),"data-search-match":format!("{} {} {}",customer.name,customer.phone,customer.email),
                                 onclick: { let customer = customer.clone(); move |_| selected.set(Some(customer.clone())) },
                                 span { class: "customer_avatar", {customer.name.chars().next().unwrap_or('?').to_string()} }
                                 span { class: "customer_list_identity", strong { "{customer.name}" } small { "{contact(&customer.phone)} · #{customer.id}" } }
@@ -114,9 +113,9 @@ pub fn CustomersPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
                 if state.is_none() { p { class: "customers_notice", "Loading..." } }
                 else if rows.is_empty() { p { class: "customers_notice", "No customers found." } }
             footer { class: "customers_pagination",
-                button { disabled: current == 0, onclick: move |_| page.set(current.saturating_sub(1)), "Previous" }
+                button { title:"Previous page", aria_label:"Previous page", disabled: current == 0, onclick: move |_| page.set(current.saturating_sub(1)), crate::icons::Icon { name:"arrow_circle_left" } }
                 span { "Page {current + 1} of {pages}" }
-                button { disabled: current + 1 >= pages, onclick: move |_| page.set(current + 1), "Next" }
+                button { title:"Next page", aria_label:"Next page", disabled: current + 1 >= pages, onclick: move |_| page.set(current + 1), crate::icons::Icon { name:"arrow_circle_right" } }
             }
                 }
                 aside { class: "customer_detail",
@@ -142,7 +141,7 @@ pub fn CustomersPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
                         div { class: "customer_detail_actions",
                             button { onclick: move |_| points_history.set(selected()), crate::icons::ActionLabel { label:"Points history" } }
                             button { onclick: move |_| action.set("Ledger".into()), crate::icons::ActionLabel { label:"View ledger" } }
-                            button { class: "customer_primary", onclick: move |_| action.set("Payment Collection".into()), "Payment Collection" }
+                            button { class: "customer_primary", onclick: move |_| action.set("Payment Collection".into()), crate::icons::ActionLabel { label:"Payment Collection" } }
                             button { onclick: move |_| editor.set(selected()), crate::icons::ActionLabel { label:"Edit" } }
                             button { class: "customer_delete_action", onclick: move |_| action.set("Delete".into()), crate::icons::ActionLabel { label:"Delete" } }
                         }

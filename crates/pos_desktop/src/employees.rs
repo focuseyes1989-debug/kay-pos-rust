@@ -273,11 +273,7 @@ pub fn EmployeesPage(db_form: DbForm) -> Element {
     });
     rsx! {
         section {class:"employees_page",
-            header {class:"employees_header",h2 {"Employee Management"}
-                if section()==Section::Employees {
-                    button {class:"customer_primary",disabled:!can_manage||loaded.is_none(),title:if can_manage {"Create employee profile"}else{"manage_employees permission or pending request recovery required"},onclick:move |_|edit.set(Some(Edit{section:Section::Employees,action:"save".into(),record:json!({})})),"+ Add Employee"}
-                }
-                button { hidden:true, "data-page-refresh":"true", tabindex:-1, aria_hidden:"true",disabled:!data.finished(),onclick:move |_|{selected.set(None);data.restart();},"Refresh"}}
+            button { hidden:true, "data-page-refresh":"true", tabindex:-1, aria_hidden:"true",disabled:!data.finished(),onclick:move |_|{selected.set(None);data.restart();},"Refresh"}
             match recovery.read().clone() {
                 Err(e)=>rsx!{p {role:"alert","Employee recovery file could not be read: {e}. Resolve it before making changes."}},
                 Ok(Some(pending))=>rsx!{div {role:"alert",p {"Unresolved employee request: sign in as {pending.username} to recover it before making changes."}
@@ -328,6 +324,9 @@ pub fn EmployeesPage(db_form: DbForm) -> Element {
                 }
             }
             div {class:"employee_actions",
+                if section()==Section::Employees {
+                    button {class:"customer_primary",disabled:!can_manage||loaded.is_none(),title:if can_manage {"Create employee profile"}else{"manage_employees permission or pending request recovery required"},onclick:move |_|edit.set(Some(Edit{section:Section::Employees,action:"save".into(),record:json!({})})),"+ Add Employee"}
+                }
                 if section()==Section::Attendance && ["settings","manage_attendance","manage_employees"].iter().all(|p|employees::has(&perms,p)) {
                     crate::attendance_sync::AttendanceSync {db_form:db_form.clone(),on_synced:move |_|data.restart()}
                 }
@@ -366,7 +365,7 @@ pub fn EmployeesPage(db_form: DbForm) -> Element {
                         }else{p {"Attendance Sync ဖြင့် device မှ data ရယူပါ သို့မဟုတ် Record Attendance ဖြင့် မှတ်တမ်းတင်ပါ။"}}
                     }else{p {"No records found"}}
                 }
-                footer {class:"employee_pagination",button {disabled:current_page==0,onclick:move |_|page.set(current_page.saturating_sub(1)),"Previous"} span {"Page {current_page+1} / {rows.len().div_ceil(30).max(1)}"} button {disabled:(current_page+1)*30>=rows.len(),onclick:move |_|page.set(current_page+1),"Next"}}
+                footer {class:"employee_pagination",button { title:"Previous page", aria_label:"Previous page",disabled:current_page==0,onclick:move |_|page.set(current_page.saturating_sub(1)),crate::icons::Icon { name:"arrow_circle_left" }} span {"Page {current_page+1} / {rows.len().div_ceil(30).max(1)}"} button { title:"Next page", aria_label:"Next page",disabled:(current_page+1)*30>=rows.len(),onclick:move |_|page.set(current_page+1),crate::icons::Icon { name:"arrow_circle_right" }}}
             }}
             if let Some(editing)=edit(){if let Some(loaded)=loaded.clone() {
                 EmployeeEditor {editing,loaded,db_form:db_form.clone(),on_close:move |_|edit.set(None),on_saved:move |_|{edit.set(None);selected.set(None);notice.set("Saved".into());data.restart();}}
@@ -447,7 +446,7 @@ fn EmployeeEditor(
                             input {r#type:"checkbox",disabled:frozen,checked:employees::text(&values.read(),f.key)=="1",onchange:move |e|values.write()[f.key]=json!(if e.checked(){1}else{0})}
                         }else {
                             input {disabled:frozen,r#type:match f.kind{"date"|"optional-date"=>"date","time"|"optional-time"=>"time","month"=>"month","integer"|"number"=>"number",_=>"text"},min:"0",step:if f.kind=="integer"{"1"}else{"any"},value:employees::text(&values.read(),f.key),oninput:move |e|values.write()[f.key]=json!(e.value())}
-                            if f.kind=="file"{button {disabled:frozen,onclick:move |_|{spawn(async move{if let Some(file)=rfd::AsyncFileDialog::new().pick_file().await{values.write()["file_path"]=json!(file.path().to_string_lossy());}});},"Browse"}}
+                            if f.kind=="file"{button {disabled:frozen,onclick:move |_|{spawn(async move{if let Some(file)=rfd::AsyncFileDialog::new().pick_file().await{values.write()["file_path"]=json!(file.path().to_string_lossy());}});}, crate::icons::ActionLabel { label:"Browse" } }}
                         }
                     }
                 }}
@@ -460,7 +459,7 @@ fn EmployeeEditor(
                                 match result{Ok(bytes)=>values.write()["photo_base64"]=json!(base64::engine::general_purpose::STANDARD.encode(bytes)),Err(e)=>error.set(format!("{e:#}"))}
                             }choosing.set(false);
                         });},"Choose Photo"}
-                        button {disabled:frozen||choosing(),onclick:move |_|values.write()["photo_base64"]=json!(""),"Remove Photo"}
+                        button {disabled:frozen||choosing(),onclick:move |_|values.write()["photo_base64"]=json!(""), crate::icons::ActionLabel { label:"Remove Photo" } }
                     }
                 }
             }

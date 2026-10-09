@@ -47,9 +47,17 @@ pub fn ReportsPage(db_form: DbForm, actor: Session) -> Element {
         .max(1);
     let current = page().min(pages - 1);
     rsx! {section {class:"customers_page reports_page",
-        header {class:"reports_header",
-            h2 {ActionLabel{label:"Reports"}}
             button {hidden:true,"data-page-refresh":"true",tabindex:-1,aria_hidden:"true",disabled:loading||exporting(),onclick:move |_|{notice.set(String::new());data.restart();},"Refresh"}
+        div {class:"dashboard_filters",
+            crate::date_range::DateRangePicker { from:from(), to:to(), disabled:!data.finished(), onchange:move |(a,b):(String,String)|{from.set(a.clone());to.set(b.clone());notice.set(String::new());page.set(0);range.set((a,b));data.restart();} }
+            crate::date_range::DateRangeShortcuts { disabled:!data.finished(), onchange:move |(a,b):(String,String)|{from.set(a.clone());to.set(b.clone());notice.set(String::new());page.set(0);range.set((a,b));data.restart();} }
+        }
+        div {class:"reports_results_toolbar",
+        div {class:"receipt_tabs reports_tabs",role:"tablist",aria_label:"Reports",
+            for (i,label) in ["Sales","Expenses","Profit & Loss","Financial Summary","Receivables","Payables"].iter().enumerate() {
+                button {role:"tab",aria_selected:tab()==i,class:if tab()==i{"active"}else{""},onclick:move |_|{tab.set(i);page.set(0);},"{label}"}
+            }
+        }
             button {disabled:loading||exporting()||report.is_none(),onclick:{
                 let report=report.cloned(); let source=db_form.clone(); let user=actor.clone(); let currency=currency.clone();
                 move |_| {
@@ -71,14 +79,6 @@ pub fn ReportsPage(db_form: DbForm, actor: Session) -> Element {
                 }
             },ActionLabel{label:"Export Excel"}}
         }
-        div {class:"dashboard_filters",
-            crate::date_range::DateRangePicker { from:from(), to:to(), disabled:!data.finished(), onchange:move |(a,b):(String,String)|{from.set(a.clone());to.set(b.clone());notice.set(String::new());page.set(0);range.set((a,b));data.restart();} }
-        }
-        div {class:"receipt_tabs reports_tabs",role:"tablist",aria_label:"Reports",
-            for (i,label) in ["Sales","Expenses","Profit & Loss","Financial Summary","Receivables","Payables"].iter().enumerate() {
-                button {role:"tab",aria_selected:tab()==i,class:if tab()==i{"active"}else{""},onclick:move |_|{tab.set(i);page.set(0);},"{label}"}
-            }
-        }
         if !notice().is_empty() {p {role:"status","{notice}"}}
         if loading {p {role:"status","Loading reports..."}}
         else if let Some(Err(error))=snapshot.as_ref() {p {role:"alert","{error}"}}
@@ -96,7 +96,6 @@ pub fn ReportsPage(db_form: DbForm, actor: Session) -> Element {
                 span {"{current+1} / {pages}"}
                 button {title:"Next page",aria_label:"Next page",disabled:current+1>=pages,onclick:move |_|page.set(current+1),crate::icons::Icon{name:"arrow_circle_right"}}
             }
-            details {class:"reports_notes",summary {"Accounting notes"} for warning in &report.warnings {p {"{warning}"}}}
         }
     }}
 }

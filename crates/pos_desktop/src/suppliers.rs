@@ -64,12 +64,6 @@ pub fn SuppliersPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
     rsx! {
         section { class: "customers_page customers_touch suppliers_touch",
             button { hidden:true, "data-page-refresh":"true", disabled:!loaded.finished(), onclick:move |_|loaded.restart() }
-            header { class: "customers_header customers_touch_header",
-                h2 { crate::icons::ActionLabel { label:"Suppliers" } }
-                div { class: "customers_actions",
-                    button { class: "customer_primary", onclick: move |_| editor.set(Some(Supplier { status: "Active".into(), ..Default::default() })), crate::icons::ActionLabel { label:"+ Add supplier" } }
-                }
-            }
             div { class: "customers_touch_search",
                 label { "Search" input {r#type:"search", placeholder: "Name, company or phone", value: "{query}", oninput: move |event|query.set(event.value()),
                     onkeydown: move |event| { if event.key()==Key::Enter { applied.set((query(),filter())); selected.set(None); page.set(0); } }
@@ -78,6 +72,7 @@ pub fn SuppliersPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
                     option { value: "", "All suppliers" } option { "Active" } option { "Inactive" }
                 } }
                 button { onclick: move |_| { query.set(String::new()); filter.set(String::new()); applied.set(Default::default()); selected.set(None); page.set(0); loaded.restart(); }, "Reset" }
+                    button { class: "customer_primary", onclick: move |_| editor.set(Some(Supplier { status: "Active".into(), ..Default::default() })), crate::icons::ActionLabel { label:"+ Add supplier" } }
             }
             if !notice().is_empty() { p { role: "status", "{notice}" } }
             if let Some(Err(message))=state.as_ref() { p { role: "alert", "{message}" } }
@@ -86,7 +81,7 @@ pub fn SuppliersPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
                     h3 { "Supplier list" }
                     p { class: "customer_list_count", "{rows.len()} suppliers · Page {current+1} of {pages}" }
                     for supplier in rows.iter().skip(current*50).take(50) {
-                        button { key: "{supplier.id}", class: if selected().map(|s|s.id)==Some(supplier.id) { "customer_list_item selected" } else { "customer_list_item" },
+                        button { key: "{supplier.id}", "data-search-value":supplier.name.clone(),"data-search-detail":format!("{} · {} · #{}",supplier.company_name,supplier.phone,supplier.id),"data-search-match":format!("{} {} {}",supplier.name,supplier.company_name,supplier.phone), class: if selected().map(|s|s.id)==Some(supplier.id) { "customer_list_item selected" } else { "customer_list_item" },
                             aria_pressed: selected().map(|s|s.id)==Some(supplier.id),
                             onclick: { let supplier=supplier.clone(); move |_|selected.set(Some(supplier.clone())) },
                             span { class: "customer_avatar", {supplier.name.chars().next().unwrap_or('?').to_string()} }
@@ -96,8 +91,8 @@ pub fn SuppliersPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
                     }
                     if state.is_none() { p { "Loading..." } } else if rows.is_empty() { p { "No suppliers found." } }
                     footer { class: "customers_pagination",
-                        button { disabled: current==0, onclick: move |_|page.set(current.saturating_sub(1)), "Previous" }
-                        button { disabled: current+1>=pages, onclick: move |_|page.set(current+1), "Next" }
+                        button { title:"Previous page", aria_label:"Previous page", disabled: current==0, onclick: move |_|page.set(current.saturating_sub(1)), crate::icons::Icon { name:"arrow_circle_left" } }
+                        button { title:"Next page", aria_label:"Next page", disabled: current+1>=pages, onclick: move |_|page.set(current+1), crate::icons::Icon { name:"arrow_circle_right" } }
                     }
                 }
                 aside { class: "customer_detail supplier_detail",
@@ -106,7 +101,7 @@ pub fn SuppliersPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
                         dl { class: "customer_contact",
                             for (label,value) in fields(&supplier).into_iter().skip(1) { dt { "{label}" } dd { if value.is_empty() { "—" } else { "{value}" } } }
                         }
-                        button { class: "customer_primary", onclick: move |_|editor.set(selected()), "Edit supplier" }
+                        button { class: "customer_primary", onclick: move |_|editor.set(selected()), crate::icons::ActionLabel { label:"Edit supplier" } }
                     } else { p { class: "customer_detail_empty", "Select a supplier to view details." } }
                 }
             }

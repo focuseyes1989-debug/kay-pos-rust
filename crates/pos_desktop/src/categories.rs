@@ -37,10 +37,13 @@ fn ordered(rows: &[CategoryRecord]) -> Vec<(CategoryRecord, usize, String)> {
 
 #[component]
 pub fn CategoriesPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
-    let mut groups=use_signal(||false);
-    rsx!{section{class:"phase6_categories",
-        div{class:"receipt_tabs reports_tabs",role:"tablist",button{role:"tab",class:if !groups(){"active"}else{""},aria_selected:!groups(),onclick:move |_|groups.set(false),"Categories"}button{role:"tab",class:if groups(){"active"}else{""},aria_selected:groups(),onclick:move |_|groups.set(true),"Category groups"}}
-        if groups(){crate::administration::GroupsPage{db_form}}else{CategoryList{db_form,on_sales}}
+    rsx!{section{class:"phase6_categories category_management_columns",
+        div{class:"category_management_column category_management_list",
+            CategoryList{db_form:db_form.clone(),on_sales}
+        }
+        div{class:"category_management_column category_management_groups",
+            crate::administration::GroupsPage{db_form}
+        }
     }}
 }
 
@@ -75,11 +78,7 @@ fn CategoryList(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
         .collect::<Vec<_>>();
     rsx! {
         section {class:"customers_page products_touch categories_touch",
-            header {class:"customers_header customers_touch_header",h2 {crate::icons::ActionLabel { label:"Categories" }}
-                div {class:"customers_actions",
-                    button { hidden:true, "data-page-refresh":"true", tabindex:-1, aria_hidden:"true",disabled:!data.finished(),onclick:move |_|data.restart(),"Refresh"}
-                }
-            }
+            button { hidden:true, "data-page-refresh":"true", tabindex:-1, aria_hidden:"true",disabled:!data.finished(),onclick:move |_|data.restart(),"Refresh"}
             section {class:"products_items",
                 header {class:"products_items_header",div {class:"category_heading",h3 {crate::icons::ActionLabel { label:"Categories" }}
                     if data.finished() && matches!(state.as_ref(),Some(Ok(_))) {

@@ -278,7 +278,7 @@ fn JobConfirmation(
         if action==Action::Delete {p {"Permanently delete this cancelled job and its history?"}}
         label {class:"service_form","Action note" textarea {value:note(),disabled:busy(),oninput:move |e|note.set(e.value())}}
         if !error().is_empty(){p {role:"alert","{error}"}}
-        div {class:"service_dialog_actions",button {disabled:busy(),onclick:move |_|on_close.call(()),"Back"}
+        div {class:"service_dialog_actions",button {disabled:busy(),onclick:move |_|on_close.call(()), crate::icons::ActionLabel { label:"Back" } }
             button {class:if action==Action::Delete{"danger"}else{"customer_primary"},disabled:busy(),onclick:move |_|{
                 if busy(){return;}let Some(actor)=session.read().clone() else{return;};
                 let source=db_form.clone();let j=job.clone();let n=note();busy.set(true);
@@ -354,9 +354,9 @@ fn PromptLibrary(db_form: DbForm, job: Option<Job>) -> Element {
                 if data.finished()&&filtered.is_empty(){p {class:"service_empty","No design prompts"}}
             }
             div {class:"service_prompt_pagination",
-                button {disabled:page==0,onclick:move |_|prompt_page.set(page.saturating_sub(1)),"Previous"}
+                button { title:"Previous page", aria_label:"Previous page",disabled:page==0,onclick:move |_|prompt_page.set(page.saturating_sub(1)),crate::icons::Icon { name:"arrow_circle_left" }}
                 span {"{page+1} / {pages}"}
-                button {disabled:page+1>=pages,onclick:move |_|prompt_page.set(page+1),"Next"}
+                button { title:"Next page", aria_label:"Next page",disabled:page+1>=pages,onclick:move |_|prompt_page.set(page+1),crate::icons::Icon { name:"arrow_circle_right" }}
             }
             }
             section {class:"service_prompt_detail",
@@ -499,7 +499,7 @@ fn PromptEditor(
                         match result{Ok(p)=>form.set(p),Err(e)=>error.set(format!("{e:#}"))}
                     }image_busy.set(false);
                 });},"Upload Sample Image"}
-                button {disabled:busy()||image_busy()||form().image_data.is_empty(),onclick:move |_|{form.write().image_data.clear();form.write().image_name.clear();},"Remove Image"}
+                button {disabled:busy()||image_busy()||form().image_data.is_empty(),onclick:move |_|{form.write().image_data.clear();form.write().image_name.clear();}, crate::icons::ActionLabel { label:"Remove Image" } }
             }
         }
         }

@@ -142,3 +142,20 @@ mod tests {
         assert!(dates("bad", "2026-09-17").is_err());
     }
 }
+
+#[derive(Clone, sqlx::FromRow)]
+pub struct CategoryReceipt {
+ pub id:i32,pub invoice:String,pub date:String,pub customer:String,pub total:f64,pub payment:String,
+}
+/// Match the exact category grouping used by the summary, including legacy names.
+pub async fn category_receipts(pool:&PgPool,actor:&crate::auth::Session,category:&str,from:&str,to:&str,page:usize)->Result<Vec<CategoryReceipt>> {
+ let (start,end)=dates(from,to)?;
+ let offset=page.checked_mul(50).and_then(|n|i64::try_from(n).ok()).ok_or_else(||anyhow::anyhow!("Invalid page"))?;
+ let mut tx=pool.begin().await?;
+ sqlx::query("SET TRANSACTION READ ONLY").execute(&mut *tx).await?;
+ sqlx::query("SET LOCAL statement_timeout='10s'").execute(&mut *tx).await?;
+ actor.authorize(&mut tx,crate::auth::Permission::Manage).await?;
+ let sql=format!("{GROUP_LINES} SELECT s.id,COALESCE(s.invoice_no,'Sale #'||s.id::text) AS invoice,s.created_at::text AS date,COALESCE(c.name,'Walk-in Customer') AS customer,s.total::float8 AS total,COALESCE(s.payment_type,'Cash') AS payment FROM window_sales s LEFT JOIN customers c ON c.id=s.customer_id WHERE EXISTS(SELECT 1 FROM lines l WHERE l.sale_id=s.id AND l.category=$3) ORDER BY s.created_at DESC,s.id DESC LIMIT 51 OFFSET $4");
+ let rows=sqlx::query_as::<_,CategoryReceipt>(&sql).bind(start).bind(end).bind(category).bind(offset).fetch_all(&mut *tx).await?;
+ tx.commit().await?;Ok(rows)
+}

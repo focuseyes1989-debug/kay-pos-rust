@@ -3,13 +3,29 @@ use dioxus::prelude::*;
 use pos_core::{connect, sale_summary};
 
 #[component]
-pub fn SaleSummaryPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
+pub fn SaleSummaryPage(db_form:DbForm,on_sales:EventHandler<()>)->Element {
+ let mut comparison=use_signal(||false);
+ let session=use_context::<Signal<Option<pos_core::auth::Session>>>();
+ rsx!{section{class:"customers_page sales_summary_views",
+  nav{class:"receipt_tabs",role:"tablist",aria_label:"Sale Summary views",
+   button{role:"tab",aria_selected:!comparison(),class:if !comparison(){"active"}else{""},onclick:move |_|comparison.set(false),"Summary"}
+   button{role:"tab",aria_selected:comparison(),class:if comparison(){"active"}else{""},onclick:move |_|comparison.set(true),"Comparison"}
+  }
+  if comparison(){if let Some(actor)=session(){crate::sales_comparison::SalesComparison{db_form,actor}}}
+  else{SummaryDetails{db_form,on_sales}}
+ }}
+}
+
+#[component]
+fn SummaryDetails(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
     let today = chrono::Local::now().date_naive();
     let mut from = use_signal(|| today.to_string());
     let mut to = use_signal(|| today.to_string());
     let mut range = use_signal(|| (today.to_string(), today.to_string()));
     let mut error = use_signal(String::new);
     let mut tab = use_signal(|| 0usize);
+    let mut selected_category=use_signal(||None::<(String,String,String)>);
+    let dialog_source=db_form.clone();
     let mut data = use_resource(move || {
         let source = db_form.clone();
         let (from, to) = range();
@@ -68,6 +84,7 @@ pub fn SaleSummaryPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
         header {class:"customers_header customers_touch_header",h2 {crate::icons::ActionLabel { label:"Sale Summary" }} div {class:"customers_actions",button { hidden:true, "data-page-refresh":"true", tabindex:-1, aria_hidden:"true",disabled:!data.finished(),onclick:move |_|data.restart(),"Refresh"}}}
         div {class:"summary_filters",
             crate::date_range::DateRangePicker { from:from(), to:to(), disabled:!data.finished(), onchange:move |(a,b):(String,String)|{from.set(a.clone());to.set(b.clone());error.set(String::new());range.set((a,b));} }
+            crate::date_range::DateRangeShortcuts { disabled:!data.finished(), onchange:move |(a,b):(String,String)|{from.set(a.clone());to.set(b.clone());error.set(String::new());range.set((a,b));} }
         }
         if !error().is_empty(){p {role:"alert","{error}"}}
         if !data.finished(){div {class:"product_loading",role:"status",span {class:"loading_spinner"} strong {"Loading..."}}}
@@ -93,10 +110,65 @@ pub fn SaleSummaryPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
                 div {class:"summary_table",table {thead {tr {for label in ["Name","Receipts","Quantity","Item gross","Allocated discount","Net sales","Cost of goods","Net less cost","Wholesale savings"] {th {"{label}"}}}} tbody {
                     if let Some(group)=result.groups.get(match tab(){2=>0,3=>1,4=>2,6=>3,_=>4}) {
                         if group.is_empty(){tr {td {colspan:"9","No sales in this date range."}}}
-                        for row in group {tr {td {"{row.label}"} td {"{row.receipts}"} td {{crate::format_qty(row.quantity)}} for value in [row.gross,row.discount,row.net,row.cost,row.net-row.cost,row.savings] {td {{crate::format_ks(value)}}}}}
+                        for row in group {{let category=row.label.clone();rsx!{tr {class:if tab()==2{"summary_category_row"}else{""},title:if tab()==2{"Double-click to view category receipts"}else{""},ondoubleclick:move |_|{if tab()==2 {let (a,b)=range();selected_category.set(Some((category.clone(),a,b)));}},td {if tab()==2 {button {class:"summary_category_link",onclick:{let category=row.label.clone();move |_|{let (a,b)=range();selected_category.set(Some((category.clone(),a,b)));}},"{row.label}"}}else{"{row.label}"}} td {"{row.receipts}"} td {{crate::format_qty(row.quantity)}} for value in [row.gross,row.discount,row.net,row.cost,row.net-row.cost,row.savings] {td {{crate::format_ks(value)}}}}}}}
                     }
                 } tfoot {tr {th {scope:"row","Total"} td {title:"Distinct receipts",{result.group_receipts.get(group_index).copied().unwrap_or(0).to_string()}} td {{crate::format_qty(group_totals[0])}} for value in group_totals.iter().skip(1) {td {{crate::format_ks(*value)}}}}}}}
             }
         }
+        if let Some((category,a,b))=selected_category() {CategoryReceiptsDialog {db_form:dialog_source.clone(),category,from:a,to:b,on_close:move |_|selected_category.set(None)}}
     }}
+}
+
+#[component]
+fn CategoryReceiptsDialog(db_form:DbForm,category:String,from:String,to:String,on_close:EventHandler<()>)->Element {
+ let session=use_context::<Signal<Option<pos_core::auth::Session>>>();
+ let actor=session().expect("Signed-in summary");
+ let mut page=use_signal(||0usize);
+ let mut selected=use_signal(||None::<i32>);
+ let list_source=db_form.clone();let list_actor=actor.clone();let label=category.clone();let a=from.clone();let b=to.clone();
+ let receipts=use_resource(move ||{let source=list_source.clone();let actor=list_actor.clone();let name=label.clone();let a=a.clone();let b=b.clone();let page=page();async move {async {sale_summary::category_receipts(&connect(&source.database_config()?).await?,&actor,&name,&a,&b,page).await}.await.map_err(|e|format!("{e:#}"))}});
+ let detail=use_resource(move ||{let source=db_form.clone();let actor=actor.clone();let id=selected();async move {let Some(id)=id else{return Ok(None)};async {let pool=connect(&source.database_config()?).await?;actor.authorize(&mut *pool.acquire().await?,pos_core::auth::Permission::Manage).await?;let value=pos_core::get_receipt_detail(&pool,id).await?;actor.authorize(&mut *pool.acquire().await?,pos_core::auth::Permission::Manage).await?;Ok::<_,anyhow::Error>(Some(value))}.await.map_err(|e|format!("{e:#}"))}});
+ let detail_state=detail.read();
+ let state=receipts.read();let rows=state.as_ref().and_then(|r|r.as_ref().ok()).cloned().unwrap_or_default();
+ rsx!{dialog {class:"summary_receipts_dialog",aria_label:"Category receipts",onmounted:move |_|{document::eval("document.querySelector('.summary_receipts_dialog:not([open])')?.showModal();");},oncancel:move |e|{e.prevent_default();on_close.call(());},
+  header {class:"summary_receipts_heading",div {h3 {"{category} · Receipts"} small {"{from} – {to}"}} button {aria_label:"Close",onclick:move |_|on_close.call(()),crate::icons::Icon {name:"close"}}}
+  div {class:"summary_receipts_content",
+   if selected().is_some() {
+    button {onclick:move |_|selected.set(None),"← Back to receipts"}
+    if !detail.finished(){p {role:"status","Loading receipt…"}}else{match detail_state.as_ref(){Some(Ok(value))=>rsx!{crate::ReceiptDetailPanel {detail:value.clone(),read_only:true,on_close:move |_|selected.set(None),on_print:move |_|{},on_refund:move |_|{}}},Some(Err(e))=>rsx!{p {role:"alert","{e}"}},_=>rsx!{p {"Receipt not found"}}}}
+   }else{
+    p {class:"summary_receipts_note","Receipt total သည် category တစ်ခုတည်း၏ ရောင်းရငွေ မဟုတ်ဘဲ ဘောင်ချာတစ်ခုလုံး၏ စုစုပေါင်း ဖြစ်ပါသည်။"}
+    if !receipts.finished(){p {role:"status","Loading receipts…"}}else if let Some(Err(e))=state.as_ref(){p {role:"alert","{e}"}}else{
+     div {class:"summary_table",table {thead {tr {for heading in ["Receipt","Date","Customer","Receipt total","Payment"] {th {"{heading}"}}}} tbody {
+      if rows.is_empty(){tr {td {colspan:"5","No receipts in this date range."}}}
+      for row in rows.iter().take(50){tr {td {button {class:"summary_category_link",onclick:{let id=row.id;move |_|selected.set(Some(id))},"{row.invoice}"}} td {"{row.date}"} td {"{row.customer}"} td {{crate::format_ks(row.total)}} td {"{row.payment}"}}}
+     }}}
+     div {class:"summary_receipts_pages",button { title:"Previous page", aria_label:"Previous page",disabled:page()==0,onclick:move |_|{page-=1;},crate::icons::Icon { name:"arrow_circle_left" }} span {"Page {page()+1}"} button { title:"Next page", aria_label:"Next page",disabled:rows.len()<=50,onclick:move |_|{page+=1;},crate::icons::Icon { name:"arrow_circle_right" }}}
+    }
+   }
+  }
+ }}
+}
+
+#[cfg(test)]
+mod detail_loading_tests {
+ use super::*;
+ use std::{rc::Rc,cell::Cell,time::Duration};
+ #[derive(Clone)] struct ProbeState {selected:Signal<Option<i32>>,loaded:Rc<Cell<Option<i32>>>}
+ fn probe()->Element {
+  let selected=use_signal(||None::<i32>);let loaded=use_hook(||Rc::new(Cell::new(None)));
+  let resource=use_resource(move ||{let id=selected();async move{tokio::time::sleep(Duration::from_millis(20)).await;id}});
+  use_context_provider(||ProbeState{selected,loaded:loaded.clone()});
+  // Subscribe before rendering the pending branch, just like the receipt dialog.
+  let state=resource.read();
+  if !resource.finished(){rsx!{p {"Loading receipt"}}}else{loaded.set(state.as_ref().copied().flatten());rsx!{p {"Loaded"}}}
+ }
+ #[tokio::test(flavor="current_thread")]
+ async fn selected_receipt_completion_rerenders_pending_dialog() {
+  let mut dom=VirtualDom::new(probe);dom.rebuild_in_place();
+  let mut state=dom.in_scope(ScopeId::APP,consume_context::<ProbeState>);state.selected.set(Some(42));
+  let deadline=tokio::time::Instant::now()+Duration::from_millis(200);
+  while state.loaded.get()!=Some(42){tokio::select!{_=dom.wait_for_work()=>{dom.render_immediate_to_vec();},_=tokio::time::sleep_until(deadline)=>break}}
+  assert_eq!(state.loaded.get(),Some(42),"resource completion must replace Loading receipt without another click");
+ }
 }

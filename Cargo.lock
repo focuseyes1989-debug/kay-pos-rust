@@ -4272,7 +4272,7 @@ dependencies = [
 
 [[package]]
 name = "pos_desktop"
-version = "0.2.12"
+version = "0.2.21"
 dependencies = [
  "anyhow",
  "arboard",

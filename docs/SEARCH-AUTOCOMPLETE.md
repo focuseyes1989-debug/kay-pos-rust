@@ -1,0 +1,9 @@
+# Search autocomplete
+
+Search inputs (`type=search` or a Search placeholder) share a 300 ms autocomplete handler. It reads visible, already-authorized results from the active page/filter scope, ranks prefix matches first, deduplicates value/detail pairs and displays at most eight suggestions. It makes no additional database or network requests. Suggestions are limited to results rendered by the existing live search; it is not a separate whole-database search.
+
+Products in Sales, Product management and Inventory include name/SKU/barcode matching and SKU/price/stock details. Customers and Suppliers include contact/ID details. Employees and other tables use their visible named columns and record details; categories, settings navigation, locations, service prompts, receipt history and expense summaries/history use their visible records. Empty scopes or pages without a recognizable result list show no dropdown. Searchable combo boxes retain their existing dropdown behavior.
+
+Selecting a suggestion fills the search and dispatches its existing input handler, so current filters/pagination and permissions remain authoritative. It does not click a record, edit data or add a product to the cart. Arrow keys select; Enter accepts only an explicitly highlighted suggestion, preserving barcode/submit Enter otherwise. Escape/Tab/outside interaction closes. IME composition waits until completion. Pointer events handle mouse/pen/touch selection. A fixed-position portal follows the input and fits the viewport. Background search suggestions close while dialogs are open.
+
+Validation: `cargo check -p pos_desktop --offline`; `scripts/check-search-autocomplete.cjs` with the bundled Node/Playwright runtime exercises the production script against a DOM fixture: debounce/latest input, Unicode, result cap, rich metadata, page scoping, keyboard vs native Enter, pointer/touch, IME, no results, asynchronously rendered results and modal isolation. No release is included.

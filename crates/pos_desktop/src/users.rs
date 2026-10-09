@@ -6,19 +6,23 @@ use pos_core::{
 };
 #[component]
 pub fn UsersSettings(db_form: DbForm) -> Element {
+    let session=use_context::<Signal<Option<pos_core::auth::Session>>>();
+    let actor=session();
     let source = db_form.clone();
     let mut data = use_resource(move || {
-        let source = source.clone();
+        let source = source.clone();let actor=actor.clone();
         async move {
-            async { users::list(&connect(&source.database_config()?).await?).await }
+            async {let actor=actor.as_ref().ok_or_else(||anyhow::anyhow!("Sign in as an administrator"))?; users::list(&connect(&source.database_config()?).await?,actor).await }
                 .await
                 .map_err(|e| format!("{e:#}"))
         }
     });
     let mut editor = use_signal(|| None::<User>);
     let mut deleting = use_signal(|| false);
+    let can_admin=session().is_some_and(|actor|actor.allows(pos_core::auth::Permission::Admin));
     rsx! {section {class:"users_settings",
-        div {class:"users_settings_toolbar",button {class:"users_add",onclick:move |_|{deleting.set(false);editor.set(Some(User{role:"Cashier".into(),active:1,..Default::default()}));},"+ Add user"} button { hidden:true, "data-page-refresh":"true", tabindex:-1, aria_hidden:"true",disabled:!data.finished(),onclick:move |_|data.restart(),"Refresh"}}
+        if !can_admin {p {role:"alert","Administrator permission required."}}
+        div {class:"users_settings_toolbar",button {class:"users_add",disabled:!can_admin,onclick:move |_|{deleting.set(false);editor.set(Some(User{role:"Cashier".into(),active:1,..Default::default()}));},"+ Add user"} button { hidden:true, "data-page-refresh":"true", tabindex:-1, aria_hidden:"true",disabled:!data.finished(),onclick:move |_|data.restart(),"Refresh"}}
         match data.read().as_ref() {
             None=>rsx!{p {role:"status","Loading users..."}},
             Some(Err(e))=>rsx!{p {role:"alert","{e}"}},
@@ -26,12 +30,12 @@ pub fn UsersSettings(db_form: DbForm) -> Element {
                 if rows.is_empty(){p {"No users found."}}
                 for user in rows {article {class:"users_settings_row",key:"{user.id}",
                     div {class:"users_avatar",if let Some(url)=&user.avatar {img {src:"{url}",alt:"{user.username}"}}else{span {{user.username.chars().next().unwrap_or('?').to_uppercase().to_string()}}}}
-                    div {class:"users_identity",strong {"{user.username}"} small {"{user.full_name} · {user.role} · " if user.active==1{"Active"}else{"Inactive"}}}
-                    div {class:"users_row_actions",button {onclick:{let user=user.clone();move |_|{deleting.set(false);editor.set(Some(user.clone()));}},crate::icons::ActionLabel { label:"Edit" }} button {class:"users_delete",onclick:{let user=user.clone();move |_|{deleting.set(true);editor.set(Some(user.clone()));}},crate::icons::ActionLabel { label:"Delete" }}}
+                    div {class:"users_identity",strong {"{user.username}"} small {"{user.full_name} Â· {user.role} Â· " if user.active==1{"Active"}else{"Inactive"}}}
+                    div {class:"users_row_actions",button {disabled:!can_admin,onclick:{let user=user.clone();move |_|{deleting.set(false);editor.set(Some(user.clone()));}},crate::icons::ActionLabel { label:"Edit" }} button {class:"users_delete",disabled:!can_admin,onclick:{let user=user.clone();move |_|{deleting.set(true);editor.set(Some(user.clone()));}},crate::icons::ActionLabel { label:"Delete" }}}
                 }}
             }
         }
-        if let Some(user)=editor(){UserEditor {user,delete:deleting(),db_form:db_form.clone(),on_close:move |_|editor.set(None),on_saved:move |_|{editor.set(None);data.restart();}}}
+        if can_admin {if let Some(user)=editor(){UserEditor {user,delete:deleting(),db_form:db_form.clone(),on_close:move |_|editor.set(None),on_saved:move |_|{editor.set(None);data.restart();}}}}
     }}
 }
 #[component]

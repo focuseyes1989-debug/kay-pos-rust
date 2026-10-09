@@ -117,7 +117,7 @@ fn render_state(
                 thead { tr { th { "Mapping" } th { "Account code" } th { "Account name" } th { "" } } }
                 tbody { for mapping in &state.mappings { tr { key: "{mapping.mapping_key}",
                     td { "{mapping.mapping_key}" } td { "{mapping.account_code}" } td { "{mapping.account_name}" }
-                    td { button { onclick: { let mapping=mapping.clone(); move |_| editor.set(Some(mapping.clone())) }, "Edit" } }
+                    td { button { onclick: { let mapping=mapping.clone(); move |_| editor.set(Some(mapping.clone())) }, crate::icons::ActionLabel { label:"Edit" } } }
                 }} }
             }}
         }
@@ -143,7 +143,7 @@ fn MappingEditor(db_form: DbForm, actor: Session, mapping: AccountMapping, on_cl
         }
         if !error().is_empty() { p { role: "alert", "{error}" } }
         footer { class: "customers_actions",
-            button { disabled: busy(), onclick: move |_| on_close.call(()), "Cancel" }
+            button { disabled: busy(), onclick: move |_| on_close.call(()), crate::icons::ActionLabel { label:"Cancel" } }
             button { class: "customer_primary", disabled: busy(), onclick: move |_| { busy.set(true); error.set(String::new()); let form_value=form(); let db=db_form.clone(); let actor=actor.clone(); spawn(async move {
                 let result=async { let pool=pos_core::connect(&db.database_config()?).await?; erp_accounting::save_mapping(&pool,&actor,&form_value).await }.await;
                 busy.set(false); match result { Ok(())=>on_saved.call(()),Err(value)=>error.set(format!("{value:#}")) }

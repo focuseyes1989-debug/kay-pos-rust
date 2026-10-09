@@ -18,7 +18,7 @@ async fn print_rows(invoice: String, rows: Vec<receipt_layout::Row>, settings: H
     let permit=PRINT_SLOT.get_or_init(||std::sync::Arc::new(tokio::sync::Semaphore::new(1))).clone()
         .try_acquire_owned().map_err(|_|anyhow::anyhow!("A receipt is already being sent to the printer. Please wait."))?;
     let payload = serde_json::to_vec(
-        &serde_json::json!({"printer":printer,"invoice":invoice,"rows":rows,"paper_mm":receipt_layout::paper_mm(&settings)}),
+        &serde_json::json!({"printer":printer,"invoice":invoice,"rows":rows,"paper_mm":receipt_layout::paper_mm(&settings),"geometry":crate::receipt_editor::Geometry::from(&settings)}),
     )?;
     tokio::task::spawn_blocking(move || {let _permit=permit; send(payload)}).await?
 }

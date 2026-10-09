@@ -13,9 +13,10 @@ fn normalized(value: &str) -> String {
 }
 
 pub fn plan(prompt: &str, previous: Option<&Request>, today: NaiveDate) -> Result<Plan> {
-    let canonical=ai::canonical_periods(prompt,today)?;
+    let canonical=ai::canonical_periods(&ai::canonical_topics(prompt),today)?;
     let prompt=canonical.as_str();
-    let compare=["compare","နှိုင်းယှဉ်","နှိုင်းယှဥ်"].iter().any(|s|prompt.to_lowercase().contains(s));
+    let compare=["compare","comparison","နှိုင်းယှဉ်","နှိုင်းယှဥ်","နှိုင်းယှင်","ယှဉ်ကြည့်","ယှဉ်ကြည့်"].iter().any(|s|prompt.to_lowercase().contains(s));
+    if compare {return comparison_plan(prompt,previous,today);}
     let mut text=prompt.to_lowercase();
     let top_expense=prompt.contains("အများဆုံး") && ["expense","အသုံးစရိတ်","ကုန်ကျစရိတ်"].iter().any(|s|prompt.contains(s));
     if top_expense {text="expenses".into();for period in ["ဒီနေ့","မနေ့က","ဒီလ","ပြီးခဲ့တဲ့လ","ဒီအပတ်","ပြီးခဲ့တဲ့အပတ်","this year","last year"] {if prompt.contains(period){text.push(' ');text.push_str(period);}}}
@@ -31,34 +32,49 @@ pub fn plan(prompt: &str, previous: Option<&Request>, today: NaiveDate) -> Resul
         let prior=previous.context("ဘယ်အချက်အလက်ကို ဆိုလိုတာလဲ ပြန်ရေးပေးပါ။")?;
         let mut value=prior.clone();
         if ["receipt","Receipt","ဘောင်ချာ"].iter().any(|s|text.contains(s)) {
-            ensure!(matches!(prior.scope,Scope::CategorySales|Scope::Receipts|Scope::Analytics),"ဤအဖြေမှ receipt သို့ မပြောင်းနိုင်ပါ။ Category သို့မဟုတ် ရက်စွဲကို ထည့်မေးပါ။");
+            ensure!(matches!(prior.scope,Scope::CategorySales|Scope::Receipts|Scope::Analytics|Scope::PaymentSales),"ဤအဖြေမှ receipt သို့ မပြောင်းနိုင်ပါ။ Category သို့မဟုတ် ရက်စွဲကို ထည့်မေးပါ။");
             value.scope=Scope::Receipts;
             if prior.scope==Scope::CategorySales {value.receipt_category=prior.product.clone();value.product.clear();}
         }
         value
     } else {
-        if compare {
-            for connector in ["နဲ့ ပြီးခဲ့တဲ့လ","နဲ့ပြီးခဲ့တဲ့လ","နှင့် ပြီးခဲ့တဲ့လ","နဲ့ မနေ့က","နဲ့မနေ့က","နှင့် မနေ့က","and last month","vs last month","and yesterday","vs yesterday","နဲ့ yesterday","နဲ့yesterday","နှင့် yesterday","နဲ့ last year","နဲ့last year","နှင့် last year","and last year","vs last year"] {text=text.replace(connector,"");}
-        }
         ai::chat_at(text.trim(),&today.to_string(),&today.to_string(),today)?
     };
     if top_expense {let period=ai::chat_at(&format!("sales {prompt}"),&today.to_string(),&today.to_string(),today)?;request.from=period.from;request.to=period.to;}
-    if compare && request.scope==Scope::CategorySales && request.product.trim().is_empty() {request.scope=Scope::Analytics;}
-    let comparison=if compare {
-        ensure!(!prompt.contains("profit")&&!prompt.contains("အမြတ်"),"အမြတ်နှိုင်းယှဉ်မှုကို မပံ့ပိုးသေးပါ။ အရောင်း သို့မဟုတ် အသုံးစရိတ်ကို နှိုင်းယှဉ်မေးပါ။");
-        ensure!(matches!(request.scope,Scope::Analytics|Scope::CategorySales|Scope::Expenses),"အရောင်း၊ Category ရောင်းရငွေနှင့် အသုံးစရိတ်ကိုသာ ကာလနှိုင်းယှဉ်နိုင်ပါသည်။");
-        let a=NaiveDate::parse_from_str(&request.from,"%Y-%m-%d")?;
-        let b=NaiveDate::parse_from_str(&request.to,"%Y-%m-%d")?;
-        let (start,end)=if prompt.contains("ပြီးခဲ့တဲ့လ") || prompt.contains("last month") {
-            let end=a.with_day(1).context("Invalid month")?-Duration::days(1);
-            (end.with_day(1).context("Invalid month")?,end)
-        } else if prompt.contains("last year") {
-            let year=a.year()-1;
-            (NaiveDate::from_ymd_opt(year,1,1).context("Invalid year")?,NaiveDate::from_ymd_opt(year,12,31).context("Invalid year")?)
-        } else {let length=(b-a).num_days()+1;(a-Duration::days(length),a-Duration::days(1))};
-        let mut value=request.clone();value.from=start.to_string();value.to=end.to_string();Some(value)
-    } else {None};
+    let comparison=None;
     Ok(Plan {request,comparison})
+}
+
+// Parse both periods before routing the subject so comparison words cannot become category filters.
+fn comparison_plan(prompt:&str,previous:Option<&Request>,today:NaiveDate)->Result<Plan> {
+    let lower=prompt.to_lowercase();
+    let explicit=ai::prompt_dates(&lower)?;
+    ensure!(matches!(explicit.len(),0|1|2|4),"ကာလနှစ်ခုအတွက် စရက်/ဆုံးရက် လေးရက် သတ်မှတ်ပါ။");
+    let same_month=["same month last year","same month of last year","မနှစ်ကတူညီတဲ့လ","မနှစ်က တူညီတဲ့လ","မနှစ်ကဒီလ","မနှစ်က ဒီလ","last year ဒီလ"].iter().any(|v|lower.contains(v));
+    let mut subject=lower.clone();
+    for word in ["same month of last year","same month last year","current month","previous month","comparison","compare","နှိုင်းယှဉ်ပေးပါ","နှိုင်းယှဥ်ပေးပါ","နှိုင်းယှင်ပေးပါ","နှိုင်းယှဉ်ချက်","နှိုင်းယှဉ်","နှိုင်းယှဥ်","နှိုင်းယှင်","ယှဉ်ကြည့်ပေးပါ","ယှဉ်ကြည့်ပေးပါ","ယှဉ်ကြည့်","ယှဉ်ကြည့်","မနှစ်ကတူညီတဲ့လ","မနှစ်က တူညီတဲ့လ","မနှစ်ကဒီလ","မနှစ်က ဒီလ","ပြီးခဲ့တဲ့လ","ပြီးခဲ့တဲ့အပတ်","this month","last month","this week","last week","this year","last year","yesterday","today","ဒီနေ့","ဒီအပတ်","ဒီလ","နဲ့","နှင့်","နှင့်"," vs "," versus "," and "," မှ "," အထိ "," to "," from "] {subject=subject.replace(word," ");}
+    for part in lower.split(|c:char| !(c.is_ascii_digit()||matches!(c,'-'|'.'|'/'))) {
+        if part.matches('-').count()==2||part.matches('.').count()==2||part.matches('/').count()==2 {subject=subject.replace(part," ");}
+    }
+    let subject=subject.trim().trim_matches(['?','။']).trim();
+    let mut request=if subject.is_empty(){previous.context("အရောင်း သို့မဟုတ် အသုံးစရိတ်ကို ထည့်မေးပါ။")?.clone()}else{ai::chat_at(subject,&today.to_string(),&today.to_string(),today)?};
+    if request.scope==Scope::CategorySales && request.product.is_empty(){request.scope=Scope::Analytics;}
+    ensure!(!request.best_sellers && !lower.contains("profit") && !lower.contains("အမြတ်"),"အရောင်း သို့မဟုတ် အသုံးစရိတ်ကို ကာလနှစ်ခု နှိုင်းယှဉ်မေးပါ။");
+    ensure!(matches!(request.scope,Scope::Analytics|Scope::CategorySales|Scope::Expenses),"အရောင်း၊ Category ရောင်းရငွေနှင့် အသုံးစရိတ်ကိုသာ ကာလနှိုင်းယှဉ်နိုင်ပါသည်။");
+    let month=|day:NaiveDate|->Result<(NaiveDate,NaiveDate)>{let start=day.with_day(1).context("Invalid month")?;let next=if day.month()==12{NaiveDate::from_ymd_opt(day.year()+1,1,1)}else{NaiveDate::from_ymd_opt(day.year(),day.month()+1,1)}.context("Invalid month")?;Ok((start,next-Duration::days(1)))};
+    let (a,b)=match explicit.as_slice(){[a,b,..]=>(*a,*b),[a]=>(*a,*a),_=>{
+        if same_month||lower.contains("month")||lower.contains("ဒီလ")||lower.contains("ပြီးခဲ့တဲ့လ"){month(today)?}
+        else {let period=if lower.contains("today")||lower.contains("ဒီနေ့"){"today"}else if lower.contains("this week")||lower.contains("ဒီအပတ်"){"this week"}else if lower.contains("this year"){"this year"}else{lower.as_str()};let r=ai::chat_at(&format!("sales {period}"),&request.from,&request.to,today)?;(NaiveDate::parse_from_str(&r.from,"%Y-%m-%d")?,NaiveDate::parse_from_str(&r.to,"%Y-%m-%d")?)}
+    }};
+    let (c,d)=if explicit.len()==4{(explicit[2],explicit[3])}
+        else if same_month {month(NaiveDate::from_ymd_opt(a.year()-1,a.month(),1).context("Invalid year")?)?}
+        else if lower.contains("month")||lower.contains("ပြီးခဲ့တဲ့လ")||lower.contains("ဒီလ"){month(a.with_day(1).context("Invalid month")?-Duration::days(1))?}
+        else if lower.contains("last year"){(NaiveDate::from_ymd_opt(a.year()-1,1,1).context("Invalid year")?,NaiveDate::from_ymd_opt(a.year()-1,12,31).context("Invalid year")?)}
+        else {let length=(b-a).num_days()+1;(a-Duration::days(length),a-Duration::days(1))};
+    for (start,end) in [(a,b),(c,d)] {ensure!(start<=end&&(end-start).num_days()<366,"ရက်အပိုင်းအခြားကို စရက်မှဆုံးရက်အထိ 366 ရက်အတွင်း ရွေးပါ။");}
+    request.from=a.to_string();request.to=b.to_string();
+    let mut other=request.clone();other.from=c.to_string();other.to=d.to_string();
+    Ok(Plan{request,comparison:Some(other)})
 }
 
 fn distance(a:&str,b:&str)->usize {
@@ -69,13 +85,13 @@ fn distance(a:&str,b:&str)->usize {
 
 /// Approximate matches are offered to the user, never silently substituted.
 pub async fn candidates(pool:&PgPool,actor:&Session,r:&Request)->Result<Vec<String>> {
-    let term=match r.scope {Scope::CategorySales=>&r.product,Scope::Receipts=>&r.receipt_category,Scope::Products|Scope::Customers|Scope::Credit|Scope::Employees=>&r.product,_=>return Ok(vec![])};
+    let term=match r.scope {Scope::CategorySales=>&r.product,Scope::Receipts=>&r.receipt_category,Scope::Products|Scope::Suppliers|Scope::Customers|Scope::Credit|Scope::Employees=>&r.product,_=>return Ok(vec![])};
     if term.is_empty(){return Ok(vec![]);}
     let mut tx=pool.begin().await?;
     sqlx::query("SET TRANSACTION READ ONLY").execute(&mut *tx).await?;
     sqlx::query("SET LOCAL statement_timeout='5s'").execute(&mut *tx).await?;
     ai::authorize(&mut tx,actor,r.scope).await?;
-    let sql=match r.scope {Scope::Products=>"SELECT DISTINCT name FROM products ORDER BY name LIMIT 1000",Scope::Customers|Scope::Credit=>"SELECT DISTINCT name FROM customers ORDER BY name LIMIT 1000",Scope::Employees=>"SELECT DISTINCT full_name FROM employees ORDER BY full_name LIMIT 1000",_=>"SELECT DISTINCT name FROM categories ORDER BY name LIMIT 1000"};
+    let sql=match r.scope {Scope::Products=>"SELECT DISTINCT name FROM products ORDER BY name LIMIT 1000",Scope::Customers|Scope::Credit=>"SELECT DISTINCT name FROM customers ORDER BY name LIMIT 1000",Scope::Suppliers=>"SELECT DISTINCT name FROM suppliers ORDER BY name LIMIT 1000",Scope::Employees=>"SELECT DISTINCT full_name FROM employees ORDER BY full_name LIMIT 1000",_=>"SELECT DISTINCT name FROM categories ORDER BY name LIMIT 1000"};
     let names:Vec<String>=sqlx::query_scalar(sql).fetch_all(&mut *tx).await?;
     let q=normalized(term);
     if let Some(name)=names.iter().find(|n|normalized(n)==q) {
@@ -87,8 +103,8 @@ pub async fn candidates(pool:&PgPool,actor:&Session,r:&Request)->Result<Vec<Stri
         let exists:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM products WHERE strpos(lower(name||' '||COALESCE(sku,'')||' '||COALESCE(barcode,'')),lower($1))>0)").bind(term).fetch_one(&mut *tx).await?;
         if exists {tx.commit().await?;return Ok(vec![]);}
     }
-    if matches!(r.scope,Scope::Customers|Scope::Credit|Scope::Employees) {
-        let sql=if r.scope==Scope::Employees {"SELECT EXISTS(SELECT 1 FROM employees WHERE strpos(lower(full_name||' '||employee_no||' '||COALESCE(phone,'')),lower($1))>0)"}else{"SELECT EXISTS(SELECT 1 FROM customers WHERE strpos(lower(name||' '||COALESCE(phone,'')||' '||id::text),lower($1))>0)"};
+    if matches!(r.scope,Scope::Suppliers|Scope::Customers|Scope::Credit|Scope::Employees) {
+        let sql=if r.scope==Scope::Suppliers {"SELECT EXISTS(SELECT 1 FROM suppliers WHERE strpos(lower(name||' '||COALESCE(phone,'')||' '||COALESCE(company_name,'')||' '||COALESCE(contact_person,'')||' '||id::text),lower($1))>0)"}else if r.scope==Scope::Employees {"SELECT EXISTS(SELECT 1 FROM employees WHERE strpos(lower(full_name||' '||employee_no||' '||COALESCE(phone,'')),lower($1))>0)"}else{"SELECT EXISTS(SELECT 1 FROM customers WHERE strpos(lower(name||' '||COALESCE(phone,'')||' '||id::text),lower($1))>0)"};
         let exists:bool=sqlx::query_scalar(sql).bind(term).fetch_one(&mut *tx).await?;
         if exists {tx.commit().await?;return Ok(vec![]);}
     }
@@ -128,7 +144,7 @@ pub async fn answer(pool:&PgPool,actor:&Session,plan:&Plan)->Result<Answer> {
 }
 
 pub async fn detail(pool:&PgPool,actor:&Session,r:&Request,row:&[String])->Result<Answer> {
-    ensure!(matches!(r.scope,Scope::Products|Scope::Inventory|Scope::Customers|Scope::Credit|Scope::Employees|Scope::Expenses),"Detail မပံ့ပိုးသော အကြောင်းအရာပါ။");
+    ensure!(matches!(r.scope,Scope::Products|Scope::Inventory|Scope::Customers|Scope::Credit|Scope::Employees|Scope::Suppliers|Scope::Expenses),"Detail မပံ့ပိုးသော အကြောင်းအရာပါ။");
     let mut tx=pool.begin().await?;
     sqlx::query("SET TRANSACTION READ ONLY").execute(&mut *tx).await?;
     sqlx::query("SET LOCAL statement_timeout='5s'").execute(&mut *tx).await?;
@@ -136,6 +152,7 @@ pub async fn detail(pool:&PgPool,actor:&Session,r:&Request,row:&[String])->Resul
     let name=row.first().context("Missing detail key")?;
     let (headers,sql)=match r.scope {
         Scope::Products|Scope::Inventory=>(vec!["ID","Product","SKU","Barcode","Price","Stock","Category"],"SELECT json_build_array(p.id::text,p.name,COALESCE(p.sku,''),COALESCE(p.barcode,''),p.price::numeric::text,CASE WHEN lower(COALESCE(p.sold_by,'Each'))='variants' THEN COALESCE((SELECT SUM(stock)::numeric::text FROM product_variants WHERE product_id=p.id),'0') ELSE p.stock::numeric::text END,COALESCE(c.name,''))::text FROM products p LEFT JOIN categories c ON c.id=p.category_id WHERE p.name=$1 AND COALESCE(p.sku,'')=$2 ORDER BY p.id LIMIT 50"),
+        Scope::Suppliers=>(vec!["ID","Supplier","Phone","Company","Contact person","Email","Address","Website","Payment terms","Status"],"SELECT json_build_array(id::text,name,COALESCE(phone,''),COALESCE(company_name,''),COALESCE(contact_person,''),COALESCE(email,''),COALESCE(address,''),COALESCE(website,''),COALESCE(payment_terms,''),COALESCE(status,'Active'))::text FROM suppliers WHERE name=$1 AND COALESCE(phone,'')=$2 ORDER BY id LIMIT 50"),
         Scope::Customers=>(vec!["ID","Customer","Phone","Email","Address","Total spent"],"SELECT json_build_array(id::text,name,COALESCE(phone,''),COALESCE(email,''),COALESCE(address,''),total_spent::numeric::text)::text FROM customers WHERE name=$1 AND COALESCE(phone,'')=$2 ORDER BY id LIMIT 50"),
         Scope::Employees=>(vec!["ID","Employee ID","Name","Phone","Position","Department","Branch","Hire date","Status","Address","Notes"],"SELECT json_build_array(id::text,employee_no,full_name,COALESCE(phone,''),COALESCE(position,''),COALESCE(department,''),COALESCE(branch,''),COALESCE(hire_date::text,''),COALESCE(employment_status,''),COALESCE(address,''),COALESCE(notes,''))::text FROM employees WHERE employee_no=$1 AND full_name=$2 ORDER BY id LIMIT 50"),
         Scope::Credit=>(vec!["ID","Customer","Phone","Email","Address","Current balance","Total spent"],"SELECT json_build_array(id::text,name,COALESCE(phone,''),COALESCE(email,''),COALESCE(address,''),current_balance::numeric::text,total_spent::numeric::text)::text FROM customers WHERE name=$1 AND COALESCE(phone,'')=$2 ORDER BY id LIMIT 50"),
@@ -175,7 +192,7 @@ mod tests {
     #[test]
     fn amount_payment_and_category_filters_survive_followups() {
         let today=NaiveDate::from_ymd_opt(2026,10,5).unwrap();
-        let previous=Request {scope:Scope::Receipts,from:"2026-10-05".into(),to:"2026-10-05".into(),product:"amount:10000".into(),receipt_category:"Services".into(),receipt_payment:"kpay".into()};
+        let previous=Request {best_sellers:false,scope:Scope::Receipts,from:"2026-10-05".into(),to:"2026-10-05".into(),product:"amount:10000".into(),receipt_category:"Services".into(),receipt_payment:"kpay".into()};
         let next=plan("မနေ့ကရော?",Some(&previous),today).unwrap();
         assert_eq!(next.request.product,previous.product);assert_eq!(next.request.receipt_category,previous.receipt_category);assert_eq!(next.request.receipt_payment,previous.receipt_payment);
         assert!(plan("today",None,today).is_err());
@@ -191,4 +208,66 @@ mod tests {
         assert!(plan("SELECT * FROM sales",None,today).is_err());
         assert_eq!(normalized("ရေခဲမုန့်"),normalized("ရေခဲမုန့်"));
     }
+}
+
+#[cfg(test)]
+mod payment_followup_tests {
+ use super::*;
+ #[test]
+ fn payment_method_survives_dates_and_receipt_followup() {
+  let today=NaiveDate::from_ymd_opt(2026,10,6).unwrap();
+  let first=plan("ဒီနေ့ Kpay နဲ့ ဘယ်လောက်ရောင်းရလဲ?",None,today).unwrap();
+  let next=plan("မနေ့ကရော",Some(&first.request),today).unwrap();
+  assert_eq!(next.request.scope,Scope::PaymentSales);assert_eq!(next.request.receipt_payment,"KPay");assert_eq!(next.request.from,"2026-10-05");
+  let receipts=plan("အဲဒီ receipts ပြပါ",Some(&next.request),today).unwrap();
+  assert_eq!(receipts.request.scope,Scope::Receipts);assert_eq!(receipts.request.receipt_payment,"KPay");assert_eq!(receipts.request.from,next.request.from);
+ }
+}
+
+#[cfg(test)]
+mod topic_alias_tests {
+ use super::*;
+ #[test] fn aliases_work_in_conversation_planning() {
+  let today=NaiveDate::from_ymd_opt(2026,10,6).unwrap();
+  assert_eq!(plan("ဒီနေ့ ဝင်ငွေ ပြပါ",None,today).unwrap(),plan("ဒီနေ့ ရောင်းရငွေ ပြပါ",None,today).unwrap());
+  for word in ["အထွက်ငွေ","သုံးစွဲငွေ"] {
+   assert_eq!(plan(&format!("ဒီလ {word} အများဆုံး ပြပါ"),None,today).unwrap(),plan("ဒီလ အသုံးစရိတ် အများဆုံး ပြပါ",None,today).unwrap());
+  }
+ }
+}
+
+#[cfg(test)]
+mod bilingual_comparison_tests {
+ use super::*;
+ #[test] fn monthly_comparisons_in_both_languages() {
+  let today=NaiveDate::from_ymd_opt(2026,10,8).unwrap();
+  for (scope,prompts) in [(Scope::Analytics,vec!["sales comparison this month vs last month","Compare sales current month and previous month","ဒီလနဲ့ အရင်လ ရောင်းအား နှိုင်းယှဉ်ပေးပါ"]),(Scope::Expenses,vec!["expense comparison this month vs last month","ဒီလနဲ့ ပြီးခဲ့တဲ့လ အသုံးစရိတ် နှိုင်းယှဉ်ပေးပါ","ယခုလနဲ့ အရင်လ အထွက်ငွေ ယှဉ်ကြည့်ပေးပါ"])] {
+   for prompt in prompts {let p=plan(prompt,None,today).unwrap();assert_eq!(p.request.scope,scope,"{prompt}");assert!(p.request.product.is_empty(),"{prompt}: {}",p.request.product);assert_eq!((&*p.request.from,&*p.request.to),("2026-10-01","2026-10-31"));let other=p.comparison.unwrap();assert_eq!((&*other.from,&*other.to),("2026-09-01","2026-09-30"));}
+  }
+ }
+ #[test] fn same_month_last_year_and_custom_ranges() {
+  let today=NaiveDate::from_ymd_opt(2024,2,15).unwrap();
+  for prompt in ["sales comparison this month vs same month last year","ဒီလနဲ့ မနှစ်ကတူညီတဲ့လ အသုံးစရိတ် နှိုင်းယှဉ်ပေးပါ"] {let p=plan(prompt,None,today).unwrap();assert_eq!(p.request.to,"2024-02-29");let other=p.comparison.unwrap();assert_eq!((&*other.from,&*other.to),("2023-02-01","2023-02-28"));assert!(p.request.product.is_empty());}
+  for prompt in ["compare sales 2026-10-01 to 2026-10-07 vs 2026-09-01 to 2026-09-07","၂၀၂၆-၁၀-၀၁ မှ ၂၀၂၆-၁၀-၀၇ အထိ နဲ့ ၂၀၂၆-၀၉-၀၁ မှ ၂၀၂၆-၀၉-၀၇ အထိ အသုံးစရိတ် နှိုင်းယှဉ်ပေးပါ"] {let p=plan(prompt,None,today).unwrap();assert!(p.request.product.is_empty(),"{}",p.request.product);assert_eq!((&*p.request.from,&*p.request.to),("2026-10-01","2026-10-07"));let other=p.comparison.unwrap();assert_eq!((&*other.from,&*other.to),("2026-09-01","2026-09-07"));}
+  assert!(plan("compare sales 2026-10-07 to 2026-10-01 vs 2026-09-01 to 2026-09-07",None,today).is_err());
+ }
+ #[test] fn comparisons_keep_category_filters_and_daily_dates() {
+  let today=NaiveDate::from_ymd_opt(2026,10,8).unwrap();
+  for prompt in ["compare sales CCTV this month vs last month","ဒီလနဲ့ ပြီးခဲ့တဲ့လ CCTV ရောင်းအား နှိုင်းယှဉ်ပေးပါ"] {let p=plan(prompt,None,today).unwrap();assert_eq!(p.request.product,"cctv");assert_eq!(p.comparison.unwrap().product,"cctv");}
+  let p=plan("compare sales today vs yesterday",None,today).unwrap();assert_eq!(p.request.from,"2026-10-08");assert_eq!(p.comparison.unwrap().from,"2026-10-07");
+ }
+}
+
+#[cfg(test)]
+mod requested_topic_equivalents {
+ use super::*;
+ #[test] fn aliases_share_normal_and_comparison_plans() {
+  let today=NaiveDate::from_ymd_opt(2026,10,8).unwrap();
+  for (canonical,aliases) in [("ရောင်းရငွေ",vec!["အရောင်း","ရောင်းအား","ရောင်းနှုန်း","ဝင်ငွေ"]),("အသုံးစရိတ်",vec!["အသုံးစရိတ်","ထွက်ငွေ","သုံးစွဲငွေ","အထွက်","အထွက်ငွေ","အထွက်စာရင်း"])] {
+   for (prefix,suffix) in [("ဒီနေ့ "," ပြပါ"),("ဒီလနဲ့ ပြီးခဲ့တဲ့လ "," နှိုင်းယှဉ်ပေးပါ"),("ဒီလနဲ့ မနှစ်ကဒီလ "," နှိုင်းယှဉ်ပေးပါ")] {
+    let expected=plan(&format!("{prefix}{canonical}{suffix}"),None,today).unwrap();
+    for alias in &aliases {assert_eq!(plan(&format!("{prefix}{alias}{suffix}"),None,today).unwrap(),expected,"{alias}");}
+   }
+  }
+ }
 }

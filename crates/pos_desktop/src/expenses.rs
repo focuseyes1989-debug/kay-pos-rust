@@ -58,7 +58,7 @@ pub fn QuickExpense(db_form: DbForm, on_close: EventHandler<()>, on_saved: Event
                         h2 { "Add expense" }
                         if let Some(Err(message)) = state {
                             p { role: "alert", "{message}" }
-                            button { onclick: move |_| data.restart(), "Retry" }
+                            button { onclick: move |_| data.restart(), crate::icons::ActionLabel { label:"Retry" } }
                         } else { p { role: "status", "Loading..." } }
                         button { onclick: move |_| on_close.call(()), crate::icons::ActionLabel { label:"Cancel" } }
                     }
@@ -81,9 +81,10 @@ pub fn ExpensesPage(
     use_effect(move||{if new_expense(){tab.set(0)}});
     rsx!{section{class:"customers_page phase4_page phase4_expenses",
         nav{class:"receipt_tabs",aria_label:"Expense views",
-            for (i,label) in ["Expenses","Budgets","Alerts"].iter().enumerate(){button{role:"tab",aria_selected:(tab()==i).to_string(),class:if tab()==i{"active"}else{""},onclick:move |_|tab.set(i),"{label}"}}
+            for (i,label) in ["Expenses","Budgets","Alerts","Comparison"].iter().enumerate(){button{role:"tab",aria_selected:(tab()==i).to_string(),class:if tab()==i{"active"}else{""},onclick:move |_|tab.set(i),"{label}"}}
         }
         if tab()==0 {ExpenseHistory{db_form,new_expense,on_sales}}
+        else if tab()==3 {crate::expense_comparison::ExpenseComparison{db_form,actor}}
         else {crate::expense_management::BudgetPanel{key:"{tab()}",db_form,actor,alerts:tab()==2}}
     }}
 }
@@ -114,6 +115,7 @@ fn ExpenseHistory(
     let mut query = use_signal(String::new);
     let mut category = use_signal(String::new);
     let mut category_view = use_signal(|| false);
+    let mut detail_category = use_signal(|| None::<String>);
     let mut from = use_signal(today);
     let mut to = use_signal(today);
     let mut page = use_signal(|| 0usize);
@@ -137,7 +139,7 @@ fn ExpenseHistory(
         let a=from(); let b=to();
         if !a.is_empty() && !b.is_empty() && a>b { return; }
         let values=(a,b,q,c);
-        if *applied.peek()!=values { applied.set(values); page.set(0); selected.set(None); }
+        if *applied.peek()!=values { applied.set(values); page.set(0); selected.set(None); detail_category.set(None); }
     });
     let state = data.read();
     let (all, categories, methods) = match state.as_ref() {
@@ -184,19 +186,6 @@ fn ExpenseHistory(
                 div { span { crate::icons::ActionLabel { label:"Expenses" } } strong { "{rows.len()}" } }
                 div { span { "Average expense" } strong { "{money(average)} {crate::regional::current().symbol()}" } }
             }
-            header { class: "customers_header expense_touch_header",
-                div { h2 { crate::icons::ActionLabel { label:"Expenses" } } }
-                div { class: "customers_actions",
-                    button { disabled: exporting() || !matches!(state.as_ref(),Some(Ok(_))), onclick: {
-                        let rows=rows.clone(); move |_| { let rows=rows.clone(); exporting.set(true); spawn(async move {
-                            if let Some(file)=rfd::AsyncFileDialog::new().add_filter("Excel", &["xlsx"]).set_file_name("Expenses.xlsx").save_file().await {
-                                match export(&rows,file.path()) { Ok(())=>notice.set(format!("Exported to {}",file.path().display())), Err(err)=>error.set(format!("{err:#}")) }
-                            } exporting.set(false);
-                        }); }
-                    }, crate::icons::ActionLabel { label:"Export Excel" } }
-                    button { class: "customer_primary", onclick: move |_| editor.set(Some(new_record())), crate::icons::ActionLabel { label:"+ Add expense" } }
-                }
-            }
             div { class: "expense_filters expense_touch_filters",
                 crate::date_range::DateRangePicker { allow_empty:true, from:from(), to:to(), onchange:move |(a,b):(String,String)|{from.set(a);to.set(b);page.set(0);selected.set(None);} }
                 label { "Category"
@@ -213,12 +202,25 @@ fn ExpenseHistory(
             if invalid_range { div { role: "alert", class: "customers_notice", "From date must not be after To date." } }
             if let Some(Err(message)) = state.as_ref() { div { role: "alert", class: "customers_notice", "{message}" } }
             if !notice().is_empty() { div { role: "status", class: "customers_notice", "{notice}" } }
+            div { class: "expense_results_toolbar",
             nav { class: "receipt_tabs expense_view_tabs", role: "tablist", aria_label: "Expense results",
                 button { role: "tab", id: "expense-category-tab", aria_controls: "expense-category-panel", aria_selected: category_view().to_string(), class: if category_view() { "active" } else { "" }, onclick: move |_| category_view.set(true), "Spending by Category" }
                 button { role: "tab", id: "expense-history-tab", aria_controls: "expense-history-panel", aria_selected: (!category_view()).to_string(), class: if !category_view() { "active" } else { "" }, onclick: move |_| category_view.set(false), "Expense History" }
             }
+                div { class: "customers_actions",
+                    button { disabled: exporting() || !matches!(state.as_ref(),Some(Ok(_))), onclick: {
+                        let rows=rows.clone(); move |_| { let rows=rows.clone(); exporting.set(true); spawn(async move {
+                            if let Some(file)=rfd::AsyncFileDialog::new().add_filter("Excel", &["xlsx"]).set_file_name("Expenses.xlsx").save_file().await {
+                                match export(&rows,file.path()) { Ok(())=>notice.set(format!("Exported to {}",file.path().display())), Err(err)=>error.set(format!("{err:#}")) }
+                            } exporting.set(false);
+                        }); }
+                    }, crate::icons::ActionLabel { label:"Export Excel" } }
+                    button { class: "customer_primary", onclick: move |_| editor.set(Some(new_record())), crate::icons::ActionLabel { label:"+ Add expense" } }
+                }
+            }
             if category_view() {
-            section { class: "expense_category_chart", id: "expense-category-panel", role: "tabpanel", aria_labelledby: "expense-category-tab",
+            div {class:"expense_category_columns",id:"expense-category-panel",role:"tabpanel",aria_labelledby:"expense-category-tab",
+            section { class: "expense_category_chart",
                 header {
                     div { strong { "Spending by category" } small { "Totals for the applied date range and filters · Select a category to view its expenses" } }
                     if !filter_category.is_empty() {
@@ -235,13 +237,10 @@ fn ExpenseHistory(
                         {
                             let width = if largest_category > Money::ZERO { (*amount / largest_category * Money::from(100)).round_dp(2) } else { Money::ZERO };
                             let share = if total > Money::ZERO { (*amount / total * Money::from(100)).round_dp(1).normalize() } else { Money::ZERO };
-                            rsx! { button { class: "expense_category_bar", onclick: {
+                            rsx! { button { class: if detail_category().as_ref()==Some(name) {"expense_category_bar active"}else{"expense_category_bar"},aria_pressed:(detail_category().as_ref()==Some(name)).to_string(),"data-search-value":name.clone(),"data-search-detail":format!("{} · {} expenses",amount,count), onclick: {
                                 let name=name.clone(); move |_| {
-                                    category.set(name.clone());
-                                    let (a,b,q,_) = applied();
-                                    applied.set((a,b,q,name.clone()));
+                                    detail_category.set(Some(name.clone()));
                                     page.set(0); selected.set(None);
-                                    category_view.set(false);
                                 }
                             },
                                 span { class: "expense_category_name", "{name}" }
@@ -252,6 +251,47 @@ fn ExpenseHistory(
                     }
                     if category_summary.is_empty() { p { class: "customers_notice", "No expenses for the applied filters." } }
                 }
+            }
+            section {class:"expense_category_details panel",aria_label:"Category expense details",
+                if let Some(name)=detail_category().filter(|name| rows.iter().any(|row| &row.category==name)) {
+                    {
+                        let matching=rows.iter().filter(|row|row.category==name).collect::<Vec<_>>();
+                        let amount:Money=matching.iter().map(|row|row.amount).sum();
+                        let detail_pages=matching.len().div_ceil(25).max(1);
+                        let detail_page=page().min(detail_pages-1);
+                        rsx! {
+                            header {class:"transactions_head",
+                                div {strong {"{name}"} small {"{filter_from} – {filter_to} · {matching.len()} expenses"}}
+                                button {aria_label:"Close category details",title:"Close category details",onclick:move |_|{detail_category.set(None);page.set(0);},crate::icons::Icon {name:"close"}}
+                            }
+                            div {class:"expense_category_detail_total",span {"Category total"} strong {"{money(amount)} {crate::regional::current().symbol()}"}}
+                            div {class:"expense_category_detail_list",
+                                for row in matching.iter().skip(detail_page*25).take(25) {
+                                    details {class:"expense_category_detail_record",key:"{row.id}",
+                                        summary {div {strong {"{row.description}"} small {"{row.expense_date} · {row.expense_no}"}} strong {"{money(row.amount)} {crate::regional::current().symbol()}"}}
+                                        div {class:"expense_detail_body",
+                                            dl {
+                                                div {dt {"Payment method"} dd {"{row.payment_method}"}}
+                                                div {dt {"Reference"} dd {if row.reference_no.is_empty(){"-"}else{"{row.reference_no}"}}}
+                                                div {dt {"Notes"} dd {if row.notes.is_empty(){"-"}else{"{row.notes}"}}}
+                                            }
+                                            div {class:"expense_category_record_actions",
+                                                button {onclick:{let id=row.id;move |_|attachments.set(Some(id))},crate::icons::ActionLabel {label:"Attachments"}}
+                                                button {onclick:{let row=(*row).clone();move |_|editor.set(Some(row.clone()))},crate::icons::ActionLabel {label:"Edit"}}
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            if detail_pages>1 {footer {class:"customers_pagination",
+                                button { title:"Previous page", aria_label:"Previous page",disabled:detail_page==0,onclick:move |_|page.set(detail_page.saturating_sub(1)),crate::icons::Icon { name:"arrow_circle_left" }}
+                                span {"Page {detail_page+1} of {detail_pages}"}
+                                button { title:"Next page", aria_label:"Next page",disabled:detail_page+1>=detail_pages,onclick:move |_|page.set(detail_page+1),crate::icons::Icon { name:"arrow_circle_right" }}
+                            }}
+                        }
+                    }
+                } else {div {class:"empty receipts_empty",strong {"Select a category"} span {"Its expenses and category total will appear here."}}}
+            }
             }
             } else {
             div { class: "expense_columns", id: "expense-history-panel", role: "tabpanel", aria_labelledby: "expense-history-tab",
@@ -264,6 +304,7 @@ fn ExpenseHistory(
                         for row in rows.iter().skip(current*25).take(25) {
                             article {
                                 class: if selected().as_ref().is_some_and(|item|item.id==row.id) { "expense_touch_item active" } else { "expense_touch_item" },
+                                "data-search-value":row.category.clone(),"data-search-detail":format!("{} · {} · {}",row.description,row.expense_date,money(row.amount)),"data-search-match":format!("{} {} {}",row.category,row.description,row.reference_no),
                                 key: "{row.id}",
                                 tabindex: "0",
                                 role: "button",
@@ -281,9 +322,9 @@ fn ExpenseHistory(
                         else if rows.is_empty() { p { class: "customers_notice", "No expenses found." } }
                     }
                     footer { class: "customers_pagination",
-                        button { disabled: current==0, onclick: move |_| { page.set(current.saturating_sub(1)); selected.set(None); }, "Previous" }
+                        button { title:"Previous page", aria_label:"Previous page", disabled: current==0, onclick: move |_| { page.set(current.saturating_sub(1)); selected.set(None); }, crate::icons::Icon { name:"arrow_circle_left" } }
                         span { "Page {current+1} of {pages}" }
-                        button { disabled: current+1>=pages, onclick: move |_| { page.set(current+1); selected.set(None); }, "Next" }
+                        button { title:"Next page", aria_label:"Next page", disabled: current+1>=pages, onclick: move |_| { page.set(current+1); selected.set(None); }, crate::icons::Icon { name:"arrow_circle_right" } }
                     }
                 }
                 if let Some(row)=selected() {
@@ -351,7 +392,7 @@ fn ExpenseHistory(
     }
 }
 
-fn money(amount: Money) -> String {
+pub(crate) fn money(amount: Money) -> String {
     let text = amount.round_dp(2).normalize().to_string();
     let (whole, decimal) = text.split_once('.').unwrap_or((&text, ""));
     let mut result = String::new();
@@ -391,8 +432,10 @@ fn ExpenseEditor(
     rsx! {
         div { class: "modal_backdrop",
             section { class: "customer_dialog", role: "dialog", aria_modal: "true", aria_label: "Expense",
-                h2 { if expense.id==0 { "Add Expense" } else { "Edit Expense" } }
-                p { "{expense.expense_no}" }
+                header {class:"expense_dialog_heading",
+                    h2 { if expense.id==0 { "Add Expense" } else { "Edit Expense" } }
+                    span {class:"expense_dialog_number","{expense.expense_no}"}
+                }
                 div { class: "customer_form",
                     label { "Category" select { value: "{form().category}", disabled: saving(), onchange: move |event| form.write().category=event.value(),
                         option { value: "", "Select category" }
@@ -423,7 +466,7 @@ fn ExpenseEditor(
                             saving.set(false);
                             match result { Ok(())=>on_saved.call(()), Err(err)=>on_error.call(format!("{err:#}")) }
                         });
-                    }, if saving() { "Saving..." } else { "Save Expense" } }
+                    }, if saving() { "Saving..." } else { crate::icons::ActionLabel {label:"Save Expense"} } }
                 }
             }
         }

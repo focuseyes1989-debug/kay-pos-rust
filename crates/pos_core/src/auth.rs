@@ -22,6 +22,17 @@ impl Session {
     pub fn username(&self) -> &str {
         &self.username
     }
+    pub fn role(&self) -> &str { &self.role }
+
+    pub async fn profile_image(&self, pool:&PgPool) -> Result<Option<String>> {
+        let mut conn=pool.acquire().await?;
+        self.authorize(&mut conn,Permission::Sell).await?;
+        let image:Option<String>=sqlx::query_scalar("SELECT 'data:image/jpeg;base64,'||encode(photo_data,'base64') FROM employees WHERE user_id=$1 AND photo_data IS NOT NULL ORDER BY id DESC LIMIT 1")
+            .bind(self.id).fetch_optional(&mut *conn).await?;
+        self.authorize(&mut conn,Permission::Sell).await?;
+        Ok(image)
+    }
+
     pub fn allows(&self, permission: Permission) -> bool {
         allows(&self.role, permission)
     }
@@ -115,3 +126,5 @@ fn role_permissions() {
     assert!(!allows("unknown", Permission::Sell));
     assert_ne!(new_request_id(), new_request_id());
 }
+
+#[cfg(test)]mod permission_matrix_tests {use super::*;#[test]fn all_supported_roles_and_unknowns(){for(role,expected)in [("Admin",[true,true,true]),("Manager",[true,true,false]),("Cashier",[true,false,false]),("Viewer",[false,false,false]),("",[false,false,false])]{for(permission,allowed)in [Permission::Sell,Permission::Manage,Permission::Admin].into_iter().zip(expected){assert_eq!(allows(role,permission),allowed);assert_eq!(allows(&role.to_uppercase(),permission),allowed);}}}}

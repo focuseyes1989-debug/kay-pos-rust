@@ -169,7 +169,14 @@ pub fn PurchasesPage(db_form: DbForm, actor: Session) -> Element {
     let snapshot_at = loaded.map(|d| d.loaded_at.clone()).unwrap_or_default();
     rsx! {section {class:"customers_page purchases_page",
         button {hidden:true,"data-page-refresh":"true",disabled:loading||locked,onclick:move |_|{refresh+=1;data.restart();},"Refresh"}
-        header {class:"reports_header",h2 {ActionLabel{label:"Purchases"}}
+        div {class:"purchase_filters",
+            label {"Search" input {r#type:"search",value:query(),placeholder:"Order or supplier",oninput:move |e|{query.set(e.value());page.set(0);}}}
+            label {"Supplier" select {value:supplier().to_string(),onchange:move |e|{supplier.set(e.value().parse().unwrap_or(0));page.set(0);},option{value:"0","All suppliers"} if let Some(d)=loaded {for s in &d.suppliers {option{value:s.id.to_string(),"{s.name}"}}}}}
+            if tab()!=2 {label {"Status" select {value:status(),onchange:move |e|{status.set(e.value());page.set(0);},option{value:"","All statuses"} for label in if tab()==0{vec!["pending","received","cancelled"]}else{vec!["Unpaid","Partial","Paid"]}{option{value:label,"{label}"}}}}}
+            crate::date_range::DateRangePicker { from:from(), to:to(), onchange:move |(a,b):(String,String)|{from.set(a);to.set(b);} }
+        }
+        div {class:"purchase_results_toolbar",
+        div {class:"receipt_tabs reports_tabs",role:"tablist",for (i,label) in ["Purchase Orders","Purchase History","Supplier Ledger"].iter().enumerate(){button{role:"tab",aria_selected:tab()==i,class:if tab()==i{"active"}else{""},onclick:move |_|{tab.set(i);status.set(String::new());page.set(0);},"{label}"}}}
             div {class:"customers_actions",
                 button {disabled:loading||locked||exporting()||tab()!=1,onclick:{let orders=order_rows.clone();let source=db_form.clone();let actor=actor.clone();let currency=currency.clone();let snapshot_at=snapshot_at.clone();move |_|{
                     let orders=orders.clone();let source=source.clone();let actor=actor.clone();let currency=currency.clone();let snapshot_at=snapshot_at.clone();let (from,to)=dates();exporting.set(true);
@@ -185,13 +192,6 @@ pub fn PurchasesPage(db_form: DbForm, actor: Session) -> Element {
                 button {disabled:loading||locked||supplier()==0,onclick:move |_|operation.set(Some(Action::Pay(Payment{supplier_id:supplier(),po_id:None,amount:String::new(),date:today.to_string(),method:"Cash".into(),reference:String::new(),notes:String::new()}))),ActionLabel{label:"Supplier payment"}}
             }
         }
-        div {class:"purchase_filters",
-            label {"Search" input {r#type:"search",value:query(),placeholder:"Order or supplier",oninput:move |e|{query.set(e.value());page.set(0);}}}
-            label {"Supplier" select {value:supplier().to_string(),onchange:move |e|{supplier.set(e.value().parse().unwrap_or(0));page.set(0);},option{value:"0","All suppliers"} if let Some(d)=loaded {for s in &d.suppliers {option{value:s.id.to_string(),"{s.name}"}}}}}
-            if tab()!=2 {label {"Status" select {value:status(),onchange:move |e|{status.set(e.value());page.set(0);},option{value:"","All statuses"} for label in if tab()==0{vec!["pending","received","cancelled"]}else{vec!["Unpaid","Partial","Paid"]}{option{value:label,"{label}"}}}}}
-            crate::date_range::DateRangePicker { from:from(), to:to(), onchange:move |(a,b):(String,String)|{from.set(a);to.set(b);} }
-        }
-        div {class:"receipt_tabs reports_tabs",role:"tablist",for (i,label) in ["Purchase Orders","Purchase History","Supplier Ledger"].iter().enumerate(){button{role:"tab",aria_selected:tab()==i,class:if tab()==i{"active"}else{""},onclick:move |_|{tab.set(i);status.set(String::new());page.set(0);},"{label}"}}}
         if !notice().is_empty(){p{role:"status","{notice}"}}
         if loading {p{role:"status","Loading purchases..."}}
         else if let Some(Err(error))=snapshot.as_ref(){p{role:"alert","{error}"}}
@@ -230,7 +230,7 @@ pub fn PurchasesPage(db_form: DbForm, actor: Session) -> Element {
         h2{"Unresolved purchase request"}p{"Operator: {value.username}"}p{"{value.command.request_id}"}
         if !notice().is_empty(){p{role:"alert","{notice}"}}
         div{class:"customers_actions",
-            button{class:"customer_primary",disabled:busy()||value.username!=actor.username(),onclick:{let source=db_form.clone();let user=actor.clone();let command=value.command.clone();move |_|dispatch(source.clone(),user.clone(),command.clone(),pending,busy,notice,refresh)},"Retry same request"}
+            button{class:"customer_primary",disabled:busy()||value.username!=actor.username(),onclick:{let source=db_form.clone();let user=actor.clone();let command=value.command.clone();move |_|dispatch(source.clone(),user.clone(),command.clone(),pending,busy,notice,refresh)}, crate::icons::ActionLabel { label:"Retry same request" } }
             button{disabled:busy()||value.username!=actor.username(),onclick:{let source=db_form.clone();let user=actor.clone();let value=value.clone();move |_|{
                 let source=source.clone();let user=user.clone();let value=value.clone();busy.set(true);
                 spawn(async move{let result=async{let pool=pos_core::connect(&source.database_config()?).await?;let saved=purchases::cancel_unsaved(&pool,&user,&value.command).await?;purchase_pending::clear(&source,&value)?;Ok::<_,anyhow::Error>(saved)}.await;busy.set(false);match result{Ok(saved)=>{pending.set(None);refresh+=1;notice.set(if let Some(id)=saved{format!("Already saved as record #{id}")}else{"Unsaved request cancelled".into()});},Err(e)=>notice.set(format!("{e:#}"))}});

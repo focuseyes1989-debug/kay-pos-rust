@@ -91,7 +91,7 @@ fn Login() -> Element {
             img { class: "login_background", src: background, alt: "", aria_hidden: "true" }
             form { class: "login_form", onsubmit: move |event| {
                 event.prevent_default();
-                if busy() { return; }
+                if busy() || !error().is_empty() { return; }
                 busy.set(true);
                 error.set(String::new());
                 let name = username();
@@ -120,6 +120,10 @@ fn Login() -> Element {
                 div { class: "login_brand",
                     div { class: "brand_mark", aria_hidden: "true", "K" }
                     h1 { "KAY POS" }
+                    div {class:"login_header_tools",
+                        button {class:"login_header_icon",r#type:"button",disabled:busy(),title:"Database connection",aria_label:"Database connection",onclick:move |_|configure.set(true),crate::icons::Icon {name:"settings"}}
+                        updates::UpdatePanel {allow_install:true,busy,compact:true}
+                    }
                 }
                 label { "Username" input { autofocus: true, autocomplete: "username", disabled: busy(), value: username(), oninput: move |e| username.set(e.value()) } }
                 label { "Password" input { r#type: "password", autocomplete: "current-password", disabled: busy(), value: password(), oninput: move |e| password.set(e.value()) } }
@@ -130,10 +134,8 @@ fn Login() -> Element {
                     }}
                     span {"Remember me"}
                 }
-                if !error().is_empty() { p { role: "alert", "{error}" } }
                 button { class: "primary", r#type: "submit", disabled: busy(), if busy() { "Signing in..." } else { crate::icons::ActionLabel { label:"Sign in" } } }
-                button { class: "login_connection", r#type: "button", disabled: busy(), onclick: move |_| configure.set(true), "Database connection" }
-                updates::UpdatePanel { allow_install: true, busy }
+                small {class:"login_version","KAY POS {updates::VERSION}"}
             }
             if configure() {
                 DbSettingsDialog { form: load_saved_db_form(), on_cancel: move |_| configure.set(false), on_save: move |form| {
@@ -142,6 +144,11 @@ fn Login() -> Element {
                         Err(e) => error.set(format!("{e:#}")),
                     }
                 } }
+            }
+            if !error().is_empty() {
+                MessageBox { title:"Login Error".to_string(), message:error(),
+                    on_close:move |_|error.set(String::new())
+                }
             }
         }
     }

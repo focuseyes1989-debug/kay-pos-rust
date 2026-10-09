@@ -59,9 +59,7 @@ pub fn DashboardPage(db_form: DbForm, actor: pos_core::auth::Session, on_navigat
     rsx! {
         style { {include_str!("../assets/dashboard.css")} }
         section { class:"customers_page dashboard_page",
-            header { class:"customers_header dashboard_header", div { h2 {crate::icons::ActionLabel { label:"Dashboard" }} p { "Your business at a glance" } }
-                button { hidden:true,"data-page-refresh":"true",tabindex:-1,aria_hidden:"true",disabled:loading,onclick:move |_|data.restart(),"Refresh" }
-            }
+            button { hidden:true,"data-page-refresh":"true",tabindex:-1,aria_hidden:"true",disabled:loading,onclick:move |_|data.restart(),"Refresh" }
             div {class:"dashboard_filters",
                 crate::date_range::DateRangePicker { from:from(), to:to(), disabled:!data.finished(), onchange:move |(a,b):(String,String)|{from.set(a.clone());to.set(b.clone());error.set(String::new());range.set((a,b));} }
                 div { class:"dashboard_date_shortcuts",
@@ -83,8 +81,11 @@ pub fn DashboardPage(db_form: DbForm, actor: pos_core::auth::Session, on_navigat
                     for label in ["Completed sales","Received at checkout","Recorded expenses","Credit sales"] {
                         if let Some(row)=summary.period.iter().find(|r|r.label==label) {
                             article {class:"dashboard_metric", "data-metric":label,
-                                small {"{row.label}"} strong {"{format_ks(row.amount)}"}
-                                small {"{row.count} records"}
+                                div {class:"dashboard_metric_heading",
+                                    small {"{row.label}"}
+                                    small {class:"dashboard_metric_count","{row.count} records"}
+                                }
+                                strong {"{format_ks(row.amount)}"}
                             }
                         }
                     }
@@ -104,7 +105,10 @@ pub fn DashboardPage(db_form: DbForm, actor: pos_core::auth::Session, on_navigat
                     summary {"More period details"}
                     div {class:"dashboard_metrics",
                         for row in summary.period.iter().filter(|r|!matches!(r.label.as_str(),"Completed sales"|"Received at checkout"|"Recorded expenses"|"Credit sales")) {
-                            article {class:"dashboard_metric",small {"{row.label}"} strong {"{format_ks(row.amount)}"} small {"{row.count} records"}}
+                            article {class:"dashboard_metric",
+                                div {class:"dashboard_metric_heading",small {"{row.label}"} small {class:"dashboard_metric_count","{row.count} records"}}
+                                strong {"{format_ks(row.amount)}"}
+                            }
                         }
                     }
                 }
@@ -114,7 +118,7 @@ pub fn DashboardPage(db_form: DbForm, actor: pos_core::auth::Session, on_navigat
                     }
                 }
                 div {class:"dashboard_section_heading",h3 {"Current balances & operations"} small {"Current totals across all dates"}}
-                div {class:"dashboard_metrics",
+                div {class:"dashboard_metrics dashboard_operations_metrics",
                     article {class:"dashboard_metric",small {"Customer receivables"} strong {"{format_ks(summary.customers.iter().map(|r|r.amount).sum())}"} small {"{summary.customers.len()} customers"}}
                     article {class:"dashboard_metric",small {"Supplier payable (ledger)"} strong {"{format_ks(summary.suppliers.iter().map(|r|r.amount.max(0.0)).sum())}"}}
                     article {class:"dashboard_metric",small {"Supplier advances (ledger)"} strong {"{format_ks(summary.suppliers.iter().map(|r|(-r.amount).max(0.0)).sum())}"}}

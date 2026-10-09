@@ -16,11 +16,9 @@ pub fn DiscountsPage(db_form:DbForm,actor:Session)->Element {
     let today=chrono::Local::now().format("%Y-%m-%d").to_string();
     rsx!{section{class:"customers_page phase4_page",
         button{hidden:true,"data-page-refresh":"true",onclick:move |_|refresh+=1}
-        header{class:"customers_header",h2{ActionLabel{label:"Discounts"}}
-            button{class:"customer_primary",disabled:!data.finished(),onclick:move |_|{let today=chrono::Local::now().format("%Y-%m-%d").to_string();editor.set(Some((None,Discount{id:0,product_id:0,discount_percent:10.into(),discount_type:"percentage".into(),manual_price:0.into(),start_date:today.clone(),end_date:today,active:1,note:String::new()})));},ActionLabel{label:"Add promotion"}}
-        }
-        div{class:"phase4_toolbar",label{"Search" input{r#type:"search",placeholder:"Product, SKU or note",value:"{search}",oninput:move|e|{search.set(e.value());page.set(0);}}}
+        div{class:"phase4_toolbar discount_toolbar",label{"Search" input{r#type:"search",placeholder:"Product, SKU or note",value:"{search}",oninput:move|e|{search.set(e.value());page.set(0);}}}
             label{"Status" select{value:"{status}",onchange:move|e|{status.set(e.value());page.set(0);},for s in ["All","Active now","Scheduled","Expired","Disabled"]{option{value:s,"{s}"}}}}
+            button{class:"customer_primary",disabled:!data.finished(),onclick:move |_|{let today=chrono::Local::now().format("%Y-%m-%d").to_string();editor.set(Some((None,Discount{id:0,product_id:0,discount_percent:10.into(),discount_type:"percentage".into(),manual_price:0.into(),start_date:today.clone(),end_date:today,active:1,note:String::new()})));},ActionLabel{label:"Add promotion"}}
         }
         if !error.is_empty(){p{role:"alert","{error}"}}
         match data.read().as_ref(){None=>rsx!{p{"Loading..."}},Some(Err(e))=>rsx!{p{role:"alert","{e}"}},Some(Ok((all,products)))=>{
@@ -33,7 +31,7 @@ pub fn DiscountsPage(db_form:DbForm,actor:Session)->Element {
                 }}
             }}}
             if rows.is_empty(){p{"No promotions found."}}
-            footer{class:"customers_pagination",button{disabled:current==0,onclick:move |_|page.set(current.saturating_sub(1)),"Previous"}span{"Page {current+1} of {pages}"}button{disabled:current+1>=pages,onclick:move |_|page.set(current+1),"Next"}}
+            footer{class:"customers_pagination",button{ title:"Previous page", aria_label:"Previous page",disabled:current==0,onclick:move |_|page.set(current.saturating_sub(1)),crate::icons::Icon { name:"arrow_circle_left" }}span{"Page {current+1} of {pages}"}button{ title:"Next page", aria_label:"Next page",disabled:current+1>=pages,onclick:move |_|page.set(current+1),crate::icons::Icon { name:"arrow_circle_right" }}}
             if let Some((old,form))=editor(){Editor{old,form,products:products.clone(),onsave:move|c|{editor.set(None);op.set(Some(c));},onclose:move |_|editor.set(None)}}
             }
         }}

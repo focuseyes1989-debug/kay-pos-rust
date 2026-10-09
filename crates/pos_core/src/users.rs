@@ -10,8 +10,10 @@ pub struct User {
     pub active: i32,
     pub avatar: Option<String>,
 }
-pub async fn list(pool: &PgPool) -> Result<Vec<User>> {
-    Ok(sqlx::query_as("SELECT u.id,u.username,COALESCE(u.full_name,'') AS full_name,u.role,COALESCE(u.is_active,1) AS active,(SELECT 'data:image/jpeg;base64,'||encode(e.photo_data,'base64') FROM employees e WHERE e.user_id=u.id AND e.photo_data IS NOT NULL ORDER BY e.id DESC LIMIT 1) AS avatar FROM users u ORDER BY LOWER(u.username),u.id").fetch_all(pool).await?)
+pub async fn list(pool: &PgPool,actor:&crate::auth::Session) -> Result<Vec<User>> {
+    let mut conn=pool.acquire().await?;actor.authorize(&mut conn,crate::auth::Permission::Admin).await?;
+    let rows=sqlx::query_as("SELECT u.id,u.username,COALESCE(u.full_name,'') AS full_name,u.role,COALESCE(u.is_active,1) AS active,(SELECT 'data:image/jpeg;base64,'||encode(e.photo_data,'base64') FROM employees e WHERE e.user_id=u.id AND e.photo_data IS NOT NULL ORDER BY e.id DESC LIMIT 1) AS avatar FROM users u ORDER BY LOWER(u.username),u.id").fetch_all(&mut *conn).await?;
+    actor.authorize(&mut conn,crate::auth::Permission::Admin).await?;Ok(rows)
 }
 pub async fn save(
     pool: &PgPool,
@@ -21,6 +23,7 @@ pub async fn save(
     admin: &str,
     secret: &str,
 ) -> Result<()> {
+    ensure!(u.active==0||u.active==1,"Active must be enabled or disabled");
     let mut tx = pool.begin().await?;
     sqlx::query("LOCK TABLE users IN SHARE ROW EXCLUSIVE MODE")
         .execute(&mut *tx)

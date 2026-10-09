@@ -59,3 +59,7 @@ mod pos_only_tests {
         assert!(super::erp_reconciliation::ReconciliationConfig::from_env().unwrap().is_none());
     }
 }
+
+pub mod stock_transfer;
+
+pub mod sales_comparison;

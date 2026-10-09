@@ -48,7 +48,7 @@ pub fn AttendanceSync(db_form: DbForm, on_synced: EventHandler<()>) -> Element {
                 for device in &rows {option {value:"{device.id}","{device.device_no} · {device.name}"}}
             }
             if let Some(device)=chosen {p {"{device.mappings} active employee mapping(s)"}}
-            if let Some(Err(e))=state.as_ref(){p {role:"alert","{e}"} button {disabled:busy(),onclick:move |_|devices.restart(),"Retry"}}
+            if let Some(Err(e))=state.as_ref(){p {role:"alert","{e}"} button {disabled:busy(),onclick:move |_|devices.restart(), crate::icons::ActionLabel { label:"Retry" } }}
             if !devices.finished(){p {role:"status","Loading devices..."}}
             else if matches!(state.as_ref(),Some(Ok(_)))&&rows.is_empty(){p {"No active devices"}}
             if chosen.is_some_and(|d|d.mappings==0){p {role:"alert","Configure employee mappings for this device in Main POS first."}}

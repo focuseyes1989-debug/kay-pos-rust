@@ -43,17 +43,18 @@ pub fn ActivityPage(db_form: DbForm, actor: Session) -> Element {
         }
     });
     rsx! {section{class:"customers_page phase6_page",
-        header{class:"customers_header",h2{ActionLabel{label:"Activity Log"}}button{hidden:true,"data-page-refresh":"true",disabled:!data.finished(),onclick:move |_|data.restart(),"Refresh"}}
-        div{class:"phase6_filters",
+        button{hidden:true,"data-page-refresh":"true",disabled:!data.finished(),onclick:move |_|data.restart(),"Refresh"}
+        div{class:"phase6_filters date_shortcut_filter",
             crate::date_range::DateRangePicker { from:from(), to:to(), onchange:move |(a,b):(String,String)|{from.set(a);to.set(b);} }
             label{"Search" input{r#type:"search",placeholder:"User, action or details",value:"{query}",oninput:move|e|query.set(e.value())}}
+            crate::date_range::DateRangeShortcuts { onchange:move |(a,b):(String,String)|{from.set(a);to.set(b);} }
         }
         match data.read().as_ref(){None=>rsx!{p{"Loading..."}},Some(Err(e))=>rsx!{p{role:"alert","{e}"}},Some(Ok(rows))=>rsx!{
             div{class:"customers_table_scroll",table{class:"customers_table",thead{tr{th{"Date"}th{"User"}th{"Action"}th{"Details"}th{"IP address"}}}tbody{
                 for r in rows.iter().take(50){tr{key:"{r.id}",td{"{r.created_at}"}td{"{r.username}"}td{"{r.action}"}td{class:"phase6_details","{r.details}"}td{"{r.ip_address}"}}}
             }}}
             if rows.is_empty(){p{"No activity found."}}
-            footer{class:"customers_actions",button{disabled:page()==0,onclick:move |_|page-=1,"Previous"}span{"Page {page()+1}"}button{disabled:rows.len()<=50,onclick:move |_|page+=1,"Next"}}
+            footer{class:"customers_actions",button{ title:"Previous page", aria_label:"Previous page",disabled:page()==0,onclick:move |_|page-=1,crate::icons::Icon { name:"arrow_circle_left" }}span{"Page {page()+1}"}button{ title:"Next page", aria_label:"Next page",disabled:rows.len()<=50,onclick:move |_|page+=1,crate::icons::Icon { name:"arrow_circle_right" }}}
         }}
     }}
 }
@@ -77,7 +78,7 @@ pub fn GroupsPage(db_form: DbForm) -> Element {
     let mut query = use_signal(String::new);
     let mut busy = use_signal(|| false);
     let mut error = use_signal(String::new);
-    rsx! {section{class:"customers_page phase6_page",
+    rsx! {section{class:"customers_page phase6_page category_groups_page",
         header{class:"customers_header",h2{ActionLabel{label:"Category groups"}}div{class:"customers_actions",
             button{hidden:true,"data-page-refresh":"true",disabled:busy()||!data.finished(),onclick:move |_|data.restart(),"Refresh"}
             button{class:"customer_primary",disabled:busy(),onclick:{let db=db_form.clone();move |_|{let db=db.clone();busy.set(true);spawn(async move{
@@ -85,15 +86,21 @@ pub fn GroupsPage(db_form: DbForm) -> Element {
                 busy.set(false);match result{Ok(g)=>editor.set(Some((g,true))),Err(e)=>error.set(format!("{e:#}"))}
             });}},ActionLabel{label:"Add group"}}
         }}
-        div{class:"phase6_filters",label{"Search" input{r#type:"search",value:"{query}",oninput:move|e|query.set(e.value())}}}
+        div{class:"phase6_filters",label{input{r#type:"search",aria_label:"Search category groups",placeholder:"Search category groups",value:"{query}",oninput:move|e|query.set(e.value())}}}
         if !error().is_empty(){p{role:"alert","{error}"}}
         match data.read().as_ref(){None=>rsx!{p{"Loading..."}},Some(Err(e))=>rsx!{p{role:"alert","{e}"}},Some(Ok(rows))=>rsx!{
-            div{class:"customers_table_scroll",table{class:"customers_table",thead{tr{th{"Group"}th{"Description"}th{"Sort order"}th{"Favorite"}th{"Status"}th{""}}}tbody{
-                for g in rows.iter().filter(|g|g.name.to_lowercase().contains(&query().to_lowercase())){tr{key:"{g.id}",
-                    td{span{class:"group_swatch",style:"background:{g.color}"}"{g.name}"}td{"{g.description}"}td{"{g.sort_order}"}td{if g.is_favorite==1{"Yes"}else{"No"}}td{if g.is_active==1{"Active"}else{"Inactive"}}
-                    td{button{onclick:{let g=g.clone();move |_|editor.set(Some((g.clone(),false)))},ActionLabel{label:"Edit"}}}
-                }}
-            }}}
+            div{class:"category_group_list",
+                for g in rows.iter().filter(|g|g.name.to_lowercase().contains(&query().to_lowercase())){
+                    article{class:"category_group_card",key:"{g.id}",
+                        div{class:"category_group_identity",
+                            strong{span{class:"group_swatch",style:"background:{g.color}"}"{g.name}"}
+                            if !g.description.trim().is_empty(){p{"{g.description}"}}
+                            small{"Order: {g.sort_order} · " if g.is_favorite==1{"Favorite · "} if g.is_active==1{"Active"}else{"Inactive"}}
+                        }
+                        button{onclick:{let g=g.clone();move |_|editor.set(Some((g.clone(),false)))},ActionLabel{label:"Edit"}}
+                    }
+                }
+            }
             if rows.is_empty(){p{"No category groups."}}
         }}
         if let Some((group,new))=editor(){GroupEditor{db_form:db_form.clone(),group,new,onclose:move |_|editor.set(None),onsaved:move |_|{editor.set(None);data.restart();}}}

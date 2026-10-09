@@ -196,7 +196,7 @@ pub fn SettingsUpdates() -> Element {
 }
 
 #[component]
-pub fn UpdatePanel(allow_install: bool, mut busy: Signal<bool>) -> Element {
+pub fn UpdatePanel(allow_install: bool, mut busy: Signal<bool>, #[props(default)] compact:bool) -> Element {
     let mut version = use_signal(|| None::<String>);
     let mut status = use_signal(String::new);
     let mut installed = use_signal(|| None::<std::path::PathBuf>);
@@ -209,14 +209,7 @@ pub fn UpdatePanel(allow_install: bool, mut busy: Signal<bool>) -> Element {
         else if checking() { "Checking..." }
         else if allow_install && version().is_some() { "Download & Install" }
         else { "Check for Updates" };
-    rsx! {
-        section { class: "app_updates",
-            strong { "KAY POS {VERSION}" }
-            div { class: "app_update_actions",
-                button { class: "primary update_check", r#type: "button",
-                    disabled: restarting() || (busy() && installed().is_none()),
-                    "aria-busy": checking() || progress().is_some() || restarting(),
-                    onclick: move |_| {
+    let action=EventHandler::new(move |_:MouseEvent| {
                     if restarting() { return; }
                     if let Some(path) = installed() {
                         restarting.set(true);
@@ -259,16 +252,53 @@ pub fn UpdatePanel(allow_install: bool, mut busy: Signal<bool>) -> Element {
                         }
                         checking.set(false); busy.set(false);
                     });
-                }, crate::icons::ActionLabel {label:button_label} }
+
+    });
+    rsx! {
+        section { class: if compact {"app_updates app_updates_compact"}else{"app_updates"},
+            if !compact {strong { "KAY POS {VERSION}" }}
+            div { class: "app_update_actions",
+                button { class: if compact {"login_header_icon update_check"}else{"primary update_check"}, r#type: "button",
+                    title:button_label, aria_label:button_label,
+                    disabled: restarting() || (busy() && installed().is_none()),
+                    "aria-busy": checking() || progress().is_some() || restarting(),
+                    onclick: action, if compact {crate::icons::Icon {name:"refresh"}}else{crate::icons::ActionLabel {label:button_label}} }
             }
-            if let Some(value) = progress() {
+            if let Some(value) = progress().filter(|_| !allow_install) {
                 div { class: "app_update_progress",
                     progress { max: "100", value: value.percent().map(|v| v.to_string()), aria_label: value.label() }
                     small { "{value.detail()}" }
                 }
             }
             if !allow_install && version().is_some() { p { "Sign out to install this update." } }
-            if !status().is_empty() { p { role: "status", "{status}" } }
+            if !allow_install && !status().is_empty() { p { role: "status", "{status}" } }
+            if allow_install && (checking() || progress().is_some() || restarting() || !status().is_empty()) {
+                div {class:"modal_backdrop",
+                    section {class:"message_box",role:"dialog",aria_modal:"true",aria_label:"App Update",
+                        div {class:"message_icon","!"}
+                        div {class:"message_body",
+                            strong {"App Update"}
+                            if checking() {p {role:"status","Checking for updates..."}}
+                            else if restarting() {p {role:"status","Restarting KAY POS..."}}
+                            else if let Some(value)=progress() {
+                                p {role:"status","{value.label()}"}
+                                div {class:"app_update_progress",
+                                    progress {max:"100",value:value.percent().map(|v|v.to_string()),aria_label:value.label()}
+                                    small {"{value.detail()}"}
+                                }
+                            } else {p {role:"status","{status}"}}
+                        }
+                        if !checking() && progress().is_none() && !restarting() {
+                            div {class:"dialog_actions message_actions",
+                                if installed().is_some() || version().is_some() {
+                                    button {class:"primary",r#type:"button",autofocus:true,onclick:action,crate::icons::ActionLabel {label:button_label}}
+                                }
+                                button {r#type:"button",autofocus:installed().is_none() && version().is_none(),onclick:move |_|status.set(String::new()), crate::icons::ActionLabel { label:"OK" } }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }

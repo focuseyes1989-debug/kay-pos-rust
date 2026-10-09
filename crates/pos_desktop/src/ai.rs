@@ -201,7 +201,7 @@ pub fn AiPage(db_form: DbForm, actor: Session, on_navigate: EventHandler<Workspa
                                     }
                                     div {class:"ai_followups",
                                         for (label,prompt) in [("ဒီနေ့","today"),("မနေ့က","yesterday"),("ဒီလ","this month")] {
-                                            if matches!(entry.scope,Scope::Analytics|Scope::CategorySales|Scope::Dashboard|Scope::Digest|Scope::Expenses|Scope::Receipts|Scope::Attendance) {
+                                            if matches!(entry.scope,Scope::Analytics|Scope::ParentSales|Scope::PaymentSales|Scope::CategorySales|Scope::Dashboard|Scope::Digest|Scope::Expenses|Scope::Receipts|Scope::Attendance) {
                                                 {let entry=followup_entry.clone();rsx!{button {disabled:busy(),onclick:move |_|question.set(followup_prompt(&entry,prompt)),"{label}"}}}
                                             }
                                         }
@@ -221,7 +221,7 @@ pub fn AiPage(db_form: DbForm, actor: Session, on_navigate: EventHandler<Workspa
                 p {"ပစ္စည်းအမည်ကို တိုက်ရိုက်ရိုက်ပါ။ အရောင်း၊ ကုန်လက်ကျန်၊ အသုံးစရိတ်နဲ့ ရက်စွဲကို မေးခွန်းထဲမှာ ထည့်မေးနိုင်ပါတယ်။"}
 
                     div {class:"ai_suggestions",
-                        for (label,prompt) in [("ဒီနေ့ အရောင်း","ဒီနေ့ အရောင်း"),("ဒီလ အရောင်း","ဒီလ အရောင်း"),("လုပ်ငန်းအခြေအနေ","dashboard"),("လုပ်ငန်းအနှစ်ချုပ်","digest"),("အသုံးစရိတ်","expenses this month"),("ဖောက်သည်အကြွေး","debt"),("ကုန်လက်ကျန်နည်း","low stock"),("ဝန်ထမ်းတက်ရောက်မှု","attendance today"),("အသုံးပြုနည်း","help"),("ပစ္စည်းစာရင်း","products"),("ကုန်လက်ကျန်","inventory")] {
+                        for (label,prompt) in [("ဒီနေ့ အရောင်း","ဒီနေ့ အရောင်း"),("ဒီလ အရောင်း","ဒီလ အရောင်း"),("အရောင်း နှိုင်းယှဉ်","ဒီလနဲ့ ပြီးခဲ့တဲ့လ အရောင်း နှိုင်းယှဉ်ပေးပါ"),("အသုံးစရိတ် နှိုင်းယှဉ်","ဒီလနဲ့ ပြီးခဲ့တဲ့လ အသုံးစရိတ် နှိုင်းယှဉ်ပေးပါ"),("လုပ်ငန်းအခြေအနေ","dashboard"),("လုပ်ငန်းအနှစ်ချုပ်","digest"),("အသုံးစရိတ်","expenses this month"),("ဖောက်သည်အကြွေး","debt"),("ကုန်လက်ကျန်နည်း","low stock"),("ဝန်ထမ်းတက်ရောက်မှု","attendance today"),("အသုံးပြုနည်း","help"),("ပစ္စည်းစာရင်း","products"),("ကုန်လက်ကျန်","inventory")] {
                             button {r#type:"button",onclick:move |_|question.set(prompt.into()),"{label}"}
                         }
                     }
@@ -235,6 +235,7 @@ pub fn AiPage(db_form: DbForm, actor: Session, on_navigate: EventHandler<Workspa
 
 fn followup_prompt(entry:&ChatEntry,period:&str)->String {
     if entry.scope==Scope::CategorySales {format!("category sales {} {period}",entry.subject)}
+    else if entry.scope==Scope::PaymentSales {format!("payments {} {period}",entry.receipt_payment)}
     else if entry.scope==Scope::Receipts {
         let category=if entry.receipt_category.is_empty(){String::new()}else{format!("{} (category)",entry.receipt_category)};
         let amount=entry.subject.strip_prefix("amount:").map(|value|format!("{value} ကျပ်")).unwrap_or_default();
@@ -245,9 +246,11 @@ fn followup_prompt(entry:&ChatEntry,period:&str)->String {
 
 fn scope_view(scope: Scope) -> Option<WorkspaceView> {
     Some(match scope {
-        Scope::Analytics | Scope::CategorySales => WorkspaceView::SaleSummary,
+        Scope::Analytics | Scope::ParentSales | Scope::CategorySales | Scope::PaymentSales => WorkspaceView::SaleSummary,
         Scope::Expenses => WorkspaceView::Expenses,
         Scope::Customers | Scope::Credit => WorkspaceView::Customers,
+        Scope::Suppliers => WorkspaceView::Suppliers,
+        Scope::Categories => WorkspaceView::Categories,
         Scope::Products => WorkspaceView::Products,
         Scope::Inventory => WorkspaceView::Inventory,
         Scope::Employees | Scope::Attendance => WorkspaceView::Employees,
@@ -343,7 +346,7 @@ fn AnswerPanel(answer: ai::Answer, request:Request, db_form: DbForm, actor: Sess
                 tbody {for (index,row) in answer.rows.iter().enumerate() {tr {for (column,cell) in row.iter().enumerate() {td {
                     if column==0 && answer.receipt_ids.get(index).is_some() {
                         {let id=answer.receipt_ids[index];let mut open=open_receipt.clone();rsx!{button {class:"ai_text_action",disabled:detail_busy(),onclick:move |_|open(id),"{cell}"}}}
-                    } else if column==0 && answer.sources!="comparison" && matches!(request.scope,Scope::Products|Scope::Inventory|Scope::Expenses|Scope::Customers|Scope::Credit|Scope::Employees) {
+                    } else if column==0 && answer.sources!="comparison" && matches!(request.scope,Scope::Products|Scope::Inventory|Scope::Expenses|Scope::Customers|Scope::Credit|Scope::Employees|Scope::Suppliers) {
                         {let row=row.clone();let mut open=open_entity.clone();rsx!{button {class:"ai_text_action",disabled:detail_busy(),onclick:move |_|open(row.clone()),"{cell}"}}}
                     } else {"{cell}"}
                 }}}}}

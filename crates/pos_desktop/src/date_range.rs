@@ -181,3 +181,15 @@ mod tests {
         );
     }
 }
+
+#[component]
+pub fn DateRangeShortcuts(#[props(default)] disabled:bool, onchange:EventHandler<(String,String)>) -> Element {
+    rsx! { div { class:"date_range_shortcuts",
+        for (label,days) in [("Today",0i64),("Last 7 days",6),("Last 30 days",29)] {
+            button { disabled, onclick:move |_| {
+                let today=Local::now().date_naive();
+                onchange.call(((today-Duration::days(days)).to_string(),today.to_string()));
+            }, "{label}" }
+        }
+    } }
+}

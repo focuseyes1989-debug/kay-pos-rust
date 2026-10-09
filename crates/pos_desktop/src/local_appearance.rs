@@ -6,6 +6,10 @@ use std::{
 };
 
 const KEYS: &[&str] = &[
+    "sidebar_hidden_pages",
+    "barcode_label_width",
+    "barcode_label_height",
+    "barcode_label_dpi",
     "theme",
     "follow_system_theme",
     "window_resolution",
@@ -17,6 +21,7 @@ const KEYS: &[&str] = &[
     "ui_category_color",
     "ui_product_hover_color",
     "ui_sidebar_color",
+    "ui_icon_hover_color",
 ];
 type Settings = HashMap<String, String>;
 
@@ -110,6 +115,17 @@ mod tests {
             ("shop_name".into(), "Shop".into()),
         ]
         .into()
+    }
+    #[test]
+    fn menu_visibility_survives_reload_and_stays_local() {
+        let temp = tempfile::tempdir().unwrap();
+        let a = temp.path().join("a/appearance.json");
+        let b = temp.path().join("b/appearance.json");
+        resolve_at(&a, shared("light")).unwrap();
+        resolve_at(&b, shared("light")).unwrap();
+        save_at(&a, &[("sidebar_hidden_pages".into(), r#"["Reports"]"#.into())]).unwrap();
+        assert_eq!(resolve_at(&a, shared("dark")).unwrap()["sidebar_hidden_pages"], r#"["Reports"]"#);
+        assert!(!resolve_at(&b, shared("dark")).unwrap().contains_key("sidebar_hidden_pages"));
     }
     #[test]
     fn clients_are_independent_and_shared_settings_still_refresh() {

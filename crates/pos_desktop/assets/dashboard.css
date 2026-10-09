@@ -51,3 +51,23 @@
   .shell .dashboard_primary_metrics .dashboard_metric {padding:14px;}
   .shell .dashboard_section_heading {align-items:flex-start;}
 }
+
+/* Compact period activity cards. */
+.shell .dashboard_page .dashboard_primary_metrics .dashboard_metric { min-height: 0; padding: 10px 14px; gap: 6px; }
+.shell .dashboard_primary_metrics .dashboard_metric_heading { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.shell .dashboard_primary_metrics .dashboard_metric small { font-size: 11px; line-height: 1.4; }
+.shell .dashboard_primary_metrics .dashboard_metric_count { white-space: nowrap; }
+.shell .dashboard_primary_metrics .dashboard_metric strong { margin: 0; font-size: 21px; line-height: 1.25; }
+
+/* Compact current balances and operations. */
+.shell .dashboard_page .dashboard_operations_metrics .dashboard_metric { min-height: 0; padding: 10px 14px; gap: 6px; }
+.shell .dashboard_operations_metrics .dashboard_metric small { font-size: 11px; line-height: 1.4; }
+.shell .dashboard_operations_metrics .dashboard_metric strong { margin: 0; font-size: 21px; line-height: 1.25; }
+
+/* Compact expanded period details. */
+.shell .dashboard_page .dashboard_more_metrics { padding: 10px 14px; }
+.shell .dashboard_page .dashboard_more_metrics .dashboard_metric { min-height: 0; padding: 10px 14px; gap: 6px; }
+.shell .dashboard_more_metrics .dashboard_metric_heading { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.shell .dashboard_more_metrics .dashboard_metric small { font-size: 11px; line-height: 1.4; }
+.shell .dashboard_more_metrics .dashboard_metric_count { white-space: nowrap; }
+.shell .dashboard_more_metrics .dashboard_metric strong { margin: 0; font-size: 21px; line-height: 1.25; }

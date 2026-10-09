@@ -223,6 +223,7 @@ pub fn Controls(
     mut customer: Signal<Option<i32>>,
     mut payment: Signal<String>,
     mut active: Signal<Option<String>>,
+    mut clear_requested: Signal<bool>,
     blocked: bool,
     visible: bool,
 ) -> Element {
@@ -315,7 +316,8 @@ pub fn Controls(
                     active.set(None);
                     cart.set(vec![]);
                     customer.set(None);
-                    message.set(format!("Saved {}", out.hold.hold_no));
+                    payment.set("Cash".into());
+                    message.set(if matches!(&c.action,Action::Discard{..}) {"Cart cleared. Ready for a new sale.".into()} else {format!("Saved {}", out.hold.hold_no)});
                 }
                 journal.set(Ok(j));
                 initialized.set(true);
@@ -332,36 +334,44 @@ pub fn Controls(
             }
         });
     };
+    let mut clear_run = run.clone();
+    use_effect(move || {
+        if clear_requested() {
+            clear_requested.set(false);
+            if let Some(token) = active() {
+                clear_run(Command { request_id:pos_core::auth::new_request_id(), action:Action::Discard{token} });
+            }
+        }
+    });
     // Recovery is explicit: never replace a live cart automatically.
     rsx! {
         if visible {div{class:"held_toolbar",
             button{class:"held_icon_button",title:"Hold sale",aria_label:"Hold sale",disabled:blocked||busy()||cart().is_empty()||recovery,onclick:move |_|holding.set(true),ActionLabel{label:"Hold sale"}}
             button{class:"held_icon_button",title:"Held sales",aria_label:"Held sales",disabled:blocked||busy()||!cart().is_empty()||active().is_some()||recovery,onclick:move |_|{modal.set(true);refresh+=1;},ActionLabel{label:"Held sales"}}
-            if active().is_some(){span{"Resumed hold"}}
-            if !message().is_empty(){span{role:"status","{message}"}}
+            if active().is_some(){span{class:"held_status_badge","Resumed"}}
         }}
-        if holding(){div{class:"modal_backdrop",section{class:"customer_dialog held_dialog",h2{"Hold sale"}
+        if holding(){div{class:"modal_backdrop",section{class:"customer_dialog held_dialog hold_sale_dialog",role:"dialog",aria_modal:"true",aria_label:"Hold sale",h2{"Hold sale"}
             label{"Note / customer reference" input{value:"{note}",oninput:move|e|note.set(e.value()),disabled:busy()}}
             div{class:"customers_actions",button{disabled:busy(),onclick:move |_|holding.set(false),ActionLabel{label:"Cancel"}}
                 button{class:"customer_primary",disabled:busy(),onclick:{let mut run=run.clone();move |_|{match make_hold(&cart(),customer(),payment(),note()){
                     Ok(hold)=>run(Command{request_id:pos_core::auth::new_request_id(),action:Action::Save{hold,return_token:active()}}),Err(e)=>message.set(format!("{e:#}"))
                 }}},ActionLabel{label:"Hold sale"}}
-            }p{role:"status","{message}"}
+            }
         }}}
         if modal(){div{class:"modal_backdrop",section{class:"customer_dialog held_dialog",role:"dialog",aria_modal:"true",aria_label:"Held sales",
             header{class:"customers_header",h2{"Held sales"}button{disabled:busy(),onclick:move |_|modal.set(false),ActionLabel{label:"Close"}}}
-            match data.read().as_ref(){None=>rsx!{p{"Loading..."}},Some(Err(e))=>rsx!{p{role:"alert","{e}"}},Some(Ok(rows))=>rsx!{
+            match data.read().as_ref(){None=>rsx!{p{"Loading..."}},Some(Err(e))=>rsx!{crate::MessageBox{title:"Held sales".to_string(),message:e.clone(),on_close:move |_|modal.set(false)}},Some(Ok(rows))=>rsx!{
                 for h in rows{article{class:"held_row",key:"{h.id}",div{strong{"{h.hold_no}"}small{"{h.customer_name} / {h.item_count} items / {crate::format_ks(h.total_amount)}"}small{"{h.note}"}small{"{h.created_at}"}}
                     button{disabled:busy()||blocked||!cart().is_empty(),onclick:{let id=h.id;let mut run=run.clone();move |_|run(Command{request_id:pos_core::auth::new_request_id(),action:Action::Resume{id}})},ActionLabel{label:"Resume sale"}}
                 }}if rows.is_empty(){p{"No held sales."}}
-            }}p{role:"alert","{message}"}
+            }}
         }}}
         if !blocked && (journal().is_err()||recovery) {div{class:"modal_backdrop",section{class:"customer_dialog held_dialog",role:"dialog",aria_modal:"true",aria_label:"Held cart recovery",
-            h2{"Held cart recovery"}p{role:"alert","{message}"}
+            h2{"Held cart recovery"}
             match journal(){Err(e)=>rsx!{p{"{e}"}},Ok(j)=>rsx!{
                 p{"Operator: {j.owner}"}
                 if let Some(c)=j.pending{
-                    button{disabled:busy()||blocked,onclick:{let c=c.clone();let mut run=run.clone();move |_|run(c.clone())},"Retry original request"}
+                    button{disabled:busy()||blocked,onclick:{let c=c.clone();let mut run=run.clone();move |_|run(c.clone())}, crate::icons::ActionLabel { label:"Retry original request" } }
                     button{disabled:busy()||blocked,onclick:{let db=db_restore.clone();let actor=actor_restore.clone();move |_|{
                         if journal().as_ref().is_ok_and(|j|j.owner!=actor.username()){message.set("Sign in as the original operator first.".into());return}
                         let db=db.clone();let actor=actor.clone();let c=c.clone();busy.set(true);spawn(async move{
@@ -379,7 +389,7 @@ pub fn Controls(
                                 save(&db,&next)?;active.set(next.active.clone());journal.set(Ok(next));initialized.set(true);modal.set(false);holding.set(false);message.set("Unsaved request cancelled.".into());Ok::<_,anyhow::Error>(())
                             }.await;busy.set(false);if let Err(e)=result{message.set(format!("{e:#}"));}
                         });
-                    }},"Check and cancel unsaved request"}
+                    }}, crate::icons::ActionLabel { label:"Check and cancel unsaved request" } }
                 }
                 else if let Some(token)=j.active{
                     button{disabled:busy()||blocked,onclick:{let db=db_restore.clone();let actor=actor_restore.clone();let token=token.clone();move |_|{
@@ -391,15 +401,16 @@ pub fn Controls(
                             }else{completed(&db)?;journal.set(Ok(Journal::default()));active.set(None);}
                             initialized.set(true);Ok::<_,anyhow::Error>(())
                         }.await;busy.set(false);if let Err(e)=result{message.set(format!("{e:#}"));}});
-                    }},"Recover saved cart"}
+                    }}, crate::icons::ActionLabel { label:"Recover saved cart" } }
                     button{disabled:busy()||blocked,onclick:{let db=db_restore.clone();let actor=actor_restore.clone();let run=run.clone();move |_|{let db=db.clone();let actor=actor.clone();let token=token.clone();let mut run=run.clone();busy.set(true);spawn(async move{
                         let result=async{let pool=pos_core::connect(&db.database_config()?).await?;core::session(&pool,&actor,&token).await?.context("Hold already resolved")}.await;
                         busy.set(false);
                         match result{Ok(out)=>run(Command{request_id:pos_core::auth::new_request_id(),action:Action::Save{hold:out.hold,return_token:Some(token)}}),Err(e)=>message.set(format!("{e:#}"))}
-                    });}},"Return saved hold"}
+                    });}}, crate::icons::ActionLabel { label:"Return saved hold" } }
                 }
             }}
             button{disabled:busy(),onclick:move |_|login.set(None),ActionLabel{label:"Sign out"}}
         }}}
+        if !message().is_empty(){crate::MessageBox{title:"Held sale".to_string(),message:message(),on_close:move |_|message.set(String::new())}}
     }
 }

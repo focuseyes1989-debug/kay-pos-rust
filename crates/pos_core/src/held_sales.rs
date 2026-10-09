@@ -19,6 +19,7 @@ pub struct Hold {
 const SELECT:&str="SELECT id,hold_no,cart_json,customer_id,COALESCE(customer_name,'') AS customer_name,COALESCE(payment_type,'Cash') AS payment_type,COALESCE(note,'') AS note,COALESCE(total_amount,0)::float8 AS total_amount,COALESCE(item_count,0) AS item_count,created_at::text AS created_at FROM held_sales";
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Action {
+    Discard { token: String },
     Save {
         hold: Hold,
         return_token: Option<String>,
@@ -169,6 +170,16 @@ pub async fn execute(pool: &PgPool, actor: &Session, c: &Command) -> Result<Outc
                 .bind(id)
                 .fetch_one(&mut *tx)
                 .await?;
+            Outcome { hold, token: None }
+        }
+        Action::Discard { token } => {
+            lock_session(&mut tx, actor, token).await?;
+            let body: String = sqlx::query_scalar("SELECT body FROM rust_held_sessions WHERE token=$1")
+                .bind(token).fetch_one(&mut *tx).await?;
+            let hold = serde_json::from_str(&body)?;
+            // A discarded session is resolved without creating a sale or changing stock.
+            sqlx::query("UPDATE rust_held_sessions SET state='returned',updated_at=CURRENT_TIMESTAMP WHERE token=$1")
+                .bind(token).execute(&mut *tx).await?;
             Outcome { hold, token: None }
         }
         Action::Resume { id } => {

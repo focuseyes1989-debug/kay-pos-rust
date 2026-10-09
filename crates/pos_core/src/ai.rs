@@ -9,10 +9,14 @@ pub enum Scope {
     Dashboard,
     Analytics,
     CategorySales,
+    ParentSales,
+    PaymentSales,
+    Categories,
     Products,
     Digest,
     Expenses,
     Customers,
+    Suppliers,
     Credit,
     Employees,
     Attendance,
@@ -26,10 +30,14 @@ impl Scope {
         match self {
             Self::Dashboard => "လုပ်ငန်းအခြေအနေ အကူအညီ",
             Self::Analytics => "အရောင်းအချက်အလက် ခွဲခြမ်းစိတ်ဖြာမှု",
+            Self::ParentSales => "Parent Category အလိုက် ရောင်းရငွေ",
             Self::CategorySales => "Category အလိုက် ရောင်းရငွေ",
+            Self::PaymentSales => "Payment အလိုက် ရောင်းရငွေ",
+            Self::Categories => "လက်ရှိ Category စာရင်း",
             Self::Products => "ကုန်ပစ္စည်း အကူအညီ",
             Self::Digest => "လုပ်ငန်းအကျဉ်းချုပ်",
             Self::Expenses => "အသုံးစရိတ်",
+            Self::Suppliers => "Supplier စာရင်း",
             Self::Customers => "ဖောက်သည်စာရင်း",
             Self::Credit => "လက်ရှိဖောက်သည်အကြွေး",
             Self::Employees => "ဝန်ထမ်းစာရင်း",
@@ -42,16 +50,18 @@ impl Scope {
     }
     fn permissions(self) -> &'static [&'static str] {
         match self {
+            Self::Categories => &["ai_pages", "categories"],
             Self::Products => &["ai_pages", "products"],
             Self::Inventory => &["ai_pages", "products", "inventory"],
             Self::Expenses => &["ai_pages", "expense"],
+            Self::Suppliers => &["ai_pages", "suppliers"],
             Self::Customers => &["ai_pages", "customers"],
             Self::Credit => &["ai_pages", "credit"],
             Self::Employees => &["ai_pages", "employees"],
             Self::Attendance => &["ai_pages", "employees", "attendance"],
             Self::Receipts => &["ai_pages", "receipts"],
             Self::Help | Self::Diagnostics => &["ai_pages"],
-            Self::Analytics | Self::CategorySales => &["ai_pages", "sales_summary"],
+            Self::Analytics | Self::CategorySales | Self::ParentSales | Self::PaymentSales => &["ai_pages", "sales_summary"],
             _ => &[
                 "ai_pages",
                 "dashboard",
@@ -65,6 +75,8 @@ impl Scope {
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Request {
+    #[serde(default)]
+    pub best_sellers: bool,
     #[serde(default)]
     pub receipt_payment: String,
     #[serde(default)]
@@ -101,7 +113,7 @@ pub fn chat(text: &str, from: &str, to: &str) -> Result<Request> {
     chat_at(text,from,to,Local::now().date_naive())
 }
 pub(crate) fn chat_at(text:&str,from:&str,to:&str,today:NaiveDate)->Result<Request> {
-    let canonical=canonical_periods(text,today)?;
+    let canonical=canonical_periods(&canonical_topics(text),today)?;
     let text=canonical.as_str();
     ensure!(text.len() <= 1000, "မေးခွန်းသည် ရှည်လွန်းနေပါသည်");
     let normalized: String = text.chars().map(|c| match c {
@@ -129,24 +141,37 @@ pub(crate) fn chat_at(text:&str,from:&str,to:&str,today:NaiveDate)->Result<Reque
         (Scope::Diagnostics, lower.clone())
     } else if has(&["help", "how to", "အသုံးပြု", "ဘယ်လို", "သုံးနည်း", "/help"]) {
         (Scope::Help, lower.clone())
+    } else if (has(&["sales", "sale", "revenue", "ရောင်းရငွေ", "ရောင်းအား", "အရောင်း"])
+        && has(&["expense", "အသုံးစရိတ်", "အသုံးစားရိတ်", "ကုန်ကျစရိတ်"]))
+        || has(&["လက်ကျန်ငွေ", "ငွေလက်ကျန်", "sales minus expenses", "income minus expenses"]) {
+        (Scope::Dashboard, "financial_summary".into())
     } else if has(&["low stock", "out of stock", "inventory", "stock", "လက်ကျန်နည်း", "လက်ကျန်ကုန်", "ကုန်လက်ကျန်", "လက်ကျန်"]) {
-        let term = subject(&lower, &["inventory", "stock", "ကုန်လက်ကျန်", "လက်ကျန်", "product", "products", "ပစ္စည်း"], true);
+        let mut stock_text=lower.clone();
+        for word in ["ကုန်လက်ကျန်","လက်ကျန်","inventory","stock","products","product","ကုန်ပစ္စည်း","ပစ္စည်း","(category)","category"] {stock_text=stock_text.replace(word," ");}
+        let term = subject(&stock_text, &[], true);
         (Scope::Inventory, if has(&["out of stock", "လက်ကျန်ကုန်"]) {"out".into()}
             else if has(&["low stock", "လက်ကျန်နည်း"]) {"low".into()}
             else if term.is_empty() {"all".into()} else {format!("search:{term}")})
     } else if has(&["attendance", "check-in", "နောက်ကျ", "တက်ရောက်"]) {
         (Scope::Attendance, if has(&["late", "နောက်ကျ"]) {"late".into()} else {String::new()})
+    } else if has(&["supplier","suppliers","ပေးသွင်းသူ","ကုန်ပစ္စည်းပေးသွင်းသူ"]) {
+        (Scope::Suppliers,person_subject(&lower))
     } else if has(&["employee", "ဝန်ထမ်း"]) {
         (Scope::Employees, person_subject(&lower))
-    } else if has(&["expense", "အသုံးစရိတ်", "အသုံးစားရိတ်", "ကုန်ကျစရိတ်", "အသုံးစရိတ်စုစုပေါင်း"]) {
-        (Scope::Expenses, subject(&lower, &["expenses", "expense", "အသုံးစရိတ်", "အသုံးစားရိတ်", "ကုန်ကျစရိတ်", "အသုံးစရိတ်စုစုပေါင်း"], true))
-    } else if has(&["debt", "credit", "အကြွေး"]) && !has(&["receipt", "invoice", "ဘောင်ချာ"]) {
+    } else if has(&["expense", "အထွက်စာရင်း", "အသုံးစရိတ်", "အသုံးစားရိတ်", "ကုန်ကျစရိတ်", "အသုံးစရိတ်စုစုပေါင်း"]) {
+        (Scope::Expenses, expense_subject(&lower))
+    } else if has(&["parent","မိခင်အမျိုးအစား"]) && has(&["sales","sale","ရောင်းရငွေ","ရောင်းအား","အရောင်း","category","categories","အမျိုးအစား"]) {
+        let term=lower.replace("parent"," ").replace("မိခင်အမျိုးအစား"," ").replace('/'," ");
+        (Scope::ParentSales, category_subject(&term)?)
+    } else if has(&["debt", "credit", "အကြွေး"]) && !has(&["receipt", "invoice", "ဘောင်ချာ", "payment", "ငွေပေးချေမှု"]) {
         (Scope::Credit, person_subject(&lower))
     } else if has(&["customer", "ဖောက်သည်"]) {
         (Scope::Customers, person_subject(&lower))
     } else if has(&["receipt", "invoice", "ဘောင်ချာ"]) {
         let (category,amount_text)=receipt_category_prompt(&lower)?;
         (Scope::Receipts, receipt_amount(&if category.is_empty(){amount_text}else{amount_text.replace(&category," ")})?)
+    } else if has(&["payment", "ငွေပေးချေမှု", "ငွေချေမှု"]) || !receipt_payment(&lower).is_empty() {
+        (Scope::PaymentSales, String::new())
     } else if ["product", "products", "search", "ပစ္စည်း", "ကုန်ပစ္စည်း", "ရှာ"].iter().any(|prefix| lower==*prefix || lower.starts_with(&format!("{prefix} "))) {
         (Scope::Products, subject(&lower, &["products", "product", "search", "ကုန်ပစ္စည်း", "ပစ္စည်း", "ရှာ"], false))
     } else if has(&["dashboard", "business summary", "လုပ်ငန်းအကျဉ်းချုပ်"]) {
@@ -158,6 +183,10 @@ pub(crate) fn chat_at(text:&str,from:&str,to:&str,today:NaiveDate)->Result<Reque
         if has(&["category", "categories", "အမျိုးအစား"]) || !category.is_empty() {
             (Scope::CategorySales, category)
         } else {(Scope::Analytics, String::new())}
+    } else if has(&["categories","category","အမျိုးအစားစာရင်း"]) {
+        let mut term=subject(&lower,&[],true);
+        for word in ["categories","category","အမျိုးအစားစာရင်း","လက်ရှိ","များကို","များ","တွေကို","တွေ","အားလုံး","စာရင်း","current","list","all","show","please"] {term=term.replace(word," ");}
+        (Scope::Categories,term.trim().trim_end_matches("ကို").trim().to_owned())
     } else {
         ensure!(lower.len()<=200,"ပစ္စည်းရှာဖွေစာသား ရှည်လွန်းနေပါသည်။ မေးခွန်းတွင် အရောင်း၊ အသုံးစရိတ်၊ ကုန်လက်ကျန် စသည့်အကြောင်းအရာကို ထည့်ပါ။");
         (Scope::Products, subject(&lower, &[], false))
@@ -197,7 +226,8 @@ pub(crate) fn chat_at(text:&str,from:&str,to:&str,today:NaiveDate)->Result<Reque
         _ => (from, to),
     };
     Ok(Request {
-        receipt_payment: if scope==Scope::Receipts {receipt_payment(&lower).into()}else{String::new()},
+        best_sellers: scope==Scope::CategorySales && ["အကောင်းဆုံး","အများဆုံး","best selling","best-selling","best sellers","top products"].iter().any(|word|lower.contains(word)),
+        receipt_payment: if matches!(scope,Scope::Receipts|Scope::PaymentSales) {payment_selector(&lower)}else{String::new()},
         receipt_category: if scope==Scope::Receipts {receipt_category_prompt(&lower)?.0}else{String::new()},
         scope,
         from,
@@ -289,24 +319,62 @@ async fn read_answer(pool: &PgPool, actor: &Session, r: &Request) -> Result<Answ
         notes: vec!["ဤအဖြေကို PostgreSQL ဒေတာနှင့် သတ်မှတ်ထားသော စည်းမျဉ်းများဖြင့် စက်တွင်း၌ တွက်ချက်ထားပြီး ပြင်ပ AI ဝန်ဆောင်မှုကို မဆက်သွယ်ပါ။".into()],
     };
     match r.scope {
-        Scope::CategorySales => {
+        Scope::PaymentSales => {
+            let pattern=if r.receipt_payment.is_empty(){None}else{Some(payment_pattern(&r.receipt_payment)?)};
+            let invalid:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM sales s WHERE s.created_at >= $1 AND s.created_at < $2 AND s.status='completed' AND ($3::text IS NULL OR lower(regexp_replace(s.payment_type,'\\s','','g')) ~ $3) AND (s.total IS NULL OR s.total<0 OR s.total::text IN ('NaN','Infinity','-Infinity') OR EXISTS(SELECT 1 FROM sale_items i WHERE i.sale_id=s.id AND COALESCE(i.refunded_qty,0)>0)))")
+                .bind(start.and_hms_opt(0,0,0).unwrap()).bind(end.and_hms_opt(0,0,0).unwrap()).bind(pattern.as_deref()).fetch_one(&mut *tx).await?;
+            ensure!(!invalid,"Receipt totals / partial refunds require verification before reporting sales");
+            let rows:Vec<(String,i64,String)>=sqlx::query_as(PAYMENT_SALES_SQL)
+                .bind(start.and_hms_opt(0,0,0).unwrap()).bind(end.and_hms_opt(0,0,0).unwrap()).bind(pattern.as_deref()).fetch_all(&mut *tx).await?;
+            let total=rows.iter().try_fold(rust_decimal::Decimal::ZERO,|sum,row| -> Result<_> {Ok(sum.checked_add(row.2.parse()?).context("Sales total overflow")?)})?;
+            answer.total_amount=Some(total.to_string());
+            answer.headers=vec!["Payment method".into(),"Receipts".into(),"Sales".into()];
+            answer.rows=rows.into_iter().map(|(method,count,amount)|vec![method,count.to_string(),amount]).collect();
+            answer.narrative=format!("{} – {}: {} ရောင်းရငွေစုစုပေါင်း {} Ks",r.from,r.to,if r.receipt_payment.is_empty(){"Payment အားလုံး"}else{&r.receipt_payment},total);
+            answer.sources="sales, sale_items".into();
+            answer.notes.push("ပြီးစီးသည့် အရောင်းများသာ ပါဝင်သည်။ Refund မပါဝင်ပါ။ ရောင်းရငွေဖြစ်ပြီး အကြွေးပြန်ဆပ်ငွေ မပါဝင်ပါ။".into());
+        }
+        Scope::Categories => {
+            let rows:Vec<String>=sqlx::query_scalar("SELECT json_build_array(c.name,COALESCE(parent.name,'—'),COALESCE(c.status,'active'),(SELECT COUNT(*)::text FROM products p WHERE p.category_id=c.id OR (p.category_id IS NULL AND p.category=c.name)))::text FROM categories c LEFT JOIN categories parent ON parent.id=c.parent_id WHERE strpos(lower(c.name),lower($1))>0 ORDER BY c.sort_order,c.name,c.id LIMIT 201").bind(&r.product).fetch_all(&mut *tx).await?;
+            answer.headers=["Category","Parent","Status","Products"].into_iter().map(String::from).collect();
+            answer.rows=rows.iter().take(200).map(|row|{let v:Vec<serde_json::Value>=serde_json::from_str(row)?;Ok(v.iter().map(|cell|cell.as_str().unwrap_or("").to_owned()).collect())}).collect::<Result<Vec<_>>>()?;
+            answer.narrative=format!("လက်ရှိ Category စာရင်း {} ခု ပြထားပါသည်။",answer.rows.len());
+            answer.sources="categories, products".into();
+            answer.notes.push("လက်ရှိ category စာရင်း ဖြစ်ပြီး ရက်စွဲဖြင့် စစ်ထားသည့် အရောင်းစာရင်း မဟုတ်ပါ။".into());
+            if rows.len()>200 {answer.notes.push("ပထမ 200 categories သာ ပြထားသည်။ အမည်ထည့်ပြီး ထပ်ရှာနိုင်ပါသည်။".into());}
+        }
+        Scope::CategorySales | Scope::ParentSales => {
             let category_name=if r.product.is_empty(){None}else{
                 Some(resolve_category(&mut tx,&r.product).await?)
             };
-            let partial:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM sales s JOIN sale_items i ON i.sale_id=s.id WHERE s.created_at >= $1 AND s.created_at < $2 AND s.status='completed' AND COALESCE(i.refunded_qty,0)>0 AND ($3::text IS NULL OR EXISTS(SELECT 1 FROM sale_items matched JOIN products p ON p.id=matched.product_id LEFT JOIN categories c ON c.id=p.category_id WHERE matched.sale_id=s.id AND lower(trim(c.name))=lower(trim($3)))))")
+            let partial_sql="SELECT EXISTS(SELECT 1 FROM sales s JOIN sale_items i ON i.sale_id=s.id WHERE s.created_at >= $1 AND s.created_at < $2 AND s.status='completed' AND COALESCE(i.refunded_qty,0)>0 AND ($3::text IS NULL OR EXISTS(SELECT 1 FROM sale_items matched JOIN products p ON p.id=matched.product_id LEFT JOIN categories c ON c.id=p.category_id WHERE matched.sale_id=s.id AND lower(trim(c.name))=lower(trim($3)))))";
+            let partial_sql=if r.scope==Scope::ParentSales {partial_sql.replace("LEFT JOIN categories c ON c.id=p.category_id", "LEFT JOIN categories c ON c.id=p.category_id LEFT JOIN categories parent ON parent.id=c.parent_id").replace("trim(c.name)","trim(COALESCE(parent.name,c.name,p.category,'Uncategorized'))")}else{partial_sql.to_owned()};
+            let partial:bool=sqlx::query_scalar(&partial_sql)
                 .bind(start.and_hms_opt(0,0,0).unwrap()).bind(end.and_hms_opt(0,0,0).unwrap()).bind(&category_name).fetch_one(&mut *tx).await?;
             ensure!(!partial,"ဤ category တွင် တစ်စိတ်တစ်ပိုင်း refund မှတ်တမ်းရှိပါသည်။ ရောင်းရငွေမတွက်မီ receipt များကို စစ်ဆေးပါ။");
-            let rows:Vec<(String,i64,String,String,String)>=sqlx::query_as(CATEGORY_SALES_SQL)
+            let grouped_sql=if r.scope==Scope::ParentSales {parent_sales_sql()}else{CATEGORY_SALES_SQL.to_owned()};
+            let ranking_sql=grouped_sql
+                .replace("COALESCE(c.name,'Uncategorized') AS category,", "COALESCE(c.name,'Uncategorized') AS category,p.id AS product_id,COALESCE(p.name,i.product_name,'Unknown item') AS item,")
+                .replace("SELECT category,COUNT", "SELECT item,COUNT")
+                .replace("GROUP BY category ORDER BY", "GROUP BY product_id,item ORDER BY")
+                .replace("DESC,category", "DESC,item,product_id");
+            let rows:Vec<(String,i64,String,String,String)>=sqlx::query_as(if r.best_sellers {&ranking_sql}else{&grouped_sql})
                 .bind(start.and_hms_opt(0,0,0).unwrap()).bind(end.and_hms_opt(0,0,0).unwrap()).bind(&category_name).fetch_all(&mut *tx).await?;
             let mut total=rust_decimal::Decimal::ZERO;
             for (_,_,net,_,_) in &rows {total=total.checked_add(net.parse()?).context("Category total overflow")?;}
-            let name=category_name.as_deref().unwrap_or("Category အားလုံး");
+            let name=category_name.as_deref().unwrap_or(if r.scope==Scope::ParentSales {"Parent Category အားလုံး"}else{"Category အားလုံး"});
             answer.total_amount=Some(total.to_string());
             answer.narrative=if rows.is_empty(){format!("မေးထားတဲ့ကာလအတွင်း {name} ရောင်းရငွေမှတ်တမ်း မရှိပါဘူး။ စုစုပေါင်း 0 ကျပ်ပါ။")}
                 else{format!("မေးထားတဲ့ကာလအတွင်း {name} ရောင်းရငွေ စုစုပေါင်း {total} ကျပ် ရှိပါတယ်။")};
-            answer.headers=["Category","Receipts","ရောင်းရငွေ (ကျပ်)","အရေအတွက်","ပစ္စည်းစုစုပေါင်း (ကျပ်)"].into_iter().map(String::from).collect();
-            if rows.len()>50 {answer.notes.push("ပထမ category 50 ခုသာ ပြထားသည်။ စုစုပေါင်းတွင် category အားလုံး ပါဝင်သည်။".into());}
+            answer.headers=[if r.scope==Scope::ParentSales {"Parent Category"}else{"Category"},"Receipts","ရောင်းရငွေ (ကျပ်)","အရေအတွက်","ပစ္စည်းစုစုပေါင်း (ကျပ်)"].into_iter().map(String::from).collect();
+            if rows.len()>50 && !r.best_sellers {answer.notes.push("ပထမ category 50 ခုသာ ပြထားသည်။ စုစုပေါင်းတွင် category အားလုံး ပါဝင်သည်။".into());}
             answer.rows=rows.into_iter().take(50).map(|(name,count,net,qty,gross)|vec![name,count.to_string(),net,qty,gross]).collect();
+            if r.best_sellers {
+                answer.title=format!("{name} · ရောင်းအားအကောင်းဆုံးပစ္စည်းများ");
+                answer.headers[0]="Product".into();
+                answer.narrative=if answer.rows.is_empty(){format!("ရွေးထားသောကာလအတွင်း {name} အတွက် ရောင်းထားသည့်ပစ္စည်း မရှိပါ။")}else{format!("{name} ထဲမှ ပစ္စည်းများကို ရောင်းရငွေ အများဆုံးမှ အနည်းဆုံး စီထားပါသည်။ ပထမ 50 ပစ္စည်းအထိ ပြထားပါသည်။")};
+                answer.notes.push("အဆင့်သတ်မှတ်မှုသည် အရေအတွက် မဟုတ်ဘဲ receipt discount/tax ခွဲဝေပြီး ရောင်းရငွေအပေါ် အခြေခံသည်။ စုစုပေါင်းတွင် ကိုက်ညီသည့် ပစ္စည်းအားလုံး ပါဝင်သည်။".into());
+            }
             answer.sources="sales, sale_items, products, categories".into();
             answer.notes.push("ပြီးစီးသည့် receipt များသာ ပါဝင်သည်။ Category ရောင်းရငွေကို receipt Total (discount/tax အပါအဝင်) မှ ပစ္စည်းတန်ဖိုးအချိုးအလိုက် ခွဲတွက်ထားသည်။ Cash နှင့် Credit နှစ်ခုလုံး ပါဝင်ပြီး လက်ခံရရှိပြီးသော ငွေသားသီးသန့် မဟုတ်ပါ။".into());
             answer.notes.push("Category သည် ပစ္စည်း၏ လက်ရှိ category ဖြစ်သည်။ Receipt အရေအတွက်ကို category တစ်ခုချင်းစီအလိုက်တွက်ထား၍ category များကြား ထပ်နိုင်သည်။".into());
@@ -375,10 +443,12 @@ async fn read_answer(pool: &PgPool, actor: &Session, r: &Request) -> Result<Answ
             answer.rows = offline_guidance(r.scope, &r.product);
             answer.sources = "KAY POS Rust curated guidance".into();
         }
-        Scope::Expenses | Scope::Customers | Scope::Credit | Scope::Employees | Scope::Attendance | Scope::Inventory => {
+        Scope::Suppliers | Scope::Expenses | Scope::Customers | Scope::Credit | Scope::Employees | Scope::Attendance | Scope::Inventory => {
             let (headers, source, sql) = match r.scope {
                 Scope::Expenses => (vec!["Category", "Records", "Amount"], "expenses",
                     "SELECT json_build_array(COALESCE(category,'Uncategorized'),COUNT(*)::text,COALESCE(SUM(amount::numeric),0)::text)::text FROM expenses WHERE left(expense_date,10)>=$1 AND left(expense_date,10)<$2 GROUP BY category ORDER BY SUM(amount) DESC LIMIT 50"),
+                Scope::Suppliers => (vec!["Supplier", "Phone", "Company", "Contact person", "Status"], "suppliers",
+                    "SELECT json_build_array(name,COALESCE(phone,''),COALESCE(company_name,''),COALESCE(contact_person,''),COALESCE(status,'Active'))::text FROM suppliers WHERE $1::text IS NOT NULL AND $2::text IS NOT NULL ORDER BY name,id LIMIT 50"),
                 Scope::Customers => (vec!["Customer", "Phone", "Visits", "Total spent"], "customers",
                     "SELECT json_build_array(name,COALESCE(phone,''),COALESCE(total_visit,0)::text,COALESCE(total_spent,0)::numeric::text)::text FROM customers WHERE $1::text IS NOT NULL AND $2::text IS NOT NULL ORDER BY name,id LIMIT 50"),
                 Scope::Credit => (vec!["Customer", "Phone", "Current balance"], "customers",
@@ -388,14 +458,15 @@ async fn read_answer(pool: &PgPool, actor: &Session, r: &Request) -> Result<Answ
                 Scope::Attendance => (vec!["Date", "Employee", "In", "Out", "Status", "Late minutes"], "attendance, employees",
                     "SELECT json_build_array(a.attendance_date::text,e.full_name,COALESCE(a.check_in::text,''),COALESCE(a.check_out::text,''),COALESCE(a.status,''),COALESCE(a.late_minutes,0)::text)::text FROM attendance a JOIN employees e ON e.id=a.employee_id WHERE left(a.attendance_date::text,10)>=$1 AND left(a.attendance_date::text,10)<$2 ORDER BY a.attendance_date DESC,a.id DESC LIMIT 50"),
                 Scope::Inventory => (vec!["Product", "SKU", "Stock", "Low-stock level"], "products, product_variants",
-                    "WITH stock AS (SELECT p.id,p.name,p.sku,p.barcode,COALESCE(p.low_stock,0) AS threshold,CASE WHEN lower(COALESCE(p.sold_by,'Each'))='variants' THEN COALESCE((SELECT SUM(v.stock) FROM product_variants v WHERE v.product_id=p.id),0) ELSE COALESCE(p.stock,0) END AS quantity FROM products p WHERE lower(COALESCE(p.sold_by,'Each')) NOT IN ('service','restaurant')) SELECT json_build_array(name,COALESCE(sku,''),quantity::numeric::text,threshold::numeric::text)::text FROM stock WHERE quantity<=threshold AND $1::text IS NOT NULL AND $2::text IS NOT NULL ORDER BY quantity,id LIMIT 50"),
+                    "WITH stock AS (SELECT p.id,p.name,p.sku,p.barcode,COALESCE((SELECT c.name FROM categories c WHERE c.id=p.category_id),p.category,'') AS category,COALESCE(p.low_stock,0) AS threshold,CASE WHEN lower(COALESCE(p.sold_by,'Each'))='variants' THEN COALESCE((SELECT SUM(v.stock) FROM product_variants v WHERE v.product_id=p.id),0) ELSE COALESCE(p.stock,0) END AS quantity FROM products p WHERE lower(COALESCE(p.sold_by,'Each')) NOT IN ('service','restaurant')) SELECT json_build_array(name,COALESCE(sku,''),quantity::numeric::text,threshold::numeric::text)::text FROM stock WHERE quantity<=threshold AND $1::text IS NOT NULL AND $2::text IS NOT NULL ORDER BY quantity,id LIMIT 50"),
                 _ => (vec!["Invoice", "Date", "Total", "Payment", "Status"], "sales",
                     "SELECT json_build_array(COALESCE(invoice_no,''),created_at::text,COALESCE(total,0)::numeric::text,COALESCE(payment_type,''),COALESCE(status,''))::text FROM sales WHERE created_at >= $1::text::timestamp AND created_at < $2::text::timestamp ORDER BY created_at DESC,id DESC LIMIT 50"),
             };
             let sql = if r.scope==Scope::Inventory && r.product=="out" {sql.replace("quantity<=threshold", "quantity<=0")}
                 else if r.scope==Scope::Inventory && r.product=="all" {sql.replace("quantity<=threshold", "TRUE")}
-                else if r.scope==Scope::Inventory && r.product.starts_with("search:") {sql.replace("quantity<=threshold", "strpos(lower(name||' '||COALESCE(sku,'')||' '||COALESCE(barcode,'')),lower($3))>0")}
+                else if r.scope==Scope::Inventory && r.product.starts_with("search:") {sql.replace("quantity<=threshold", INVENTORY_SEARCH_FILTER)}
                 else if r.scope==Scope::Expenses && !r.product.is_empty() {sql.replace("GROUP BY category", "AND strpos(lower(COALESCE(category,'')||' '||COALESCE(description,'')),lower($3))>0 GROUP BY category")}
+                else if r.scope==Scope::Suppliers && !r.product.is_empty() {sql.replace("ORDER BY", "AND strpos(lower(name||' '||COALESCE(phone,'')||' '||COALESCE(company_name,'')||' '||COALESCE(contact_person,'')||' '||id::text),lower($3))>0 ORDER BY")}
                 else if matches!(r.scope,Scope::Customers|Scope::Credit) && !r.product.is_empty() {sql.replace("ORDER BY", "AND strpos(lower(name||' '||COALESCE(phone,'')||' '||id::text),lower($3))>0 ORDER BY")}
                 else if r.scope==Scope::Employees && !r.product.is_empty() {sql.replace("ORDER BY", "AND strpos(lower(full_name||' '||employee_no||' '||COALESCE(phone,'')),lower($3))>0 ORDER BY")}
                 else if r.scope==Scope::Attendance && r.product=="late" {sql.replace("ORDER BY a.attendance_date", "AND COALESCE(a.late_minutes,0)>0 ORDER BY a.attendance_date")}
@@ -422,7 +493,7 @@ async fn read_answer(pool: &PgPool, actor: &Session, r: &Request) -> Result<Answ
                 } else {format!("မေးထားတဲ့ကာလအတွင်း အသုံးစရိတ် စုစုပေါင်း {total} ရှိပါတယ်။ မှတ်တမ်း {count} ခုအပေါ် အခြေခံထားပါတယ်။ အမျိုးအစားအလိုက် အသေးစိတ်ကို အောက်မှာ ကြည့်နိုင်ပါတယ်။")};
             }
             answer.notes.push("အများဆုံး 50 records ပြထားသည်။".into());
-            if matches!(r.scope, Scope::Inventory | Scope::Customers | Scope::Credit | Scope::Employees) {
+            if matches!(r.scope, Scope::Inventory | Scope::Suppliers | Scope::Customers | Scope::Credit | Scope::Employees) {
                 answer.notes.push("လက်ရှိစာရင်းဖြစ်ပြီး ရွေးထားသောကာလ၏ သမိုင်းစာရင်းမဟုတ်ပါ။".into());
             }
             if r.scope==Scope::Expenses && !r.product.is_empty() {
@@ -496,6 +567,16 @@ async fn read_answer(pool: &PgPool, actor: &Session, r: &Request) -> Result<Answ
                     vec!["လက်ကျန်နည်းနေသော ကုန်ပစ္စည်း".into(), low.to_string()],
                     vec!["လက်ကျန်ကုန်နေသော ကုန်ပစ္စည်း".into(), out.to_string()],
                 ];
+                if r.product == "financial_summary" {
+                    let expense_total: Decimal = answer.rows[5][1].parse()?;
+                    let remainder = total.checked_sub(expense_total).context("Total overflow")?;
+                    answer.rows = vec![
+                        vec!["အရောင်းစုစုပေါင်း".into(), total.to_string()],
+                        vec!["အသုံးစရိတ်စုစုပေါင်း".into(), expense_total.to_string()],
+                        vec!["အရောင်း − အသုံးစရိတ်".into(), remainder.to_string()],
+                    ];
+                    answer.notes.push("အရောင်း − အသုံးစရိတ်သည် တွက်ချက်ထားသော ကျန်ငွေဖြစ်ပြီး လက်ဝယ်ငွေသား သို့မဟုတ် ဘဏ်လက်ကျန် မဟုတ်ပါ။ အကြွေးရောင်း ပါဝင်နိုင်ပါသည်။".into());
+                }
                 answer.sources.push_str(", expenses, customers, products");
                 answer.notes.push("ဖောက်သည်အကြွေးနှင့် ကုန်လက်ကျန်များသည် လက်ရှိတန်ဖိုးများဖြစ်ပြီး ယခင်ကာလတန်ဖိုးများ မဟုတ်ပါ။ အသုံးစရိတ်တွင် လစာစာရင်း ပါဝင်နိုင်ပါသည်။ ဤတန်ဖိုးသည် အသားတင်အမြတ် သို့မဟုတ် လက်ဝယ်ငွေ မဟုတ်ပါ။".into());
                 if scope == Scope::Digest {
@@ -530,6 +611,9 @@ async fn read_answer(pool: &PgPool, actor: &Session, r: &Request) -> Result<Answ
     Ok(answer)
 }
 
+// Prefer an exact category name; otherwise search product name, SKU or barcode.
+const INVENTORY_SEARCH_FILTER:&str="CASE WHEN EXISTS(SELECT 1 FROM stock c WHERE lower(trim(replace(c.category,'့်','့်')))=lower(trim(replace($3,'့်','့်')))) THEN lower(trim(replace(category,'့်','့်')))=lower(trim(replace($3,'့်','့်'))) ELSE strpos(lower(name||' '||COALESCE(sku,'')||' '||COALESCE(barcode,'')),lower($3))>0 END";
+
 fn numeric_parts(text: &str) -> impl Iterator<Item = &str> {
     text.split(|c:char| !c.is_ascii_digit() && !matches!(c,'.'|'/'|'-'|','))
         .map(|part|part.trim_matches(['.', '/', ','])).filter(|part|!part.is_empty())
@@ -549,13 +633,13 @@ fn category_subject(text: &str) -> Result<String> {
     }
     for marker in ["(category)","(categories)","(အမျိုးအစား)"] {value=value.replace(marker," ");}
     for phrase in ["ဘယ်လောက်ရှိလဲ", "ဘယ်လောက်လဲ", "ဘယ်လောက်", "ရောင်းရသလဲ", "ရောင်းရလဲ", "ရောင်းရလား"] {value=value.replace(phrase," ");}
-    for word in ["ပြီးခဲ့တဲ့အပတ်", "ပြီးခဲ့တဲ့လ", "this month", "last month", "this week", "last week", "this year", "last year", "yesterday", "today", "မနေ့က", "ဒီနေ့", "ယနေ့", "ဒီအပတ်", "ဒီလ", "ရက်နေ့", "ရောင်းရငွေ", "အရောင်းစုစုပေါင်း", "ရောင်းအား", "အရောင်း", "ပြပေးပါ", "ပြောပြပါ", "ပြပါ", "ဘယ်လောက်ရှိလဲ", "ဘယ်လောက်လဲ", "categories", "category", "အမျိုးအစားအလိုက်", "အမျိုးအစား", "sales", "sale", "revenue", "show", "total"] {value=value.replace(word," ");}
+    for word in ["ပြီးခဲ့တဲ့အပတ်", "ပြီးခဲ့တဲ့လ", "this month", "last month", "this week", "last week", "this year", "last year", "yesterday", "today", "မနေ့က", "ဒီနေ့", "ယနေ့", "ဒီအပတ်", "ဒီလ", "ရက်နေ့", "ရောင်းရငွေ", "အရောင်းစုစုပေါင်း", "ရောင်းအား", "အရောင်း", "ပြပေးပါ", "ပြောပြပါ", "ပြပါ", "ဘယ်လောက်ရှိလဲ", "ဘယ်လောက်လဲ", "categories", "category", "အမျိုးအစားအလိုက်", "အမျိုးအစား", "အကောင်းဆုံးကို", "အကောင်းဆုံး", "အများဆုံးကို", "အများဆုံး", "best selling", "best-selling", "best sellers", "top products", "sales", "sale", "revenue", "show", "total"] {value=value.replace(word," ");}
     let value=value.trim().trim_matches(['?', '။', '？', '"', '\'']).trim();
     if ["all", "အားလုံး", "အလိုက်", ""].contains(&value) {return Ok(String::new());}
     ensure!(value.len()<=200,"Category အမည် ရှည်လွန်းပါသည်");
     Ok(value.split_whitespace().collect::<Vec<_>>().join(" "))
 }
-fn prompt_dates(text: &str) -> Result<Vec<NaiveDate>> {
+pub(crate) fn prompt_dates(text: &str) -> Result<Vec<NaiveDate>> {
     let mut dates=Vec::new();
     for part in numeric_parts(text) {
         let format=if part.matches('-').count()==2 {Some("%Y-%m-%d")}
@@ -572,16 +656,41 @@ fn receipt_payment(text:&str)->&'static str {
     else if text.contains("cash")||text.contains("ငွေသား"){"Cash"}
     else if text.contains("credit")||text.contains("အကြွေး"){"Credit"}else{""}
 }
-fn payment_pattern(payment:&str)->Result<&'static str> {
+fn payment_selector(text:&str)->String {
+    let base=receipt_payment(text);
+    let compact:String=text.chars().filter(|c|!c.is_whitespace()).collect();
+    for alias in match base {"KPay"=>vec!["kpay","kbzpay"],"WavePay"=>vec!["wavepay"],_=>vec![]} {
+        if let Some((_,tail))=compact.split_once(&format!("{alias}(")) {
+            if let Some((account,_))=tail.split_once(')') {
+                if !account.is_empty() && account.chars().all(|c|c.is_ascii_digit()) {return format!("{base}({account})");}
+            }
+        }
+    }
+    base.into()
+}
+fn payment_pattern(payment:&str)->Result<String> {
+    if let Some((base,account))=payment.split_once('(') {
+        let account=account.strip_suffix(')').unwrap_or("");
+        ensure!(!account.is_empty() && account.chars().all(|c|c.is_ascii_digit()),"Invalid payment account");
+        let alias=match base {"KPay"=>"(kpay|kbzpay)","WavePay"=>"wavepay",_=>anyhow::bail!("Unsupported payment account")};
+        return Ok(format!("^{alias}[(]{account}[)]$"));
+    }
     Ok(match payment {
         "KPay"=>"^(kpay|kbzpay)([(][0-9]+[)])?$",
         "WavePay"=>"^wavepay([(][0-9]+[)])?$",
         "Cash"=>"^cash$", "Credit"=>"^credit$",
         _=>anyhow::bail!("မပံ့ပိုးသော ငွေပေးချေမှုနည်းလမ်းပါ"),
-    })
+    }.into())
 }
 fn receipt_category_prompt(text: &str) -> Result<(String,String)> {
     let mut cleaned=text.to_owned();
+    let selector=payment_selector(text);
+    if let Some((_,suffix))=selector.split_once('(') {
+        let account=format!("({suffix}");
+        for alias in ["kpay","kbzpay","kbz pay","wavepay","wave pay"] {
+            cleaned=cleaned.replace(&format!("{alias}{account}")," ");
+        }
+    }
     if !receipt_payment(text).is_empty() {
         for word in ["kbz pay","kbzpay","kpay","wave pay","wavepay","cash","credit","ငွေသား","အကြွေး","နဲ့","ဖြင့်"] {cleaned=cleaned.replace(word," ");}
     }
@@ -624,7 +733,7 @@ pub async fn receipt_detail(pool: &PgPool, actor: &Session, sale_id: i32) -> Res
 
 fn person_subject(text:&str)->String {
     let mut value=subject(text,&[],true);
-    for word in ["customers","customer","employees","employee","ဖောက်သည်","ဝန်ထမ်း","အကြွေး","debt","credit","အချက်အလက်များ","အချက်အလက်","အသေးစိတ်","အမည်","နာမည်","details","detail","data","information","search","ရှာပေးပါ","ရှာပါ","ရှာပေး","ပြပေးပါ","ပြပါ"] {value=value.replace(word," ");}
+    for word in ["ကုန်ပစ္စည်းပေးသွင်းသူ","ပေးသွင်းသူ","suppliers","supplier","customers","customer","employees","employee","ဖောက်သည်","ဝန်ထမ်း","အကြွေး","debt","credit","အချက်အလက်များ","အချက်အလက်","အသေးစိတ်","အမည်","နာမည်","details","detail","data","information","search","ရှာပေးပါ","ရှာပါ","ရှာပေး","ပြပေးပါ","ပြပါ"] {value=value.replace(word," ");}
     let value=value.trim().trim_end_matches("ကို").trim().trim_end_matches("ရဲ့").trim().trim_end_matches("၏").trim();
     if ["all","အားလုံး","စာရင်း","list",""].contains(&value){String::new()}else{value.split_whitespace().collect::<Vec<_>>().join(" ")}
 }
@@ -653,9 +762,9 @@ fn subject(text: &str, markers: &[&str], remove_dates: bool) -> String {
 
 pub fn scope_prompt(scope: Scope) -> &'static str {
     match scope {
-        Scope::Analytics => "sales", Scope::CategorySales => "category sales", Scope::Dashboard => "dashboard", Scope::Digest => "digest",
+        Scope::ParentSales => "parent sales", Scope::PaymentSales => "payments", Scope::Categories => "categories", Scope::Analytics => "sales", Scope::CategorySales => "category sales", Scope::Dashboard => "dashboard", Scope::Digest => "digest",
         Scope::Expenses => "expenses", Scope::Receipts => "receipts", Scope::Attendance => "attendance",
-        Scope::Customers => "customers", Scope::Credit => "debt", Scope::Employees => "employees",
+        Scope::Suppliers => "suppliers", Scope::Customers => "customers", Scope::Credit => "debt", Scope::Employees => "employees",
         Scope::Inventory => "low stock", Scope::Products => "product", Scope::Help => "help", Scope::Diagnostics => "error",
     }
 }
@@ -740,6 +849,15 @@ fn offline_guidance(scope: Scope, query: &str) -> Vec<Vec<String>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn financial_summary_prompt_precedes_inventory_and_expenses() {
+        for prompt in ["ဒီနေ့ ရောင်းအား အသုံးစရိတ် လက်ကျန်ငွေ စုစုပေါင်း ပြပါ", "sales and expenses today", "ဒီနေ့ ဝင်ငွေ ထွက်ငွေ စုစုပေါင်း", "လက်ကျန်ငွေ ဘယ်လောက်ရှိလဲ"] {
+            let r = chat(prompt, "2026-10-09", "2026-10-09").unwrap();
+            assert_eq!(r.scope, Scope::Dashboard);
+            assert_eq!(r.product, "financial_summary");
+        }
+        assert_eq!(chat("ကုန်လက်ကျန်", "2026-10-09", "2026-10-09").unwrap().scope, Scope::Inventory);
+    }
     #[test]
     fn routing_is_explicit() {
         assert_eq!(
@@ -936,5 +1054,118 @@ mod person_search_tests {
  use super::*;
  #[test] fn person_name_phone_id_and_unfiltered_lists() {
   for (prompt,scope,term) in [("customer Daw Win Maw details",Scope::Customers,"daw win maw"),("Daw Win Maw customer ပြပါ",Scope::Customers,"daw win maw"),("ဝန်ထမ်း မောင်မောင် အချက်အလက် ပြပါ",Scope::Employees,"မောင်မောင်"),("employee EMP-0005",Scope::Employees,"emp-0005"),("customer 091234567",Scope::Customers,"091234567"),("customer Daw Win Maw အကြွေး ပြပါ",Scope::Credit,"daw win maw"),("employees",Scope::Employees,""),("customers အားလုံး",Scope::Customers,"")] {let r=chat(prompt,"2026-10-06","2026-10-06").unwrap();assert_eq!(r.scope,scope,"{prompt}");assert_eq!(r.product,term,"{prompt}");}
+ }
+}
+
+#[cfg(test)]
+mod category_stock_tests {
+ use super::*;
+ #[test] fn burmese_stock_phrase_extracts_only_the_category() {
+  for prompt in ["ရေခဲမုန့် လက်ကျန် ပြပေးပါ","ရေခဲမုန့် လက်ကျန် ပြပါ","ဒီနေ့ ရေခဲမုန့် လက်ကျန် ပြပေးပါ","လက်ကျန် ရေခဲမုန့် ပြပါ"] {let r=chat(prompt,"2026-10-06","2026-10-06").unwrap();assert_eq!(r.scope,Scope::Inventory);assert!(r.product=="search:ရေခဲမုန့်"||r.product=="search:ရေခဲမုန့်","{}",r.product);}
+ }
+}
+
+#[cfg(test)]
+mod best_seller_tests {
+ use super::*;
+ #[test] fn category_ranking_words_are_not_part_of_category_name() {
+  for prompt in ["ရေခဲမုန့် ရောင်းအားအကောင်းဆုံးကို ပြပေးပါ","ဒီလ ရေခဲမုန့် ရောင်းအားအများဆုံး ပြပါ","ရေခဲမုန့် best selling sales today"] {let r=chat(prompt,"2026-10-06","2026-10-06").unwrap();assert_eq!(r.scope,Scope::CategorySales);assert_eq!(r.product,"ရေခဲမုန့်");assert!(r.best_sellers);}
+  assert!(!chat("ရေခဲမုန့် ရောင်းရငွေ ပြပါ","2026-10-06","2026-10-06").unwrap().best_sellers);
+ }
+}
+
+#[cfg(test)]
+mod category_list_tests {
+ use super::*;
+ #[test] fn category_lists_do_not_route_to_product_search_or_sales() {
+  for prompt in ["လက်ရှိ categories များကို ပြပေးပါ","categories","category list","show all categories"] {let r=chat(prompt,"2026-10-06","2026-10-06").unwrap();assert_eq!(r.scope,Scope::Categories);assert!(r.product.is_empty(),"{}",r.product);}
+  assert_eq!(chat("categories ရေခဲမုန့် ပြပါ","2026-10-06","2026-10-06").unwrap().product,"ရေခဲမုန့်");
+  assert_eq!(chat("ဒီနေ့ categories အလိုက် ရောင်းရငွေ ပြပါ","2026-10-06","2026-10-06").unwrap().scope,Scope::CategorySales);
+ }
+}
+
+#[cfg(test)]
+mod supplier_search_tests {
+ use super::*;
+ #[test] fn supplier_names_numbers_and_lists() {
+  for (prompt,term) in [("supplier ABC Trading details","abc trading"),("suppliers အားလုံး",""),("supplier 091234567","091234567"),("ပေးသွင်းသူ မောင်မောင် အချက်အလက် ပြပါ","မောင်မောင်")] {let r=chat(prompt,"2026-10-06","2026-10-06").unwrap();assert_eq!(r.scope,Scope::Suppliers);assert_eq!(r.product,term);}
+ }
+}
+
+const PAYMENT_SALES_SQL: &str = r"WITH payments AS (
+ SELECT total, COALESCE(NULLIF(trim(payment_type),''),'Unknown') AS original,
+ lower(regexp_replace(payment_type,'\s','','g')) AS method
+ FROM sales WHERE created_at >= $1 AND created_at < $2 AND status='completed'
+) SELECT CASE WHEN method ~ '^(kpay|kbzpay)([(][0-9]+[)])?$' THEN 'KPay' || COALESCE(substring(method from '[(][0-9]+[)]$'),'')
+ WHEN method ~ '^wavepay([(][0-9]+[)])?$' THEN 'WavePay' || COALESCE(substring(method from '[(][0-9]+[)]$'),'')
+ WHEN method='cash' THEN 'Cash' WHEN method='credit' THEN 'Credit' ELSE original END,
+ COUNT(*), SUM(total::numeric)::text FROM payments
+ WHERE ($3::text IS NULL OR method ~ $3) GROUP BY 1 ORDER BY SUM(total::numeric) DESC,1";
+
+#[cfg(test)]
+mod payment_sales_tests {
+ use super::*;
+ #[test]
+ fn screenshot_payment_queries() {
+  for (prompt,method) in [("ဒီနေ့ payment ပြပါ",""),("ဒီနေ့ Kpay နဲ့ ဘယ်လောက်ရောင်းရလဲ?","KPay"),("ယခုလ KBZ Pay ရောင်းရငွေ ပြပါ","KPay"),("wavepay sales today","WavePay"),("credit payment today","Credit"),("ဒီနေ့ Kpay(889) နဲ့ ဘယ်လောက်ရောင်းရလဲ?","KPay(889)"),("Kpay(510) payment today","KPay(510)")] {
+   let r=chat_at(prompt,"","",NaiveDate::from_ymd_opt(2026,10,6).unwrap()).unwrap();
+   assert_eq!(r.scope,Scope::PaymentSales,"{prompt}");assert_eq!(r.receipt_payment,method);assert!(r.product.is_empty());
+  }
+  let receipts=chat("Kpay(889) receipts today","2026-10-06","2026-10-06").unwrap();
+  assert_eq!(receipts.receipt_payment,"KPay(889)");assert!(receipts.product.is_empty());assert!(receipts.receipt_category.is_empty());
+  assert_eq!(payment_pattern("KPay(510)").unwrap(),"^(kpay|kbzpay)[(]510[)]$");
+  assert!(payment_pattern("KPay(.*)").is_err());
+  assert_eq!(Scope::PaymentSales.permissions(),Scope::Analytics.permissions());
+  assert_eq!(chat("KPay receipts today","2026-10-06","2026-10-06").unwrap().scope,Scope::Receipts);
+ }
+}
+
+fn parent_sales_sql()->String {
+ CATEGORY_SALES_SQL.replace("COALESCE(c.name,'Uncategorized') AS category", "COALESCE(parent.name,c.name,p.category,'Uncategorized') AS category")
+ .replace("LEFT JOIN categories c ON c.id=p.category_id", "LEFT JOIN categories c ON c.id=p.category_id LEFT JOIN categories parent ON parent.id=c.parent_id")
+}
+fn expense_subject(text:&str)->String {
+ let cleaned=text.replace("categories"," ").replace("category"," ").replace("အမျိုးအစားအလိုက်"," ").replace("အမျိုးအစား"," ").replace('/'," ");
+ let mut cleaned=cleaned;
+ for word in ["expenses","expense","အထွက်စာရင်း","အသုံးစရိတ်စုစုပေါင်း","အသုံးစရိတ်","အသုံးစားရိတ်","ကုန်ကျစရိတ်"] {cleaned=cleaned.replace(word," ");}
+ let value=subject(&cleaned,&[],true);
+ let value=value.trim().trim_end_matches("ပြပါ").trim().to_owned();
+ let value=value.trim().trim_end_matches("အား").trim();
+ if ["အားလုံး","အလိုက်",""].contains(&value) {String::new()}else{value.into()}
+}
+#[cfg(test)]
+mod parent_expense_tests {
+ use super::*;
+ #[test] fn requested_grouped_queries() {
+  let today=NaiveDate::from_ymd_opt(2026,10,6).unwrap();
+  for prompt in ["ဒီနေ့ Parent ရောင်းရငွေ ပြပေးပါ","ဒီနေ့ Parent ရောင်းအား ပြပေးပါ","ဒီနေ့ Parent ရောင်းရငွေ/ရောင်းအား ပြပေးပါ","ဒီလ parent sales ပြပါ","today parent category","today parent categories","ဒီနေ့ parent category ပြပါ"] {
+   let r=chat_at(prompt,"","",today).unwrap();assert_eq!(r.scope,Scope::ParentSales);assert!(r.product.is_empty(),"{}",r.product);
+  }
+  for prompt in ["ဒီနေ့ Expense category အား ပြပေးပါ","ဒီနေ့ အထွက်စာရင်း category အား ပြပေးပါ","ဒီနေ့ Expense/အထွက်စာရင်း category အား ပြပေးပါ","ဒီလ အသုံးစရိတ် အမျိုးအစားအလိုက် ပြပါ"] {
+   let r=chat_at(prompt,"","",today).unwrap();assert_eq!(r.scope,Scope::Expenses);assert!(r.product.is_empty(),"{}",r.product);
+  }
+  assert_eq!(Scope::ParentSales.permissions(),Scope::Analytics.permissions());
+ }
+}
+
+// User-defined equivalents, shared by direct queries and conversation planning.
+pub(crate) fn canonical_topics(text:&str)->String {
+ text.replace("ဝင်ငွေ","ရောင်းရငွေ").replace("ရောင်းနှုန်း","ရောင်းရငွေ")
+     .replace("အထွက်စာရင်း","အသုံးစရိတ်").replace("အထွက်ငွေ","အသုံးစရိတ်")
+     .replace("ထွက်ငွေ","အသုံးစရိတ်").replace("သုံးစွဲငွေ","အသုံးစရိတ်").replace("အထွက်","အသုံးစရိတ်")
+}
+#[cfg(test)]
+mod topic_alias_tests {
+ use super::*;
+ #[test] fn synonyms_preserve_intent_filters_and_dates() {
+  let today=NaiveDate::from_ymd_opt(2026,10,6).unwrap();
+  for prefix in ["ဒီနေ့ ","ဒီလ Parent ","ဒီနေ့ Kpay(889) ","ဒီနေ့ ရေခဲမုန့် "] {
+   let expected=chat_at(&format!("{prefix}ရောင်းရငွေ ပြပေးပါ"),"","",today).unwrap();
+   for alias in ["အရောင်း","ရောင်းအား","ရောင်းနှုန်း","ဝင်ငွေ"] {assert_eq!(chat_at(&format!("{prefix}{alias} ပြပေးပါ"),"","",today).unwrap(),expected);}
+  }
+  for suffix in [" ပြပေးပါ"," category အား ပြပေးပါ"," fuel ပြပါ"] {
+   let expected=chat_at(&format!("ဒီနေ့ အသုံးစရိတ်{suffix}"),"","",today).unwrap();
+   for alias in ["အသုံးစရိတ်","ထွက်ငွေ","သုံးစွဲငွေ","အထွက်","အထွက်ငွေ","အထွက်စာရင်း"] {assert_eq!(chat_at(&format!("ဒီနေ့ {alias}{suffix}"),"","",today).unwrap(),expected);}
+  }
  }
 }

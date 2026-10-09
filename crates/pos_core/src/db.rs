@@ -364,3 +364,9 @@ fn is_service_mode(sold_by: Option<&str>) -> bool {
 fn effective_out_of_stock(product: &Product) -> bool {
     !is_service_mode(product.sold_by.as_deref()) && product.stock <= 0.0
 }
+
+/// Net sold units across completed sales, including every variant of a product.
+pub async fn product_sales_quantities(pool:&PgPool)->anyhow::Result<std::collections::HashMap<i32,f64>> {
+    let rows:Vec<(i32,f64)>=sqlx::query_as("SELECT i.product_id,SUM(GREATEST(COALESCE(i.qty,0)-COALESCE(i.refunded_qty,0),0))::float8 FROM sale_items i JOIN sales s ON s.id=i.sale_id WHERE s.status='completed' AND i.product_id IS NOT NULL GROUP BY i.product_id").fetch_all(pool).await?;
+    Ok(rows.into_iter().filter(|(_,qty)|qty.is_finite() && *qty>0.0).collect())
+}

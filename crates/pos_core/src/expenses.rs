@@ -134,3 +134,7 @@ mod tests {
         assert!(validate(&e).is_err());
     }
 }
+
+pub async fn comparison_categories(pool:&PgPool)->Result<Vec<String>> {
+ Ok(sqlx::query_scalar("SELECT name FROM expense_categories ORDER BY name").fetch_all(pool).await?)
+}

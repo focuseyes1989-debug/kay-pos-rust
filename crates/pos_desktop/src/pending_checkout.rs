@@ -202,8 +202,8 @@ pub fn Recovery(
                         p { "Invoice: {request.draft.invoice_no}" }
                         p { "Operator: {request.draft.created_by}" }
                         p { "Resolve this sale before starting another. A saved sale will be recovered without selling it again." }
-                        button { class: "primary", disabled: saving(), onclick: move |_| retry(false), "Retry original sale" }
-                        button { disabled: saving(), onclick: move |_| cancel(true), "Check and cancel unsaved sale" }
+                        button { class: "primary", disabled: saving(), onclick: move |_| retry(false), crate::icons::ActionLabel { label:"Retry original sale" } }
+                        button { disabled: saving(), onclick: move |_| cancel(true), crate::icons::ActionLabel { label:"Check and cancel unsaved sale" } }
                     },
                     Err(message) => rsx! { p { role: "alert", "{message}" } },
                     _ => rsx! {},

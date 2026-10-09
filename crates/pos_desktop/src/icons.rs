@@ -26,6 +26,14 @@ pub fn Icon(name: String) -> Element {
 fn for_label(label: &str) -> Option<&'static str> {
     let label=label.trim().trim_start_matches('+').trim();
     Some(match label {
+        "OK"|"Apply"=>"check_circle", "Back"=>"arrow_circle_left",
+        "Browse"=>"folder_open", "Printing Preferences"|"Open DB Settings"=>"settings",
+        "Remove Photo"|"Remove Image"=>"delete", "Edit supplier"=>"edit",
+        "Retry"|"Retry original request"|"Retry original sale"|"Retry same request"|"Refresh Printers"=>"refresh",
+        "Check and cancel unsaved request"|"Check and cancel unsaved sale"=>"cancel",
+        "Recover saved cart"=>"shopping_cart", "Return saved hold"=>"undo",
+        "Stock Transfer"|"Transfer"=>"inventory", "Barcode Print"|"Test Print"=>"print",
+        "Store template"=>"save", "Reset layout"|"Reset Changes"=>"undo",
         "AI"|"Kay Assistant"=>"analytics", "Dashboard"=>"dashboard", "Sales"=>"point_of_sale", "Receipts"=>"receipt",
         "Products"=>"products", "Inventory"=>"inventory", "Categories"=>"category",
         "Locations"=>"location_on", "Customers"=>"person", "Employees"=>"groups",

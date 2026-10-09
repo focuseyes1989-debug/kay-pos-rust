@@ -1,6 +1,6 @@
 use super::*;
 
-pub const FIELDS: [(&str, &str, &str); 8] = [
+pub const FIELDS: [(&str, &str, &str); 9] = [
     ("ui_header_color", "Header", "#1d4ed8"),
     ("ui_status_color", "Status bar", "#1d4ed8"),
     ("ui_button_color", "Primary buttons", "#2563eb"),
@@ -9,60 +9,61 @@ pub const FIELDS: [(&str, &str, &str); 8] = [
     ("ui_category_color", "Selected category / tab", "#2563eb"),
     ("ui_product_hover_color", "Product card hover", "#2563eb"),
     ("ui_sidebar_color", "Side menu", "#101827"),
+    ("ui_icon_hover_color", "Icon hover", "#60a5fa"),
 ];
-const PRESETS: [(&str, [&str; 8]); 9] = [
+const PRESETS: [(&str, [&str; 9]); 9] = [
     (
         "Blue",
         [
-            "#1d4ed8", "#1d4ed8", "#2563eb", "#1e40af", "#2563eb", "#2563eb", "#2563eb", "#172554",
+            "#1d4ed8", "#1d4ed8", "#2563eb", "#1e40af", "#2563eb", "#2563eb", "#2563eb", "#172554", "#60a5fa",
         ],
     ),
     (
         "Teal",
         [
-            "#0f766e", "#115e59", "#0f766e", "#134e4a", "#0d9488", "#0d9488", "#0d9488", "#134e4a",
+            "#0f766e", "#115e59", "#0f766e", "#134e4a", "#0d9488", "#0d9488", "#0d9488", "#134e4a", "#60a5fa",
         ],
     ),
     (
         "Green",
         [
-            "#166534", "#14532d", "#15803d", "#14532d", "#16a34a", "#16a34a", "#16a34a", "#14532d",
+            "#166534", "#14532d", "#15803d", "#14532d", "#16a34a", "#16a34a", "#16a34a", "#14532d", "#60a5fa",
         ],
     ),
     (
         "Rose",
         [
-            "#be123c", "#9f1239", "#e11d48", "#881337", "#e11d48", "#e11d48", "#e11d48", "#881337",
+            "#be123c", "#9f1239", "#e11d48", "#881337", "#e11d48", "#e11d48", "#e11d48", "#881337", "#60a5fa",
         ],
     ),
     (
         "Graphite",
         [
-            "#374151", "#1f2937", "#4b5563", "#111827", "#64748b", "#64748b", "#64748b", "#111827",
+            "#374151", "#1f2937", "#4b5563", "#111827", "#64748b", "#64748b", "#64748b", "#111827", "#60a5fa",
         ],
     ),
     (
         "Magenta",
         [
-            "#a21caf", "#86198f", "#c026d3", "#86198f", "#c026d3", "#c026d3", "#c026d3", "#4a044e",
+            "#a21caf", "#86198f", "#c026d3", "#86198f", "#c026d3", "#c026d3", "#c026d3", "#4a044e", "#60a5fa",
         ],
     ),
     (
         "Orange",
         [
-            "#c2410c", "#9a3412", "#ea580c", "#9a3412", "#ea580c", "#ea580c", "#ea580c", "#431407",
+            "#c2410c", "#9a3412", "#ea580c", "#9a3412", "#ea580c", "#ea580c", "#ea580c", "#431407", "#60a5fa",
         ],
     ),
     (
         "Sky Blue",
         [
-            "#0284c7", "#0369a1", "#0ea5e9", "#0369a1", "#0284c7", "#0284c7", "#0284c7", "#082f49",
+            "#0284c7", "#0369a1", "#0ea5e9", "#0369a1", "#0284c7", "#0284c7", "#0284c7", "#082f49", "#60a5fa",
         ],
     ),
     (
         "Lavender",
         [
-            "#a78bfa", "#8b5cf6", "#a78bfa", "#7c3aed", "#8b5cf6", "#8b5cf6", "#8b5cf6", "#2e1065",
+            "#a78bfa", "#8b5cf6", "#a78bfa", "#7c3aed", "#8b5cf6", "#8b5cf6", "#8b5cf6", "#2e1065", "#60a5fa",
         ],
     ),
 ];
@@ -101,6 +102,7 @@ pub fn style(settings: &HashMap<String, String>) -> String {
         "category",
         "product-hover",
         "sidebar",
+        "icon-hover",
     ];
     FIELDS
         .iter()
@@ -140,6 +142,7 @@ pub fn ColorPreferences(
     }
     let preview = style(&values);
     rsx! {
+        div {class:"shop_color_columns",
         fieldset { class: "shop_color_preferences",
             legend { "Shop colors" }
             div { class: "shop_color_presets",
@@ -159,7 +162,9 @@ pub fn ColorPreferences(
             div { class: "shop_color_fields",
                 for (key, label, default) in FIELDS {
                     label {
-                        span { "{label}" }
+                        span {class:"shop_color_field_text", "{label}"
+                            code {"{values.get(key).map(String::as_str).filter(|v| valid(v)).unwrap_or(default)}"}
+                        }
                         input { r#type: "color", disabled: saving, aria_label: label,
                             value: values.get(key).map(String::as_str).filter(|v| valid(v)).unwrap_or(default),
                             oninput: move |event| { let color = event.value(); if valid(&color) { draft.write().insert(key.into(),color); } }
@@ -167,8 +172,13 @@ pub fn ColorPreferences(
                     }
                 }
             }
+        }
+        section {class:"shop_color_preview_panel",aria_label:"Appearance preview",
+            header {h3 {"Live Preview"} p {"Color changes appear here before saving."}}
             div { class: "shop_color_preview", style: preview,
-                div { class: "shop_preview_header", "KAY POS" }
+                div { class: "shop_preview_header", "KAY POS"
+                    button {r#type:"button",class:"shop_preview_icon_hover",title:"Preview icon hover",aria_label:"Preview icon hover",crate::icons::Icon {name:"refresh"}}
+                }
                 div { class: "shop_preview_sidebar", "Side menu" }
                 div { class: "shop_preview_buttons",
                     button { r#type: "button", class: "shop_preview_primary", crate::icons::ActionLabel { label:"Save" } }
@@ -178,6 +188,7 @@ pub fn ColorPreferences(
                 }
                 div { class: "shop_preview_status", "Database connected" }
             }
+        }
         }
     }
 }
@@ -195,4 +206,12 @@ fn colors_validate_and_keep_text_readable() {
         "invalid".into()
     )]))
     .contains("--shop-header:#1d4ed8;"));
+}
+
+#[test]
+fn icon_hover_color_is_configurable_and_validated() {
+ assert!(style(&HashMap::new()).contains("--shop-icon-hover:#60a5fa;"));
+ assert!(style(&HashMap::from([("ui_icon_hover_color".into(),"#ff8800".into())])).contains("--shop-icon-hover:#ff8800;"));
+ assert!(style(&HashMap::from([("ui_icon_hover_color".into(),"invalid".into())])).contains("--shop-icon-hover:#60a5fa;"));
+ assert!(crate::local_appearance::is_key("ui_icon_hover_color"));
 }

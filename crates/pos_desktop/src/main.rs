@@ -1,4 +1,6 @@
 #![cfg_attr(all(target_os = "windows", not(debug_assertions)), windows_subsystem = "windows")]
+mod menu_visibility;
+mod barcode_print;
 
 use dioxus::prelude::*;
 mod auth;
@@ -15,6 +17,7 @@ mod customer_display;
 mod customers;
 mod live_search;
 mod expenses;
+mod expense_comparison;
 mod expense_management;
 mod erp_operations;
 mod discounts;
@@ -24,6 +27,7 @@ mod held_sales;
 mod loyalty;
 mod inventory;
 mod locations;
+mod stock_transfer;
 mod pending_checkout;
 mod printer_settings;
 mod zkteco;
@@ -31,8 +35,11 @@ mod attendance_sync;
 mod products;
 mod receipt_printer;
 mod receipt_layout;
+mod receipt_editor;
+mod receipt_fields;
 mod receipt_preview;
 mod sale_summary;
+mod sales_comparison;
 mod dashboard;
 mod date_range;
 mod reports;
@@ -56,7 +63,7 @@ use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fs, path::PathBuf};
 use tokio::time::{sleep, Duration};
 
-const APP_CSS: &str = concat!(include_str!("../assets/app.css"), "\n", include_str!("../assets/myanmar-text.css"));
+const APP_CSS: &str = concat!(include_str!("../assets/app.css"), "\n", include_str!("../assets/myanmar-text.css"), "\n", include_str!("../assets/compact-controls.css"));
 const PRODUCT_BATCH_SIZE: usize = 60;
 
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
@@ -188,8 +195,11 @@ fn App() -> Element {
     });
     let mut products = use_signal(Vec::<Product>::new);
     use_effect(|| { let _ = document::eval(include_str!("../assets/page-refresh.js")); });
+    use_effect(|| {let _=document::eval(include_str!("../assets/receipt-drag.js"));});
+    use_effect(|| {let _=document::eval(include_str!("../assets/search-autocomplete.js"));});
     let mut categories = use_signal(Vec::<UiCategory>::new);
     let mut selected_category = use_signal(|| None::<i32>);
+    let mut sales_quantities=use_signal(HashMap::<i32,f64>::new);
     let mut db_status = use_signal(|| "DB not checked".to_string());
     let mut checkout_status = use_signal(String::new);
     let mut checkout_saving = use_signal(|| false);
@@ -207,6 +217,7 @@ fn App() -> Element {
     let mut category_query = use_signal(String::new);
     let mut cart = use_signal(Vec::<CartLine>::new);
     let mut held_token=use_signal(||None::<String>);
+    let mut clear_held=use_signal(||false);
     use_effect(move || {
         if cart.read().is_empty() {
             checkout_customer.set(None);
@@ -215,6 +226,25 @@ fn App() -> Element {
     });
     let mut message_box = use_signal(|| None::<String>);
     let mut active_view = use_signal(|| WorkspaceView::Sales);
+    use_effect(move || {
+        let view=active_view();
+        let title=if session.read().is_none() { "KAY POS Rust".to_string() } else {
+            let page=match view {
+                WorkspaceView::Ai=>"Kay Assistant", WorkspaceView::Activity=>"Activity Log",
+                WorkspaceView::Discounts=>"Discounts", WorkspaceView::Dashboard=>"Dashboard",
+                WorkspaceView::Reports=>"Reports", WorkspaceView::Purchases=>"Purchases",
+                WorkspaceView::Employees=>"Employees", WorkspaceView::ErpOperations=>"ERP Operations",
+                WorkspaceView::ServiceOrders=>"Service Order", WorkspaceView::SaleSummary=>"Sale Summary",
+                WorkspaceView::Inventory=>"Inventory", WorkspaceView::Locations=>"Locations",
+                WorkspaceView::Categories=>"Categories", WorkspaceView::Products=>"Products",
+                WorkspaceView::Suppliers=>"Suppliers", WorkspaceView::Expenses=>"Expenses",
+                WorkspaceView::Customers=>"Customers", WorkspaceView::Sales=>"Sales",
+                WorkspaceView::Receipts=>"Receipts", WorkspaceView::Settings=>"Settings",
+            };
+            format!("KAY POS Rust | {page}")
+        };
+        dioxus_desktop::window().set_title(&title);
+    });
     let mut new_expense = use_signal(|| false);
     let mut quick_expense = use_signal(|| false);
     let mut receipts = use_signal(Vec::<SaleSummary>::new);
@@ -229,6 +259,17 @@ fn App() -> Element {
     // Apply local colors on the first render, before asynchronous database loading.
     let mut app_settings = use_signal(|| local_appearance::load().unwrap_or_default());
     use_context_provider(move || regional::RegionalSettings(app_settings));
+    let profile_image = use_resource(move || {
+        let visible=show_side_menu();
+        let user=session.read().clone();
+        let form=db_form.read().clone();
+        async move {
+            if !visible {return None;}
+            let user=user?;
+            let pool=connect(&form.database_config().ok()?).await.ok()?;
+            user.profile_image(&pool).await.ok().flatten()
+        }
+    });
     let mut payment_types = use_signal(Vec::<PaymentType>::new);
     let mut selected_payment_id = use_signal(|| None::<i32>);
     let mut payment_form_name = use_signal(String::new);
@@ -253,7 +294,8 @@ fn App() -> Element {
     use_effect(move || {
         if let Some(Some(result)) = sales_catalog.read().as_ref() {
             match result {
-                Ok((loaded_categories, loaded_products)) => {
+                Ok((loaded_categories, loaded_products, loaded_quantities)) => {
+                    sales_quantities.set(loaded_quantities.clone());
                     categories.set(loaded_categories.clone());
                     products.set(loaded_products.clone());
                     refresh_cart_stock(&mut cart.write(), loaded_products);
@@ -349,7 +391,7 @@ fn App() -> Element {
         });
     });
 
-    let filtered_products = {
+    let mut filtered_products = {
         let query = query.read().to_lowercase();
         let selected_category_id = *selected_category.read();
         products
@@ -378,6 +420,11 @@ fn App() -> Element {
             .cloned()
             .collect::<Vec<_>>()
     };
+    if selected_category().is_none() {
+        let quantities=sales_quantities.read();
+        filtered_products.sort_by(|a,b|quantities.get(&b.id).unwrap_or(&0.0).total_cmp(quantities.get(&a.id).unwrap_or(&0.0))
+            .then_with(||a.name.to_lowercase().cmp(&b.name.to_lowercase())).then_with(||a.id.cmp(&b.id)));
+    }
     let visible_products = filtered_products
         .iter()
         .take(*visible_product_limit.read())
@@ -511,7 +558,7 @@ fn App() -> Element {
                     "☰"
                 }
                 div { class: "top_shop_brand",
-                    if let Some(logo) = app_settings.read().get("shop_logo_image").filter(|v| v.starts_with("data:image/")) {
+                    if let Some(logo) = receipt_layout::logo(&app_settings.read()) {
                         img { class: "top_shop_logo", src: "{logo}", alt: "Shop logo" }
                     } else {
                         span { class: "top_shop_logo top_shop_logo_fallback", "K" }
@@ -561,16 +608,21 @@ fn App() -> Element {
                 }
                 aside { class: "side_menu",
                     div { class: "side_head",
-                        div { class: "brand_mark", "K" }
-                        div {
-                            strong { "KAY POS" }
-                            small { "Rust client" }
+                        div {class:"side_profile_avatar",
+                            if let Some(Some(image))=profile_image.read().as_ref() {
+                                img {src:"{image}",alt:"Profile image"}
+                            } else {span {{actor.username().chars().next().unwrap_or('?').to_uppercase().to_string()}}}
+                        }
+                        div {class:"side_profile_identity",
+                            strong {title:"{actor.username()}","{actor.username()}"}
+                            small {"{actor.role()}"}
                         }
                         button { class: "side_close", aria_label: "Close menu", title: "Close menu", onclick: move |_| show_side_menu.set(false), icons::Icon {name:"close"} }
                     }
-                    div { class: "side_group",
+                    div {class:"side_navigation",aria_label:"Main navigation",
+                    div { class: "side_group", hidden:menu_visibility::group_hidden(&app_settings.read(),if can_manage {&["Sales","Receipts","Expenses","Service Order"]}else{&["Sales","Receipts","Service Order"]}),
                         span { "SALES" }
-                        button {
+                        button { hidden:menu_visibility::hidden(&app_settings.read(),"Sales"),
                             class: if *active_view.read() == WorkspaceView::Sales { "side_active" } else { "" },
                             onclick: move |_| {
                                 show_side_menu.set(false);
@@ -578,7 +630,7 @@ fn App() -> Element {
                             },
                             crate::icons::ActionLabel { label:"Sales" }
                         }
-                        button {
+                        button { hidden:menu_visibility::hidden(&app_settings.read(),"Receipts"),
                             class: if *active_view.read()==WorkspaceView::Receipts {"side_active"}else{""},
                             onclick: move |_| {
                                 show_side_menu.set(false);
@@ -616,36 +668,36 @@ fn App() -> Element {
                             },
                             crate::icons::ActionLabel { label:"Receipts" }
                         }
-                        if can_manage { button { class: if *active_view.read()==WorkspaceView::Expenses {"side_active"}else{""}, onclick: move |_| { new_expense.set(false); active_view.set(WorkspaceView::Expenses); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Expenses" } } }
-                        button { class: if *active_view.read()==WorkspaceView::ServiceOrders {"side_active"}else{""}, onclick:move |_|{active_view.set(WorkspaceView::ServiceOrders);show_side_menu.set(false);},crate::icons::ActionLabel { label:"Service Order" } }
+                        if can_manage { button { hidden:menu_visibility::hidden(&app_settings.read(),"Expenses"), class: if *active_view.read()==WorkspaceView::Expenses {"side_active"}else{""}, onclick: move |_| { new_expense.set(false); active_view.set(WorkspaceView::Expenses); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Expenses" } } }
+                        button { hidden:menu_visibility::hidden(&app_settings.read(),"Service Order"), class: if *active_view.read()==WorkspaceView::ServiceOrders {"side_active"}else{""}, onclick:move |_|{active_view.set(WorkspaceView::ServiceOrders);show_side_menu.set(false);},crate::icons::ActionLabel { label:"Service Order" } }
                     }
                     if can_manage {
-                    div { class: "side_group",
+                    div { class: "side_group", hidden:menu_visibility::group_hidden(&app_settings.read(),&["Employees","Customers","Suppliers","Purchases"]),
                         span { "PEOPLE" }
-                        button {class:if *active_view.read()==WorkspaceView::Employees{"side_active"}else{""},onclick:move |_|{active_view.set(WorkspaceView::Employees);show_side_menu.set(false);},crate::icons::ActionLabel { label:"Employees" }}
-                        button {
+                        button { hidden:menu_visibility::hidden(&app_settings.read(),"Employees"),class:if *active_view.read()==WorkspaceView::Employees{"side_active"}else{""},onclick:move |_|{active_view.set(WorkspaceView::Employees);show_side_menu.set(false);},crate::icons::ActionLabel { label:"Employees" }}
+                        button { hidden:menu_visibility::hidden(&app_settings.read(),"Customers"),
                             class: if *active_view.read()==WorkspaceView::Customers {"side_active"}else{""},
                             onclick: move |_| { active_view.set(WorkspaceView::Customers); show_side_menu.set(false); },
                             crate::icons::ActionLabel { label:"Customers" }
                         }
-                        button { class: if *active_view.read()==WorkspaceView::Suppliers {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Suppliers); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Suppliers" } }
-                        button { class: if *active_view.read()==WorkspaceView::Purchases {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Purchases); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Purchases" } }
+                        button { hidden:menu_visibility::hidden(&app_settings.read(),"Suppliers"), class: if *active_view.read()==WorkspaceView::Suppliers {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Suppliers); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Suppliers" } }
+                        button { hidden:menu_visibility::hidden(&app_settings.read(),"Purchases"), class: if *active_view.read()==WorkspaceView::Purchases {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Purchases); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Purchases" } }
                     }
-                    div { class: "side_group",
+                    div { class: "side_group", hidden:menu_visibility::group_hidden(&app_settings.read(),&["Products","Discounts","Categories","Locations","Inventory"]),
                         span { "PRODUCTS & STOCK" }
-                        button { class: if *active_view.read()==WorkspaceView::Products {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Products); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Products" } }
-                        button { class: if *active_view.read()==WorkspaceView::Discounts {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Discounts); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Discounts" } }
-                        button { class: if *active_view.read()==WorkspaceView::Categories {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Categories); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Categories" } }
-                        button { class: if *active_view.read()==WorkspaceView::Locations {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Locations); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Locations" } }
-                        button { class: if *active_view.read()==WorkspaceView::Inventory {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Inventory); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Inventory" } }
+                        button { hidden:menu_visibility::hidden(&app_settings.read(),"Products"), class: if *active_view.read()==WorkspaceView::Products {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Products); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Products" } }
+                        button { hidden:menu_visibility::hidden(&app_settings.read(),"Discounts"), class: if *active_view.read()==WorkspaceView::Discounts {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Discounts); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Discounts" } }
+                        button { hidden:menu_visibility::hidden(&app_settings.read(),"Categories"), class: if *active_view.read()==WorkspaceView::Categories {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Categories); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Categories" } }
+                        button { hidden:menu_visibility::hidden(&app_settings.read(),"Locations"), class: if *active_view.read()==WorkspaceView::Locations {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Locations); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Locations" } }
+                        button { hidden:menu_visibility::hidden(&app_settings.read(),"Inventory"), class: if *active_view.read()==WorkspaceView::Inventory {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Inventory); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Inventory" } }
                     }
-                    div { class: "side_group",
+                    div { class: "side_group", hidden:menu_visibility::group_hidden(&app_settings.read(),&["Kay Assistant","Activity Log","Reports","Dashboard","Sale Summary"]),
                         span { "REPORTS" }
-                        button { class: if *active_view.read()==WorkspaceView::Ai {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Ai); show_side_menu.set(false); }, crate::icons::ActionLabel {label:"Kay Assistant"} }
-                        button { class: if *active_view.read()==WorkspaceView::Activity {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Activity); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Activity Log" } }
-                        button { class: if *active_view.read()==WorkspaceView::Reports {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Reports); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Reports" } }
-                        button { class: if *active_view.read()==WorkspaceView::Dashboard {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Dashboard); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Dashboard" } }
-                        button { class: if *active_view.read()==WorkspaceView::SaleSummary {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::SaleSummary); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Sale Summary" } }
+                        button { hidden:menu_visibility::hidden(&app_settings.read(),"Kay Assistant"), class: if *active_view.read()==WorkspaceView::Ai {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Ai); show_side_menu.set(false); }, crate::icons::ActionLabel {label:"Kay Assistant"} }
+                        button { hidden:menu_visibility::hidden(&app_settings.read(),"Activity Log"), class: if *active_view.read()==WorkspaceView::Activity {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Activity); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Activity Log" } }
+                        button { hidden:menu_visibility::hidden(&app_settings.read(),"Reports"), class: if *active_view.read()==WorkspaceView::Reports {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Reports); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Reports" } }
+                        button { hidden:menu_visibility::hidden(&app_settings.read(),"Dashboard"), class: if *active_view.read()==WorkspaceView::Dashboard {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Dashboard); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Dashboard" } }
+                        button { hidden:menu_visibility::hidden(&app_settings.read(),"Sale Summary"), class: if *active_view.read()==WorkspaceView::SaleSummary {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::SaleSummary); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Sale Summary" } }
                     }
                     if actor.allows(pos_core::auth::Permission::Admin) {
                     div { class: "side_group",
@@ -672,6 +724,7 @@ fn App() -> Element {
                             },
                             crate::icons::ActionLabel { label:"Settings Center" }
                         }
+                    }
                     }
                     }
                     }
@@ -715,7 +768,7 @@ fn App() -> Element {
             } else if *active_view.read() == WorkspaceView::Inventory {
                 inventory::InventoryPage { db_form: db_form.read().clone(), on_sales: move |_| active_view.set(WorkspaceView::Sales) }
             } else if *active_view.read() == WorkspaceView::Locations {
-                locations::LocationsPage { db_form: db_form.read().clone(), on_sales: move |_| active_view.set(WorkspaceView::Sales) }
+                locations::LocationsPage { db_form: db_form.read().clone(), actor:actor.clone(), on_sales: move |_| active_view.set(WorkspaceView::Sales) }
             } else if *active_view.read() == WorkspaceView::Categories {
                 categories::CategoriesPage { db_form: db_form.read().clone(), on_sales: move |_| active_view.set(WorkspaceView::Sales) }
             } else if *active_view.read() == WorkspaceView::Products {
@@ -981,7 +1034,6 @@ fn App() -> Element {
                     div { class: "panel_head",
                         div {
                             strong { crate::icons::ActionLabel { label:"Products" } }
-                            small { "Tap a category or search the live catalog" }
                         }
                         span { class: "count_badge", "{filtered_products.len()} items" }
                         button { hidden:true, "data-page-refresh":"true", tabindex:-1, aria_hidden:"true", disabled: !sales_catalog.finished(), onclick: move |_| sales_catalog.restart(), "Refresh" }
@@ -1078,10 +1130,9 @@ fn App() -> Element {
                     div { class: "panel_head",
                         div {
                             strong { "Cart" }
-                            small { "Tap products to add" }
                         }
                         div { class: "cart_head_actions",
-                            held_sales::Controls {db_form:db_form.read().clone(),actor:actor.clone(),cart,customer:checkout_customer,payment:checkout_sale_type,active:held_token,
+                            held_sales::Controls {db_form:db_form.read().clone(),actor:actor.clone(),cart,customer:checkout_customer,payment:checkout_sale_type,active:held_token,clear_requested:clear_held,
                                 blocked:checkout_saving()||show_checkout()||!matches!(&*pending.read(),Ok(None)),visible:true}
                             span { class: "count_badge", "{cart.read().len()}" }
                         }
@@ -1089,7 +1140,7 @@ fn App() -> Element {
                     div { class: "cart_lines",
                         if cart.read().is_empty() {
                             div { class: "empty",
-                                div { class: "empty_cart_icon", "🛒" }
+                                div { class: "empty_cart_icon", aria_hidden: "true", icons::Icon {name:"shopping_cart"} }
                                 strong { "Cart is empty" }
                                 span { "Tap a product to add it to this sale." }
                             }
@@ -1105,16 +1156,15 @@ fn App() -> Element {
                                 }
                                 div { class: "qty_actions",
                                     button {
-                                        disabled:held_token().is_some()&&cart.read().len()==1&&line.qty<=1.0,
                                         onclick: move |_| decrement_cart(&mut cart, idx),
                                         "-"
                                     }
+                                    CartQuantityInput {cart,index:idx,qty:line.qty}
                                     button {
                                         onclick: move |_| increment_cart(&mut cart, idx),
                                         "+"
                                     }
                                     button {
-                                        disabled:held_token().is_some()&&cart.read().len()==1,
                                         onclick: move |_| remove_from_cart(&mut cart, idx),
                                         "Remove"
                                     }
@@ -1130,9 +1180,9 @@ fn App() -> Element {
                         }
                         div { class: "cart_actions",
                             button {
-                                disabled: cart.read().is_empty()||held_token().is_some(),
+                                disabled: (cart.read().is_empty()&&held_token().is_none())||checkout_saving()||show_checkout()||!matches!(&*pending.read(),Ok(None)),
                                 onclick: move |_| {
-                                    cart.set(Vec::new());
+                                    if held_token().is_some(){clear_held.set(true);}else{cart.set(Vec::new());}
                                     checkout_status.set(String::new());
                                 },
                                 "Clear"
@@ -1337,7 +1387,7 @@ fn load_env_files() {
 
 async fn load_catalog_from_database(
     form: DbForm,
-) -> anyhow::Result<(Vec<UiCategory>, Vec<Product>)> {
+) -> anyhow::Result<(Vec<UiCategory>, Vec<Product>, HashMap<i32,f64>)> {
     let config = form.database_config()?;
     let pool = connect(&config).await?;
     let categories = list_categories(&pool)
@@ -1357,7 +1407,8 @@ async fn load_catalog_from_database(
     }];
     category_names.extend(categories);
 
-    Ok((category_names, products))
+    let quantities=pos_core::db::product_sales_quantities(&pool).await?;
+    Ok((category_names, products, quantities))
 }
 
 async fn load_app_settings_from_database(form: DbForm) -> anyhow::Result<HashMap<String, String>> {
@@ -1703,6 +1754,7 @@ fn settings_nav_items() -> Vec<SettingsNavItem> {
             title: "Tax & Discount",
             keywords: "tax discount percentage fixed manual",
         },
+        SettingsNavItem { id: "menu", title: "Side Menu", keywords: "sidebar navigation show hide pages menu" },
         SettingsNavItem {
             id: "appearance",
             title: "Appearance",
@@ -1832,13 +1884,15 @@ fn SettingsCenterPage(
                             description: "Tax and discount values loaded from PostgreSQL settings.",
                             rows: settings_rows(&settings, &["tax_enabled", "tax_rate", "discount_enabled", "discount_type", "discount_value"])
                         }
+                    } else if active_page == "menu" {
+                        menu_visibility::MenuVisibility {settings:settings.clone(),on_saved}
                     } else if active_page == "appearance" {
                         SettingsSection {
                             title: "Appearance",
                             key: "{active_page}",
                             db_form: db_form.clone(), on_saved,
                             description: "Appearance values loaded from PostgreSQL settings.",
-                            rows: settings_rows(&settings, &["theme", "follow_system_theme", "window_resolution", "ui_header_color", "ui_status_color", "ui_button_color", "ui_hover_color", "ui_focus_color", "ui_category_color", "ui_product_hover_color", "ui_sidebar_color"])
+                            rows: settings_rows(&settings, &["theme", "follow_system_theme", "window_resolution", "ui_header_color", "ui_status_color", "ui_button_color", "ui_hover_color", "ui_focus_color", "ui_category_color", "ui_product_hover_color", "ui_sidebar_color", "ui_icon_hover_color"])
                         }
                     } else if active_page == "receipt" {
                         SettingsSection {
@@ -1846,7 +1900,7 @@ fn SettingsCenterPage(
                             key: "{active_page}",
                             db_form: db_form.clone(), on_saved,
                             description: "Receipt branding and print values loaded from PostgreSQL settings.",
-                            rows: settings_rows(&settings, &["shop_name", "shop_phone", "shop_address", "receipt_header", "receipt_footer", "shop_footer_message", "receipt_paper_size", "currency", "currency_symbol"])
+                            rows: {let mut rows=settings_rows(&settings, &["shop_name", "shop_phone", "shop_address", "receipt_logo_image", "receipt_logo_filename", "receipt_header", "receipt_footer", "shop_footer_message", "receipt_paper_size", "receipt_printer_name", "currency", "currency_symbol"]); for key in receipt_editor::defaults().keys(){if let Some(value)=settings.get(key){if !rows.iter().any(|(k,_)|k==key){rows.push((key.clone(),value.clone()));}}} rows}
                         }
                     } else if active_page == "zkteco" {
                         zkteco::ZktecoSettings {db_form:db_form.clone()}
@@ -1938,7 +1992,7 @@ fn SettingsDatabase(
                 div { span { "Status" } strong { "{db_status}" } }
             }
             div { class: "settings_page_actions",
-                button { onclick: move |event| on_open_db.call(event), "Open DB Settings" }
+                button { onclick: move |event| on_open_db.call(event), crate::icons::ActionLabel { label:"Open DB Settings" } }
             }
         }
     }
@@ -2041,7 +2095,8 @@ fn SettingsSection(
     let mut saving = use_signal(|| false);
     let mut notice = use_signal(String::new);
     let mut error = use_signal(|| false);
-    let original = rows.clone();
+    let mut original = rows.clone();
+    if title=="Receipt" {let existing: HashMap<String,String> = original.iter().cloned().collect(); let mut layout_defaults=receipt_editor::defaults(); layout_defaults.insert("receipt_printable_width".into(), receipt_editor::Geometry::from(&existing).printable_mm.to_string()); for (key,default) in layout_defaults{if !original.iter().any(|(k,_)|k==&key){original.push((key,default));}}}
     let organized = matches!(
         title,
         "Tax & Discount" | "Appearance" | "Regional" | "Receipt" | "Users"
@@ -2054,6 +2109,8 @@ fn SettingsSection(
                 div { class: "tax_discount_form receipt_preferences",
                     fieldset {
                         legend { "Receipt details" }
+                        receipt_preview::ReceiptLogoPicker {original:original.clone(),draft,disabled:saving()}
+                        receipt_editor::ReceiptEditor {original:original.clone(),draft,disabled:saving()}
                         div { class: "tax_discount_inputs",
                             for (key, label) in [
                                 ("shop_name", "Shop Name"),
@@ -2065,18 +2122,21 @@ fn SettingsSection(
                             ] {
                                 label {
                                     span { "{label}" }
+                                    if matches!(key,"shop_address"|"receipt_header"|"receipt_footer"|"shop_footer_message") {
+                                        textarea {rows:2,disabled:saving(),value:draft.read().get(key).cloned().or_else(||original.iter().find(|(k,_)|k==key).map(|(_,v)|v.clone())).unwrap_or_default(),oninput:move |event|{draft.write().insert(key.into(),event.value());notice.set(String::new());}}
+                                    }else {
                                     input {
                                         r#type: "text",
                                         disabled: saving(),
                                         value: draft.read().get(key).cloned().or_else(|| original.iter().find(|(k,_)| k == key).map(|(_,v)| v.clone())).unwrap_or_default(),
                                         oninput: move |event| { draft.write().insert(key.into(), event.value()); notice.set(String::new()); }
-                                    }
+                                    }                                    }
                                 }
                             }
                         }
                     }
                 }
-                receipt_preview::ReceiptPreview { original: original.clone(), draft }
+                receipt_preview::ReceiptPreview { original: original.clone(), draft, disabled:saving() }
                 }
             } else if title == "Regional" {
                 div { class: "tax_discount_form regional_preferences",
@@ -2226,10 +2286,11 @@ fn SettingsSection(
             }
             }
             div { class: "settings_page_actions",
-                button { disabled: saving() || draft.read().is_empty(), onclick: move |_| { draft.write().clear(); notice.set(String::new()); }, "Reset Changes" }
+                button { disabled: saving() || draft.read().is_empty(), onclick: move |_| { draft.write().clear(); notice.set(String::new()); }, crate::icons::ActionLabel { label:"Reset Changes" } }
                 button { class: "settings_save", disabled: saving() || draft.read().is_empty(), onclick: move |_| {
                     let allowed = original.iter().map(|(key, _)| key).collect::<Vec<_>>();
                     let mut values = draft.read().iter().filter(|(key, _)| allowed.contains(key)).map(|(key, value)| (key.clone(), value.clone())).collect::<Vec<_>>();
+                    if title=="Receipt" {let mut merged:HashMap<String,String>=original.clone().into_iter().collect();merged.extend(draft.read().clone());if let Err(e)=receipt_editor::validate(&merged){error.set(true);notice.set(e.to_string());return;}}
                     if title == "Regional" {
                         if let Some(symbol) = values.iter().find(|(k,_)| k == "currency").and_then(|(_,v)| match v.as_str() { "Kyats (Ks)" => Some("Ks"), "Dollar ($)" => Some("$"), "Baht (B)" => Some("B"), _ => None }) {
                             values.push(("currency_symbol".into(), symbol.into()));
@@ -2268,7 +2329,9 @@ fn SettingsSection(
                         on_close: move |_| { notice.set(String::new()); error.set(false); }
                     }
                 } else {
-                    div { role: "status", "{notice}" }
+                    MessageBox { title: "Settings Saved".to_string(), message: notice(),
+                        on_close: move |_| notice.set(String::new())
+                    }
                 }
             }
         }
@@ -2608,6 +2671,7 @@ fn ReceiptRow(receipt: SaleSummary, selected: bool, on_select: EventHandler<i32>
     rsx! {
         button {
             class: if selected { "transaction_item active" } else { "transaction_item" },
+            "data-search-value":invoice.clone(),"data-search-detail":format!("{} · {} · {}",customer,created_at,format_ks(receipt.total)),"data-search-match":format!("{} {} {}",invoice,customer,payment_type),
             onclick: move |_| on_select.call(receipt.id),
             div {
                 strong { "{invoice}" }
@@ -2935,9 +2999,7 @@ fn MessageBox(title: String, message: String, on_close: EventHandler<MouseEvent>
                     button {
                         class: "primary",
                         autofocus: true,
-                        onclick: move |event| on_close.call(event),
-                        "OK"
-                    }
+                        onclick: move |event| on_close.call(event), crate::icons::ActionLabel { label:"OK" } }
                 }
             }
         }
@@ -2948,19 +3010,21 @@ fn MessageBox(title: String, message: String, on_close: EventHandler<MouseEvent>
 fn ReceiptDialog(
     receipt: ReceiptData,
     settings: HashMap<String, String>,
-    on_done: EventHandler<MouseEvent>,
+    on_done: EventHandler<()>,
 ) -> Element {
     let mut print_status = use_signal(String::new);
 
     rsx! {
         div { class: "modal_backdrop",
-            section { class: "receipt_dialog",
+            section { class: "receipt_dialog", role:"dialog", aria_modal:"true", aria_label:"Sale saved", tabindex:-1,
+                onmounted:move |element| async move {let _=element.data().set_focus(true).await;},
+                onkeydown:move |event| {if event.key()==Key::Enter {event.prevent_default();event.stop_propagation();on_done.call(());}},
                 div { class: "dialog_head",
                     div {
                         strong { "Sale saved" }
                         small { "{receipt.invoice_no}" }
                     }
-                    button { onclick: move |event| on_done.call(event), "x" }
+                    button {class:"dialog_close_icon",aria_label:"Close",title:"Close (Enter)",onclick:move |_|on_done.call(()),crate::icons::Icon {name:"close"}}
                 }
                 div { class: "receipt_layout",
                     aside { class: "receipt_summary",
@@ -2974,23 +3038,8 @@ fn ReceiptDialog(
                         div { span { "Change" } strong { "{format_ks(receipt.change)}" } }
                     }
                     div { class: "receipt_preview",
-                        div { class: "receipt_paper",
-                            h3 { "{setting_value(&settings, \"shop_name\", \"KAY POS\")}" }
-                            small { "{receipt.invoice_no}" }
-                            div { class: "receipt_rule" }
-                            for line in receipt.lines.iter() {
-                                div { class: "receipt_item",
-                                    span { "{line.display_name()}" }
-                                    small { "{line.qty} x {format_ks(line.unit_price())}" }
-                                    strong { "{format_ks(line_total(line))}" }
-                                }
-                            }
-                            div { class: "receipt_rule" }
-                            if receipt.discount > 0.0 {
-                                div { class: "receipt_total", span { "Discount" } strong { "{format_ks(receipt.discount)}" } }
-                            }
-                            div { class: "receipt_total", span { "Total" } strong { "{format_ks(receipt.total)}" } }
-                        }
+                        receipt_preview::ReceiptPaper {receipt:receipt.clone(),settings:settings.clone()}
+
                     }
                 }
                 div { class: "dialog_actions",
@@ -3011,7 +3060,6 @@ fn ReceiptDialog(
                         },
                         crate::icons::ActionLabel { label:"Print Receipt" }
                     }
-                    button { class: "primary", onclick: move |event| on_done.call(event), crate::icons::ActionLabel { label:"Close" } }
                 }
             }
         }
@@ -3424,6 +3472,9 @@ fn ProductCard(product: Product, on_add: EventHandler<MouseEvent>) -> Element {
     rsx! {
         button {
             class: if out_of_stock { "product_card out_of_stock" } else { "product_card" },
+            "data-search-value":product.name.clone(),
+            "data-search-detail":format!("SKU: {} · {} · Stock: {}",product.sku.as_deref().unwrap_or("—"),format_ks(product.price),format_qty(available_stock)),
+            "data-search-match":format!("{} {} {}",product.name,product.sku.as_deref().unwrap_or(""),product.barcode.as_deref().unwrap_or("")),
             disabled: out_of_stock,
             onclick: move |event| on_add.call(event),
             div { class: "product_image",
@@ -3559,6 +3610,42 @@ fn remove_from_cart(cart: &mut Signal<Vec<CartLine>>, index: usize) {
     let mut lines = cart.write();
     if index < lines.len() {
         lines.remove(index);
+    }
+}
+
+fn set_cart_quantity(lines:&mut [CartLine],index:usize,value:&str)->anyhow::Result<()> {
+    let qty=value.trim().parse::<f64>().map_err(|_|anyhow::anyhow!("Enter a valid quantity"))?;
+    anyhow::ensure!(qty.is_finite() && qty>0.0,"Quantity must be greater than zero");
+    let line=lines.get_mut(index).ok_or_else(||anyhow::anyhow!("Cart item no longer exists"))?;
+    if line.variant.is_some() {anyhow::ensure!(qty.fract()==0.0 && qty<=i32::MAX as f64,"Variant quantity must be a whole number");}
+    anyhow::ensure!(qty<=available_line_stock(line),"Available stock: {}",format_qty(available_line_stock(line)));
+    line.qty=qty;
+    Ok(())
+}
+
+#[component]
+fn CartQuantityInput(mut cart:Signal<Vec<CartLine>>,index:usize,qty:f64) -> Element {
+    let mut draft=use_signal(||format_qty(qty));
+    let mut error=use_signal(String::new);
+    use_effect(use_reactive((&qty,),move |(qty,)| {draft.set(format_qty(qty));error.set(String::new());}));
+    let mut commit=move || {
+        let result=set_cart_quantity(&mut cart.write(),index,&draft.read());
+        match result {Ok(())=>error.set(String::new()),Err(e)=>{
+            error.set(e.to_string());
+            if let Some(line)=cart.read().get(index) {draft.set(format_qty(line.qty));}
+        }}
+    };
+    rsx! {
+        input {class:"cart_quantity_input",r#type:"text",inputmode:"decimal",aria_label:"Quantity",aria_invalid:!error.read().is_empty(),title:"Enter quantity; press Enter or leave the field to apply",value:"{draft}",
+            oninput:move |event| {draft.set(event.value());error.set(String::new());},
+            onblur:move |_|commit(),
+            onkeydown:move |event| {
+                event.stop_propagation();
+                if event.key()==Key::Enter {event.prevent_default();commit();}
+                else if event.key()==Key::Escape {event.prevent_default();draft.set(format_qty(qty));error.set(String::new());}
+            }
+        }
+        if !error.read().is_empty() {small {class:"cart_quantity_error",role:"alert","{error}"}}
     }
 }
 
@@ -3803,4 +3890,19 @@ fn category_tone(id: Option<i32>, name: &str) -> usize {
         hash = hash.wrapping_mul(31).wrapping_add(*byte as usize);
     }
     hash % 6
+}
+
+#[test]
+fn manual_cart_quantity_preserves_line_and_rejects_invalid_stock() {
+    let product:Product=serde_json::from_value(serde_json::json!({"id":1,"name":"Item","price":2500.0,"cost":2000.0,"stock":150.0,"low_stock":0.0,"sold_by":"Each","variants":[],"price_tiers":[]})).unwrap();
+    let mut lines=vec![CartLine {product,variant:None,qty:1.0,unit_price_override:Some(2400.0)}];
+    set_cart_quantity(&mut lines,0,"100").unwrap();assert_eq!(lines[0].qty,100.0);assert_eq!(lines[0].unit_price_override,Some(2400.0));
+    for value in ["", "abc", "0", "-1", "NaN", "inf", "151"] {assert!(set_cart_quantity(&mut lines,0,value).is_err(),"{value}");assert_eq!(lines[0].qty,100.0);}
+    set_cart_quantity(&mut lines,0,"2.5").unwrap();assert_eq!(lines[0].qty,2.5);
+    assert!(set_cart_quantity(&mut lines,9,"1").is_err());
+    lines[0].product.sold_by=Some("Service".into());set_cart_quantity(&mut lines,0,"1000").unwrap();
+    let variant:Product=serde_json::from_value(serde_json::json!({"id":2,"name":"Variant","price":4000.0,"cost":3000.0,"stock":50.0,"low_stock":0.0,"sold_by":"Variants","variants":[{"variant_id":3,"product_id":2,"price":4000.0,"cost":3000.0,"stock":10.0,"low_stock":0.0,"wholesale_min_qty":0,"wholesale_price":0.0}],"price_tiers":[]})).unwrap();
+    lines[0]=CartLine {variant:Some(variant.variants[0].clone()),product:variant,qty:1.0,unit_price_override:None};
+    for value in ["11","1.5"] {assert!(set_cart_quantity(&mut lines,0,value).is_err());assert_eq!(lines[0].qty,1.0);}
+    set_cart_quantity(&mut lines,0,"10").unwrap();assert_eq!(lines[0].qty,10.0);
 }
