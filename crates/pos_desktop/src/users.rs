@@ -30,7 +30,7 @@ pub fn UsersSettings(db_form: DbForm) -> Element {
                 if rows.is_empty(){p {"No users found."}}
                 for user in rows {article {class:"users_settings_row",key:"{user.id}",
                     div {class:"users_avatar",if let Some(url)=&user.avatar {img {src:"{url}",alt:"{user.username}"}}else{span {{user.username.chars().next().unwrap_or('?').to_uppercase().to_string()}}}}
-                    div {class:"users_identity",strong {"{user.username}"} small {"{user.full_name} Â· {user.role} Â· " if user.active==1{"Active"}else{"Inactive"}}}
+                    div {class:"users_identity",strong {"{user.username}"} small {"{user.full_name} · {user.role} · " if user.active==1{"Active"}else{"Inactive"}}}
                     div {class:"users_row_actions",button {disabled:!can_admin,onclick:{let user=user.clone();move |_|{deleting.set(false);editor.set(Some(user.clone()));}},crate::icons::ActionLabel { label:"Edit" }} button {class:"users_delete",disabled:!can_admin,onclick:{let user=user.clone();move |_|{deleting.set(true);editor.set(Some(user.clone()));}},crate::icons::ActionLabel { label:"Delete" }}}
                 }}
             }
