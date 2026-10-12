@@ -1,0 +1,30 @@
+[package]
+name = "rustzk"
+version = "1.1.0"
+edition = "2021"
+description = "A pure Rust implementation of the ZK protocol for attendance devices."
+license = "MIT"
+repository = "https://github.com/vkaylee/rustzk"
+keywords = ["zk", "attendance", "protocol", "iot"]
+categories = ["embedded", "network-programming"]
+
+[dependencies]
+chrono = "0.4"
+byteorder = "1.5"
+thiserror = "1.0"
+bitflags = "2.4"
+encoding_rs = "0.8"
+log = "0.4.29"
+socket2 = "0.5"
+
+
+
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+indexing_slicing = "allow"
+cast_lossless = "allow"
+todo = "warn"
+unimplemented = "warn"

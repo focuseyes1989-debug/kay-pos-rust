@@ -23,6 +23,46 @@ fn amount_chart(rows: &[pos_core::dashboard::Row], daily: bool) -> Element {
     }
 }
 
+fn hourly_chart(rows: &[pos_core::dashboard::Row], by_count: bool) -> Element {
+    let value = |r: &pos_core::dashboard::Row| if by_count {r.count as f64} else {r.amount};
+    let maximum = rows.iter().map(value).fold(0.0,f64::max);
+    let mut ranked: Vec<_> = rows.iter().filter(|r| r.count > 0).collect();
+    ranked.sort_by(|a,b|value(b).total_cmp(&value(a)).then(a.label.cmp(&b.label)));
+    rsx! {
+        if ranked.is_empty() {
+            div {class:"dashboard_chart_empty", "No completed sales in this period."}
+        } else {
+            div {class:"dashboard_peak_summary",
+                for (index,row) in ranked.iter().take(3).enumerate() {
+                    div {class:"dashboard_peak_stat",
+                        small {if index==0 {"Peak hour"}else{"Top selling hour"}}
+                        strong {"{row.label}:00 – {row.label}:59"}
+                        span {"{format_ks(row.amount)} · {row.count} receipts"}
+                    }
+                }
+            }
+            div {class:"dashboard_hourly_scroll",
+                div {class:"dashboard_hourly_plot",role:"img",aria_label:"Hourly completed sales. Each bar represents one hour; exact sales and receipt counts are available below.",
+                    for row in rows {
+                        div {class:if maximum>0.0 && value(row)==maximum {"dashboard_hour_column peak"} else {"dashboard_hour_column"},
+                            title:"{row.label}:00 – {row.label}:59 · {format_ks(row.amount)} · {row.count} receipts",
+                            div {class:"dashboard_hour_track",span {style:"height:{bar_width(value(row),maximum)}%"}}
+                            small {"{row.label}"}
+                        }
+                    }
+                }
+            }
+            small {class:"dashboard_hour_hint", "00–23 hours · Hours use the same shop time as receipts · Point to a bar for details"}
+            details {class:"dashboard_hour_details",
+                summary {"View hourly figures"}
+                table {class:"customers_table",thead {tr {th {"Hour"} th {"Sales"} th {"Receipts"}}} tbody {
+                    for row in rows {tr {td {"{row.label}:00 – {row.label}:59"} td {"{format_ks(row.amount)}"} td {"{row.count}"}}}
+                }}
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod chart_tests {
     use super::*;
@@ -43,6 +83,7 @@ pub fn DashboardPage(db_form: DbForm, actor: pos_core::auth::Session, on_navigat
     let mut to = use_signal(|| today.to_string());
     let mut range = use_signal(|| (today.to_string(),today.to_string()));
     let mut error = use_signal(String::new);
+    let mut hourly_by_count = use_signal(||false);
     let mut data = use_resource(move || {
         let source=db_form.clone(); let actor=actor.clone(); let (a,b)=range();
         async move {
@@ -100,6 +141,15 @@ pub fn DashboardPage(db_form: DbForm, actor: pos_core::auth::Session, on_navigat
                         header {div {h3 {"Period totals"} small {"Compare sales, expenses and supplier purchases"}}}
                         {amount_chart(&summary.period.iter().filter(|r|matches!(r.label.as_str(),"Completed sales"|"Recorded expenses"|"Supplier purchases (ledger)"|"Supplier payments")).cloned().collect::<Vec<_>>(),false)}
                     }
+                }
+                section {class:"dashboard_chart_card dashboard_hourly_card",
+                    header {div {h3 {"Best selling hours"} small {"Completed receipts · Selected period · Combined by hour"}}
+                        div {class:"dashboard_hour_controls",role:"group",aria_label:"Rank selling hours by",
+                            button {class:if !hourly_by_count(){"selected"}else{""},aria_pressed:(!hourly_by_count()).to_string(),onclick:move |_|hourly_by_count.set(false),"Sales amount"}
+                            button {class:if hourly_by_count(){"selected"}else{""},aria_pressed:hourly_by_count().to_string(),onclick:move |_|hourly_by_count.set(true),"Receipt count"}
+                        }
+                    }
+                    {hourly_chart(&summary.hourly,hourly_by_count())}
                 }
                 details {class:"dashboard_more_metrics",
                     summary {"More period details"}

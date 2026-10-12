@@ -1,9 +1,11 @@
+use pos_core::storage as sqlx;
 use anyhow::Result;
 use pos_core::{
     auth::{self, Session},
     complete_sale, refund_sale, SaleDraft, SaleItemDraft,
 };
-use sqlx::{postgres::PgPoolOptions, PgPool};
+use ::sqlx::postgres::PgPoolOptions;
+use pos_core::storage::PgPool;
 
 mod phase5;
 mod phase6;
@@ -16,24 +18,24 @@ async fn fixture() -> Result<(PgPool, Session, Session)> {
         .connect(&url)
         .await?;
     let schema = format!("p1_{}", auth::new_request_id().replace("RUST-", ""));
-    sqlx::query(&format!("CREATE SCHEMA {schema}"))
+    ::sqlx::query(&format!("CREATE SCHEMA {schema}"))
         .execute(&bootstrap)
         .await?;
     bootstrap.close().await;
-    let pool = PgPoolOptions::new()
+    let pool:pos_core::storage::Pool = PgPoolOptions::new()
         .max_connections(8)
         .after_connect(move |conn, _| {
             let command = format!("SET search_path TO {schema}");
             Box::pin(async move {
-                sqlx::query(&command).execute(&mut *conn).await?;
-                sqlx::query("SET statement_timeout='10s'")
+                ::sqlx::query(&command).execute(&mut *conn).await?;
+                ::sqlx::query("SET statement_timeout='10s'")
                     .execute(conn)
                     .await?;
                 Ok(())
             })
         })
         .connect(&url)
-        .await?;
+        .await?.into();
     sqlx::raw_sql(include_str!("fixtures/checkout.sql"))
         .execute(&pool)
         .await?;

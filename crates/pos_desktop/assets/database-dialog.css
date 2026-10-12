@@ -1,0 +1,41 @@
+/* Scoped to the database picker; other application dialogs retain their layout. */
+.db_setup {
+  width:min(580px,100%);
+  max-height:calc(100dvh - 40px);
+  display:flex;
+  flex-direction:column;
+  border-radius:12px;
+  color:var(--ink);
+}
+.db_setup .dialog_head {padding:16px 18px;gap:12px;flex-shrink:0;}
+.db_setup .dialog_head strong {font-size:16px;line-height:1.4;}
+.db_setup .dialog_head small {font-size:12px;line-height:1.5;}
+.db_setup .dialog_close_icon {width:32px;height:32px;min-height:32px;padding:0;font-size:20px;color:var(--muted);flex-shrink:0;}
+.db_setup .db_setup_body {grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px 12px;padding:16px 18px;overflow-y:auto;min-height:0;}
+.db_setup .db_setup_body label {gap:5px;font-size:12px;line-height:1.4;font-weight:600;}
+.db_setup .db_setup_body input {font-weight:400;background:light-dark(#fff,#172235);}
+.db_setup .db_mode_switch {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
+body .db_setup button.db_mode {display:grid;gap:2px;text-align:left;border:1px solid var(--line);border-radius:8px;padding:9px 12px!important;background:light-dark(#f8fafc,#172235);color:var(--ink);cursor:pointer;}
+.db_setup .db_mode strong {font-size:14px;font-weight:600;line-height:1.4;}
+.db_setup .db_mode small {font-size:11px;line-height:1.5;color:var(--muted);font-weight:400;}
+body .db_setup button.db_mode.active {border-color:var(--blue);background:light-dark(#eff6ff,#203452);box-shadow:inset 0 0 0 1px var(--blue);}
+.db_setup .db_file_row {display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;}
+.db_setup .db_browse {padding:0 12px;border:1px solid var(--line);border-radius:8px;color:var(--ink);background:light-dark(#f8fafc,#243247);font-weight:400;white-space:nowrap;cursor:pointer;}
+.db_setup .db_setup_hint {margin:0;color:var(--muted);font-size:12px;line-height:1.55;font-weight:400;}
+.db_setup .db_setup_body > .db_setup_hint {margin-top:-6px;}
+.db_setup .db_admin_setup {min-width:0;margin:0;padding:10px 12px 12px;border:1px solid var(--line);border-radius:8px;background:light-dark(#f8fafc,#172235);}
+.db_setup .db_admin_setup legend {padding:0 5px;font-size:12px;font-weight:600;color:var(--ink);}
+.db_setup .db_admin_fields {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:8px;}
+.db_setup .dialog_actions {padding:12px 18px;border-top:1px solid var(--line);background:light-dark(#f8fafc,#172235);flex-shrink:0;}
+.db_setup .dialog_actions button {padding-inline:16px;}
+.db_setup .db_setup_error {margin:0 18px 12px;padding:9px 12px;border:1px solid light-dark(#fecaca,#7f3038);border-radius:8px;color:light-dark(#b91c1c,#fca5a5);background:light-dark(#fff1f2,#381f29);font-size:12px;line-height:1.5;overflow-wrap:anywhere;max-height:110px;overflow:auto;}
+.db_setup button:focus-visible {outline:2px solid var(--blue);outline-offset:2px;}
+.db_setup button:disabled {opacity:.55;cursor:default;}
+@media(max-width:480px) {
+  .db_setup .dialog_head {padding:13px 14px;}
+  .db_setup .db_setup_body {padding:14px;gap:12px;}
+  .db_setup .db_admin_fields {grid-template-columns:minmax(0,1fr);gap:10px;}
+  .db_setup .dialog_actions {padding:10px 14px;}
+  body .db_setup button.db_mode {padding-inline:9px!important;}
+  .db_setup .db_mode small {font-size:10px;}
+}

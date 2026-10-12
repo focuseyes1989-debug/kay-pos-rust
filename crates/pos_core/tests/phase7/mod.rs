@@ -1,3 +1,4 @@
+use pos_core::storage as sqlx;
 use super::*;
 use pos_core::ai;
 
@@ -19,12 +20,7 @@ async fn ai_permissions_readonly_and_audit() -> Result<()> {
         .any(|r| r[0] == "အကြွေးရောင်းစုစုပေါင်း (အရောင်းစုစုပေါင်းတွင် ပါဝင်သည်)" && r[1] == "45000"));
     let product = ai::chat("product Test", "2026-09-25", "2026-09-25")?;
     assert_eq!(ai::ask(&pool, &manager, &product).await?.rows.len(), 4);
-    let literal = ai::chat(
-        "product '; DROP TABLE sales; --",
-        "2026-09-25",
-        "2026-09-25",
-    )?;
-    assert!(ai::ask(&pool, &manager, &literal).await?.rows.is_empty());
+    assert!(ai::chat("product '; DROP TABLE sales; --", "2026-09-25", "2026-09-25").is_err());
     assert_eq!(
         sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM sales")
             .fetch_one(&pool)
@@ -35,7 +31,7 @@ async fn ai_permissions_readonly_and_audit() -> Result<()> {
         sqlx::query_scalar("SELECT details FROM user_activity_log WHERE action='rust.ai.query'")
             .fetch_all(&pool)
             .await?;
-    assert_eq!(details.len(), 3);
+    assert_eq!(details.len(), 2);
     assert!(details
         .iter()
         .all(|d| d.contains("request_hash=") && !d.contains("DROP TABLE") && !d.contains("Test")));

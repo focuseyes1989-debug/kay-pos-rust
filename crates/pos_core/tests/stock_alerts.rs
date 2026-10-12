@@ -1,5 +1,6 @@
+use pos_core::storage as sqlx;
 use anyhow::Result;
-use sqlx::postgres::PgPoolOptions;
+use ::sqlx::postgres::PgPoolOptions;
 
 #[tokio::test]
 #[ignore = "requires isolated P1_TEST_DATABASE_URL"]
@@ -7,12 +8,12 @@ async fn alerts_exclude_services_and_inactive_variants() -> Result<()> {
     let url=std::env::var("P1_TEST_DATABASE_URL")?;
     let schema=format!("alerts_{}",pos_core::auth::new_request_id().replace("RUST-",""));
     let setup=PgPoolOptions::new().max_connections(1).connect(&url).await?;
-    sqlx::query(&format!("CREATE SCHEMA {schema}")).execute(&setup).await?;
+    ::sqlx::query(&format!("CREATE SCHEMA {schema}")).execute(&setup).await?;
     let schema_for_pool=schema.clone();
-    let pool=PgPoolOptions::new().max_connections(1).after_connect(move |c,_| {
+    let pool:pos_core::storage::Pool=PgPoolOptions::new().max_connections(1).after_connect(move |c,_| {
         let q=format!("SET search_path TO {schema_for_pool}");
         Box::pin(async move {sqlx::query(&q).execute(c).await?;Ok(())})
-    }).connect(&url).await?;
+    }).connect(&url).await?.into();
     sqlx::raw_sql("CREATE TABLE products(id int,name text,sku text,sold_by text,stock float8,low_stock float8);
         CREATE TABLE product_variants(id int,product_id int,size text,color text,sku text,stock int,low_stock int,active int);
         INSERT INTO products VALUES(1,'Low','A','Each',3,3),(2,'Empty','B','Each',0,0),

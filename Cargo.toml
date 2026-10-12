@@ -2,6 +2,8 @@
 members = [
     "crates/pos_core",
     "crates/pos_desktop",
+    "vendor/rustzk",
+    "crates/storage_derive",
 ]
 resolver = "2"
 
@@ -21,5 +23,8 @@ rust_decimal = { version = "1", features = ["serde-with-str"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
-sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio", "tls-native-tls", "postgres", "chrono", "derive", "rust_decimal"] }
+sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio", "tls-native-tls", "postgres", "sqlite", "chrono", "derive", "rust_decimal"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
+
+[patch.crates-io]
+rustzk = { path = 'vendor/rustzk' }

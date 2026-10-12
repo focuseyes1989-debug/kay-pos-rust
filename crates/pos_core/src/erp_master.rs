@@ -1,3 +1,4 @@
+use crate::storage as sqlx;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use sqlx::{PgConnection, PgPool};

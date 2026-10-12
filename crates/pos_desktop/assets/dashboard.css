@@ -71,3 +71,27 @@
 .shell .dashboard_more_metrics .dashboard_metric small { font-size: 11px; line-height: 1.4; }
 .shell .dashboard_more_metrics .dashboard_metric_count { white-space: nowrap; }
 .shell .dashboard_more_metrics .dashboard_metric strong { margin: 0; font-size: 21px; line-height: 1.25; }
+
+/* Hourly sales, aggregated across the selected period. */
+.dashboard_hourly_card {margin-bottom:16px;}
+.dashboard_hourly_card header {display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px;}
+.dashboard_hour_controls {display:flex;gap:4px;padding:3px;border:1px solid var(--line);border-radius:8px;}
+.shell .dashboard_hour_controls button {min-height:32px;height:auto;padding:6px 12px;border:0;background:transparent;font-size:12px;}
+.shell .dashboard_hour_controls button.selected {background:#2563eb;color:#fff;border-radius:5px;}
+.dashboard_peak_summary {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:18px;}
+.dashboard_peak_stat {display:grid;gap:5px;padding:12px;border:1px solid var(--line);border-radius:8px;}
+.dashboard_peak_stat:first-child {border-color:#2563eb;background:color-mix(in srgb,#2563eb 6%,var(--panel));}
+.dashboard_peak_stat small,.dashboard_peak_stat span,.dashboard_hour_hint {font-size:12px;color:var(--muted);}
+.dashboard_peak_stat strong {font-size:16px;font-variant-numeric:tabular-nums;}
+.dashboard_hourly_scroll {overflow-x:auto;}
+.dashboard_hourly_plot {display:grid;grid-template-columns:repeat(24,minmax(16px,1fr));gap:3px;min-width:640px;padding:6px 0;}
+.dashboard_hour_column {display:flex;flex-direction:column;align-items:center;gap:6px;}
+.dashboard_hour_track {height:140px;display:flex;align-items:flex-end;width:100%;border-bottom:1px solid var(--line);background:color-mix(in srgb,var(--muted) 4%,var(--panel));border-radius:4px 4px 0 0;}
+.dashboard_hour_track span {display:block;width:100%;background:#60a5fa;border-radius:4px 4px 0 0;}
+.dashboard_hour_column.peak .dashboard_hour_track span {background:#2563eb;}
+.dashboard_hour_column small {font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;}
+.dashboard_hour_hint {display:block;margin-top:8px;}
+.dashboard_hour_details {margin-top:12px;font-size:12px;}
+.dashboard_hour_details summary {cursor:pointer;}
+.dashboard_hour_details table {margin-top:10px;}
+@media(max-width:600px) {.dashboard_peak_summary {grid-template-columns:1fr;} .dashboard_peak_stat {padding:10px;} .dashboard_hour_controls {width:100%;} .dashboard_hour_controls button {flex:1;}}

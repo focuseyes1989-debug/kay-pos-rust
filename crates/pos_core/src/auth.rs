@@ -1,3 +1,4 @@
+use crate::storage as sqlx;
 use anyhow::{ensure, Context, Result};
 use sha2::{Digest, Sha256};
 use sqlx::{PgConnection, PgPool};

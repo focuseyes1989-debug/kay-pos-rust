@@ -1,6 +1,6 @@
 # KAY POS Rust
 
-Windows desktop point-of-sale client built with Rust, Dioxus and PostgreSQL.
+Windows desktop point-of-sale client built with Rust, Dioxus, SQLite and PostgreSQL.
 This repository contains only the Rust client, its assets, migrations and tests.
 The original Python application is not required to build the desktop executable.
 
@@ -17,7 +17,8 @@ the update URL embedded in existing clients.
 - Rust 1.88 or later with the `x86_64-pc-windows-msvc` toolchain.
 - Visual Studio Build Tools with the C++ desktop workload and Windows SDK.
 - Microsoft Edge WebView2 Runtime to run the application.
-- A compatible KAY POS PostgreSQL database to sign in and use the POS.
+- For server mode: a compatible KAY POS PostgreSQL database.
+- Standalone mode bundles SQLite in the EXE; no database server installation is needed.
 
 ## Build and run
 
@@ -33,12 +34,17 @@ The release executable is `target/release/pos_desktop.exe`. Release builds do no
 open a console window. All desktop UI assets are included in this repository and
 embedded in the executable.
 
-Use **Database connection** on the login screen to configure your server locally.
-Never commit the resulting `kay-pos-db.json`, passwords, `.env`, or shop data.
-This is a client of an existing compatible database, not a server installer.
-The migrations extend that schema; they do not create a complete production
-database. Review [deployment notes](docs/P1-DEPLOYMENT.md) and take a verified
-backup before applying migrations.
+Use **Database connection** on the login screen to select **SQLite** (standalone)
+or **PostgreSQL** (server). For a new SQLite file, enter an admin username and a
+password of at least eight characters, then **Save & Test**. Existing PostgreSQL
+configurations continue to use server mode automatically.
+
+Modes have separate records and accounts. There is no automatic sync or import.
+See [database modes and backups](docs/DATABASE-MODES.md).
+Never commit `kay-pos-db.json`, passwords, `.env`, SQLite files or shop data.
+PostgreSQL mode connects to an existing compatible schema; its migrations extend
+that schema. SQLite mode initializes its own complete empty standalone schema.
+Review [deployment notes](docs/P1-DEPLOYMENT.md) before applying server migrations.
 
 ## Tests
 
@@ -67,7 +73,7 @@ separate release repository.
 
 - `crates/pos_core`: database access, business rules and integration fixtures.
 - `crates/pos_desktop`: Dioxus desktop UI, embedded assets and updater.
-- `migrations`: incremental PostgreSQL changes and stock preflight checks.
+- `migrations`: PostgreSQL extensions, stock preflight checks and standalone SQLite schema.
 - `scripts`: receipt preview tests and release tooling.
 - `docs`: deployment and feature notes.
 - `src-tauri`: historical experimental shell; not part of the supported Cargo

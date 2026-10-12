@@ -1,3 +1,4 @@
+use crate::storage as sqlx;
 use anyhow::Result;
 use sqlx::PgPool;
 use crate::auth::{Permission, Session};
@@ -12,11 +13,14 @@ pub struct Row {
 pub struct Dashboard {
     pub period: Vec<Row>,
     pub daily: Vec<Row>,
+    pub hourly: Vec<Row>,
     pub customers: Vec<Row>,
     pub suppliers: Vec<Row>,
     pub operations: Vec<Row>,
     pub loaded_at: String,
 }
+
+const HOURLY_SQL: &str = "SELECT to_char(created_at,'HH24') AS label,COALESCE(SUM(total),0)::float8 AS amount,COUNT(*) AS count FROM sales WHERE status='completed' AND created_at >= $1 AND created_at < $2 GROUP BY 1 ORDER BY 1";
 
 pub async fn load(pool: &PgPool, actor: &Session, from: &str, to: &str) -> Result<Dashboard> {
     let (start,end) = crate::sale_summary::dates(from,to)?;
@@ -28,6 +32,12 @@ pub async fn load(pool: &PgPool, actor: &Session, from: &str, to: &str) -> Resul
         .bind(start.to_string()).bind(end.to_string()).fetch_all(&mut *tx).await?;
     let daily = sqlx::query_as("SELECT to_char(created_at,'YYYY-MM-DD') AS label,COALESCE(SUM(total),0)::float8 AS amount,COUNT(*) AS count FROM sales WHERE status='completed' AND created_at >= $1 AND created_at < $2 GROUP BY 1 ORDER BY 1")
         .bind(start.and_hms_opt(0,0,0).unwrap()).bind(end.and_hms_opt(0,0,0).unwrap()).fetch_all(&mut *tx).await?;
+    let hourly_rows: Vec<Row> = sqlx::query_as(HOURLY_SQL)
+        .bind(start.and_hms_opt(0,0,0).unwrap()).bind(end.and_hms_opt(0,0,0).unwrap()).fetch_all(&mut *tx).await?;
+    let hourly = (0..24).map(|hour| {
+        let label = format!("{hour:02}");
+        hourly_rows.iter().find(|row|row.label==label).cloned().unwrap_or(Row {label, ..Row::default()})
+    }).collect();
     let customers = sqlx::query_as("SELECT COALESCE(name,'Customer') || ' #' || id::text AS label,current_balance::float8 AS amount,1::bigint AS count FROM customers WHERE current_balance>0 ORDER BY current_balance DESC,id")
         .fetch_all(&mut *tx).await?;
     // Match Main POS supplier ledger: Purchase is a debit; other types are credits.
@@ -48,5 +58,25 @@ pub async fn load(pool: &PgPool, actor: &Session, from: &str, to: &str) -> Resul
         if exists { operations.push(sqlx::query_as(query).fetch_one(&mut *tx).await?); }
     }
     tx.commit().await?;
-    Ok(Dashboard { period,daily,customers,suppliers,operations,loaded_at:chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string() })
+    Ok(Dashboard { period,daily,hourly,customers,suppliers,operations,loaded_at:chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string() })
+}
+
+#[cfg(test)]
+mod hourly_tests {
+    #[tokio::test]
+    #[ignore = "requires disposable PostgreSQL on port 55487"]
+    async fn postgres_hourly_sales_boundaries_and_completed_only() -> anyhow::Result<()> {
+        use ::sqlx::Connection;
+        let url=std::env::var("P1_TEST_DATABASE_URL")?;
+        anyhow::ensure!(url.contains("127.0.0.1:55487/"),"Use isolated test PostgreSQL");
+        let mut conn=::sqlx::PgConnection::connect(&url).await?;
+        let mut tx=conn.begin().await?;
+        ::sqlx::query("CREATE TEMP TABLE sales(created_at timestamp,total numeric,status text) ON COMMIT DROP").execute(&mut *tx).await?;
+        ::sqlx::query("INSERT INTO sales VALUES ('2026-10-12 09:00',100,'completed'),('2026-10-12 09:59:59',200,'completed'),('2026-10-12 23:59:59',50,'completed'),('2026-10-13 00:00',900,'completed'),('2026-10-12 09:30',800,'refunded')").execute(&mut *tx).await?;
+        let start=chrono::NaiveDate::from_ymd_opt(2026,10,12).unwrap().and_hms_opt(0,0,0).unwrap();
+        let rows:Vec<(String,f64,i64)>=::sqlx::query_as(super::HOURLY_SQL).bind(start).bind(start+chrono::Duration::days(1)).fetch_all(&mut *tx).await?;
+        assert_eq!(rows,vec![("09".into(),300.0,2),("23".into(),50.0,1)]);
+        tx.rollback().await?;
+        Ok(())
+    }
 }

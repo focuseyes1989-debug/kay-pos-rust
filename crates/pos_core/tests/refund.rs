@@ -1,14 +1,15 @@
+use pos_core::storage as sqlx;
 use pos_core::refund_sale;
-use sqlx::{postgres::PgPoolOptions, Row};
+use ::sqlx::postgres::PgPoolOptions;
 
 // Requires an explicitly supplied database; all fixtures live in session-local temp tables.
 #[tokio::test]
 #[ignore = "requires REFUND_TEST_DATABASE_URL"]
 async fn refund_stock_credit_and_rollback() -> anyhow::Result<()> {
-    let pool = PgPoolOptions::new()
+    let pool:pos_core::storage::Pool = PgPoolOptions::new()
         .max_connections(1)
         .connect(&std::env::var("REFUND_TEST_DATABASE_URL")?)
-        .await?;
+        .await?.into();
     sqlx::raw_sql(r#"
         SET search_path TO pg_temp;
         CREATE TEMP TABLE settings(key text,value text);

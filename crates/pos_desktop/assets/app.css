@@ -3632,8 +3632,21 @@ footer {
 .top_identity { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .top_identity .menu_button { flex-shrink: 0; }
 .top_navigation { display: flex; align-items: center; gap: 12px; height: 100%; }
-.shell .topbar .top_nav_link { min-height: 34px; padding: 6px 14px; border: 1px solid transparent; border-radius: 4px; background: transparent; color: var(--shop-header-text, #fff); font-size: 13px; }
-.shell .topbar .top_nav_link[aria-current="page"] { border-bottom-color: currentColor; }
+.shell .topbar .top_nav_link { min-height: 34px; padding: 6px 14px; border: 1px solid transparent; border-radius: 9px; background: transparent; color: var(--shop-header-text, #fff); font-size: 13px; transition: background-color .15s ease, border-color .15s ease; }
+.shell .topbar .top_nav_link:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--shop-header-text, #fff) 10%, transparent);
+  border-color: color-mix(in srgb, var(--shop-header-text, #fff) 18%, transparent);
+}
+.shell .topbar .top_nav_link[aria-current="page"],
+.shell .topbar .top_nav_link[aria-current="page"]:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--shop-header-text, #fff) 18%, transparent);
+  border-color: color-mix(in srgb, var(--shop-header-text, #fff) 38%, transparent);
+  box-shadow: 0 1px 3px #00000014;
+}
+.shell .topbar .top_nav_link:focus-visible {
+  outline: 2px solid var(--shop-header-text, #fff);
+  outline-offset: 3px;
+}
 .topbar .top_actions { justify-self: end; }
 .shell .topbar .top_sign_out { min-height: 32px; padding: 6px 22px; border: 1px solid var(--shop-button-text, #fff); border-radius: 18px; background: var(--shop-button, #2563eb); color: var(--shop-button-text, #fff); font-size: 13px; }
 .shell .topbar .top_sign_out:disabled { opacity: .55; cursor: wait; }
@@ -3659,7 +3672,7 @@ footer {
   border-color: var(--shop-button, #2563eb);
   color: var(--shop-button-text, #fff);
 }
-.shell button:not(:disabled):not(.danger):not(.product_delete):not(.expense_delete):not(.users_delete):not(.shop_color_preset):not(.product_card):not(.inventory_product):not(.category.active):not(.customer_list_item):not(.side_group > button):not(.date_range_picker button):hover,
+.shell button:not(:disabled):not(.top_nav_link):not(.danger):not(.product_delete):not(.expense_delete):not(.users_delete):not(.shop_color_preset):not(.product_card):not(.inventory_product):not(.category.active):not(.customer_list_item):not(.side_group > button):not(.date_range_picker button):hover,
 .shell .topbar :is(.sync, .menu_button):focus-visible,
 .shell .app_status_bar button.status_refresh:hover:not(:disabled) {
   background: var(--shop-hover, #1e40af);
@@ -4753,4 +4766,111 @@ footer {
     grid-template-columns: minmax(0, 1fr);
     gap: 5px;
   }
+}
+
+/* Header language controls use embedded flags, independent of emoji fonts. */
+.top_language_switch { position:relative; display:flex; align-items:center; gap:2px; flex-shrink:0; padding-left:6px; border-left:1px solid #ffffff40; }
+.shell .topbar .top_language_button { display:inline-flex; align-items:center; justify-content:center; width:34px; min-width:34px; height:34px; min-height:34px; padding:5px; border:0 !important; border-radius:0; background:transparent !important; box-shadow:none; color:var(--shop-header-text,#fff); }
+.top_language_button img { opacity:.65; transition:opacity .15s; }
+.top_language_button[aria-pressed="true"] img, .top_language_button:hover img, .top_language_button:focus-visible img { opacity:1; }
+.top_language_button img { display:block; width:24px; height:16px; border-radius:1px; }
+.top_language_button:disabled { opacity:.6; cursor:wait; }
+.top_language_error { position:absolute; z-index:100; right:0; top:calc(100% + 8px); width:min(340px,80vw); padding:10px 34px 10px 12px; border:1px solid #ef4444; border-radius:6px; background:#fff; color:#991b1b; font-size:12px; overflow-wrap:anywhere; box-shadow:0 4px 12px #0002; }
+.top_language_error button { position:absolute; top:2px; right:2px; padding:2px 6px; background:transparent; color:inherit; border:0; }
+
+/* Keep the original page scroll. Expand only the detail panel once sticky. */
+.shell .receipts_page .receipt_detail_panel[data-stuck="true"] {
+  max-height:var(--receipt-sticky-height);
+  grid-template-rows:auto minmax(0,1fr) auto auto;
+}
+.shell .receipts_page .receipt_detail_panel[data-stuck="true"] .receipt_items_table {
+  max-height:none;
+  min-height:0;
+  overflow:auto;
+}
+.shell .receipts_page .receipt_item_header { position:sticky; top:0; z-index:1; }
+
+/* Keep customer actions visible while the profile scrolls inside its card. */
+.shell .customers_touch .customer_detail {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+.shell .customers_touch .customer_detail_content {
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+.shell .customers_touch .customer_detail_actions {
+  flex-shrink: 0;
+  background: var(--panel);
+}
+
+.shell .customers_touch .customer_detail_actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.shell .customers_touch .customer_detail_actions .customer_primary {
+  flex: 1 0 auto;
+}
+.shell .customers_touch .customer_detail_actions .customer_icon_action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 36px;
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0;
+}
+
+.shell .supplier_detail_identity { flex: 1; min-width: 0; }
+.shell .supplier_detail .supplier_edit_icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 36px;
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  color: var(--muted);
+  transition: color 150ms ease;
+}
+.shell .supplier_detail .supplier_edit_icon:hover,
+.shell .supplier_detail .supplier_edit_icon:focus-visible {
+  color: light-dark(#2563eb, #93c5fd);
+  background: transparent;
+}
+
+.shell .attendance_sync_dialog { position: relative; }
+.shell .attendance_sync_dialog h2 { padding-right: 36px; }
+.shell .attendance_sync_dialog .attendance_sync_close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  box-shadow: none;
+}
+.shell .attendance_sync_dialog .attendance_sync_close:hover:not(:disabled) {
+  color: var(--ink);
+  background: var(--bg);
 }

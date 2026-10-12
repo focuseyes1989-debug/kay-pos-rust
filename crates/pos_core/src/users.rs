@@ -1,3 +1,4 @@
+use crate::storage as sqlx;
 use anyhow::{ensure, Context, Result};
 use sqlx::PgPool;
 use subtle::ConstantTimeEq;

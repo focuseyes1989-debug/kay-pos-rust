@@ -1,31 +1,33 @@
+use pos_core::storage as sqlx;
 use anyhow::Result;
 use pos_core::{
     auth::{self, Session},
     employees::{self, Command, Section},
 };
 use serde_json::{json, Value};
-use sqlx::{postgres::PgPoolOptions, PgPool};
+use ::sqlx::postgres::PgPoolOptions;
+use pos_core::storage::PgPool;
 async fn fixture() -> Result<(PgPool, Session, Session, String)> {
     let url = std::env::var("EMPLOYEE_TEST_DATABASE_URL")?;
     ensure_local(&url)?;
     let bootstrap = PgPoolOptions::new().connect(&url).await?;
     let schema = format!("emp_{}", auth::new_request_id().replace("RUST-", ""));
-    sqlx::query(&format!("CREATE SCHEMA {schema}"))
+    ::sqlx::query(&format!("CREATE SCHEMA {schema}"))
         .execute(&bootstrap)
         .await?;
     bootstrap.close().await;
     let namespace = schema.clone();
-    let pool = PgPoolOptions::new()
+    let pool:pos_core::storage::Pool = PgPoolOptions::new()
         .max_connections(6)
         .after_connect(move |conn, _| {
             let q = format!("SET search_path TO {namespace}");
             Box::pin(async move {
-                sqlx::query(&q).execute(conn).await?;
+                ::sqlx::query(&q).execute(conn).await?;
                 Ok(())
             })
         })
         .connect(&url)
-        .await?;
+        .await?.into();
     sqlx::raw_sql(include_str!("fixtures/checkout.sql"))
         .execute(&pool)
         .await?;

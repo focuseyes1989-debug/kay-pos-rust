@@ -62,7 +62,7 @@ fn render_state(
     rsx! {
         if !delivery_configured {
             p {class:"erp_ops_notice",role:"status",
-                "ဤ client တွင် ERP delivery configuration မသတ်မှတ်ထားပါ သို့မဟုတ် မမှန်ပါ။ ERP API/Webhook URL ချိတ်ဆက်ပြီး app ပြန်ဖွင့်မှ delivery worker စတင်ပါမည်။ Pending သည် ERP ဆီ ပို့ရန်စောင့်နေသည့် မှတ်တမ်းဖြစ်ပြီး POS အရောင်းမသိမ်းရသေးဟု မဆိုလိုပါ။ အခြား client တွင် worker ဖွင့်ထားပါက ထို client ၏ status ကို အောက်တွင် စစ်ပါ။"
+                {crate::regional::text("ဤ client တွင် ERP delivery configuration မသတ်မှတ်ထားပါ သို့မဟုတ် မမှန်ပါ။ ERP API/Webhook URL ချိတ်ဆက်ပြီး app ပြန်ဖွင့်မှ delivery worker စတင်ပါမည်။ Pending သည် ERP ဆီ ပို့ရန်စောင့်နေသည့် မှတ်တမ်းဖြစ်ပြီး POS အရောင်းမသိမ်းရသေးဟု မဆိုလိုပါ။ အခြား client တွင် worker ဖွင့်ထားပါက ထို client ၏ status ကို အောက်တွင် စစ်ပါ။")}
             }
         }
         div { class: "erp_ops_metrics",
@@ -91,7 +91,7 @@ fn render_state(
                     td { "{worker.last_success}" } td { "{worker.updated_at}" } td { class: "erp_error_text", "{worker.last_error}" }
                 }} }
             }}
-            if state.workers.is_empty() { p { "ERP worker မှ status မပို့ရသေးပါ။ ERP connection configuration နှင့် worker ဖွင့်ထားသော client ကို စစ်ဆေးပါ။" } }
+            if state.workers.is_empty() { p { {crate::regional::text("ERP worker မှ status မပို့ရသေးပါ။ ERP connection configuration နှင့် worker ဖွင့်ထားသော client ကို စစ်ဆေးပါ။")} } }
         }
         section { class: "erp_ops_section",
             h3 { "Failed and delayed events" }

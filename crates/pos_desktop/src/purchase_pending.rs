@@ -11,12 +11,7 @@ pub struct Pending {
 fn path(form: &DbForm) -> anyhow::Result<std::path::PathBuf> {
     let root = std::env::var_os("LOCALAPPDATA")
         .ok_or_else(|| anyhow::anyhow!("Local app data unavailable"))?;
-    let identity = format!(
-        "{}:{}:{}",
-        form.host.trim().to_lowercase(),
-        form.port.trim(),
-        form.database.trim()
-    );
+    let identity = form.identity()?;
     Ok(std::path::PathBuf::from(root)
         .join("KAY POS Rust")
         .join("purchase-pending")

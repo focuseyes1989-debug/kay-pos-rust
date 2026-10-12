@@ -1,3 +1,4 @@
+use crate::storage as sqlx;
 use anyhow::{bail, Context, Result};
 use sqlx::PgPool;
 

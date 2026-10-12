@@ -97,11 +97,13 @@ pub fn SuppliersPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
                 }
                 aside { class: "customer_detail supplier_detail",
                     if let Some(supplier)=selected() {
-                        header { class: "customer_detail_header", div { h3 { "{supplier.name}" } small { "{supplier.status} · Supplier #{supplier.id}" } } }
+                        header { class: "customer_detail_header",
+                            div { class: "supplier_detail_identity", h3 { "{supplier.name}" } small { "{supplier.status} · Supplier #{supplier.id}" } }
+                            button { class: "supplier_edit_icon", title: "Edit supplier", aria_label: "Edit supplier", onclick: move |_|editor.set(selected()), crate::icons::Icon { name:"edit" } }
+                        }
                         dl { class: "customer_contact",
                             for (label,value) in fields(&supplier).into_iter().skip(1) { dt { "{label}" } dd { if value.is_empty() { "—" } else { "{value}" } } }
                         }
-                        button { class: "customer_primary", onclick: move |_|editor.set(selected()), crate::icons::ActionLabel { label:"Edit supplier" } }
                     } else { p { class: "customer_detail_empty", "Select a supplier to view details." } }
                 }
             }

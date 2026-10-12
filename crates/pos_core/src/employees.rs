@@ -1,3 +1,4 @@
+use crate::storage as sqlx;
 use crate::auth::{Permission, Session};
 use anyhow::{ensure, Context, Result};
 use chrono::{NaiveDate, NaiveTime};
@@ -768,7 +769,14 @@ async fn write_record(
         .map(String::as_str)
         .collect::<Vec<_>>();
     // All column names come from validate() or explicitly assigned server-side fields.
-    let sql = if id.is_some() {
+    let sql = if conn.is_sqlite() {
+        let extracted=keys.iter().map(|key|format!("json_extract($1,'$.{key}')")).collect::<Vec<_>>().join(",");
+        if id.is_some() {
+            format!("UPDATE {} SET ({})=(SELECT {}) WHERE id=$2 RETURNING id",section.table(),keys.join(","),extracted)
+        } else {
+            format!("INSERT INTO {} ({}) SELECT {} WHERE $2::integer IS NULL RETURNING id",section.table(),keys.join(","),extracted)
+        }
+    } else if id.is_some() {
         format!("UPDATE {} t SET ({})=(SELECT {} FROM jsonb_populate_record(NULL::{},$1::jsonb)) WHERE id=$2 RETURNING id",section.table(),keys.join(","),keys.join(","),section.table())
     } else {
         format!("INSERT INTO {} ({}) SELECT {} FROM jsonb_populate_record(NULL::{},$1::jsonb) WHERE $2::integer IS NULL RETURNING id",section.table(),keys.join(","),keys.join(","),section.table())

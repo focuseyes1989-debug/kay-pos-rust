@@ -15,12 +15,7 @@ struct Pending {
 fn journal_path(form: &DbForm) -> anyhow::Result<std::path::PathBuf> {
     let root = std::env::var_os("LOCALAPPDATA")
         .ok_or_else(|| anyhow::anyhow!("Local application data unavailable"))?;
-    let identity = format!(
-        "{}:{}:{}",
-        form.host.trim().to_lowercase(),
-        form.port.trim(),
-        form.database.trim()
-    );
+    let identity = form.identity()?;
     Ok(std::path::PathBuf::from(root)
         .join("KAY POS Rust")
         .join("employee-pending")
@@ -353,16 +348,16 @@ pub fn EmployeesPage(db_form: DbForm) -> Element {
                 }}
                 if rows.is_empty(){
                     if section()==Section::Attendance {
-                        p {"ရွေးထားသောကာလ / filter နှင့် ကိုက်ညီသည့် attendance မှတ်တမ်း မရှိပါ။"}
+                        p {{crate::regional::text("ရွေးထားသောကာလ / filter နှင့် ကိုက်ညီသည့် attendance မှတ်တမ်း မရှိပါ။")}}
                         if let Some(latest)=loaded.as_ref().and_then(|page|page.summary["latest_attendance"].as_str()).map(str::to_owned) {
-                            p {"နောက်ဆုံး attendance ရက်: {latest}"}
+                            p {{crate::regional::text(&format!("နောက်ဆုံး attendance ရက်: {latest}"))}}
                             button {onclick:move |_|{
                                 if let Ok(day)=chrono::NaiveDate::parse_from_str(&latest,"%Y-%m-%d") {
                                     let start=(day-chrono::Duration::days(30)).to_string();
                                     from.set(start.clone());to.set(latest.clone());range.set((start,latest.clone()));query.set(String::new());status.set(String::new());attendance_employee.set(String::new());attendance_record.set(String::new());selected.set(None);page.set(0);
                                 }
-                            },"နောက်ဆုံးမှတ်တမ်းများ ကြည့်ရန်"}
-                        }else{p {"Attendance Sync ဖြင့် device မှ data ရယူပါ သို့မဟုတ် Record Attendance ဖြင့် မှတ်တမ်းတင်ပါ။"}}
+                            },{crate::regional::text("နောက်ဆုံးမှတ်တမ်းများ ကြည့်ရန်")}}
+                        }else{p {{crate::regional::text("Attendance Sync ဖြင့် device မှ data ရယူပါ သို့မဟုတ် Record Attendance ဖြင့် မှတ်တမ်းတင်ပါ။")}}}
                     }else{p {"No records found"}}
                 }
                 footer {class:"employee_pagination",button { title:"Previous page", aria_label:"Previous page",disabled:current_page==0,onclick:move |_|page.set(current_page.saturating_sub(1)),crate::icons::Icon { name:"arrow_circle_left" }} span {"Page {current_page+1} / {rows.len().div_ceil(30).max(1)}"} button { title:"Next page", aria_label:"Next page",disabled:(current_page+1)*30>=rows.len(),onclick:move |_|page.set(current_page+1),crate::icons::Icon { name:"arrow_circle_right" }}}
@@ -578,3 +573,5 @@ fn attendance_record_matches(row: &Value, filter: &str) -> bool {
         _=>true,
     }
 }
+
+pub(crate) fn has_pending(form:&DbForm)->anyhow::Result<bool>{Ok(load_pending(form)?.is_some())}

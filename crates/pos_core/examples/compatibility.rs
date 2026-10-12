@@ -1,3 +1,4 @@
+use pos_core::storage as sqlx;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let pool = pos_core::connect(&pos_core::DatabaseConfig::from_env()?).await?;

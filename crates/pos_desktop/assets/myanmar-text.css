@@ -531,3 +531,26 @@ body .shell .login_form button.login_header_icon:hover:not(:disabled) { backgrou
 .shell [role="dialog"] button .ui_action_label > span,
 .shell .customer_dialog button .ui_action_label,
 .shell .customer_dialog button .ui_action_label > span { color:inherit !important; }
+
+/* Expense budget and notification views. */
+.shell .expense_budget_panel .expense_budget_filters { display:flex; align-items:flex-end; justify-content:space-between; padding:12px 14px; gap:12px; }
+.shell .expense_budget_filters > label:first-child { flex:0 1 240px; min-width:160px; }
+.shell .expense_budget_panel .budget_overview { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px; margin:12px 0; }
+.shell .budget_overview > div { display:flex; flex-direction:column; gap:6px; padding:12px 14px; border:1px solid var(--line); border-radius:8px; background:var(--panel); }
+.shell .budget_overview small { color:var(--muted); font-size:12px; }
+.shell .budget_overview span { font-size:18px; font-weight:400; }
+.shell .expense_budget_panel .phase4_table { background:var(--panel); }
+.shell .expense_budget_panel .phase4_table :is(th,td) { padding:10px 12px; font-weight:400; vertical-align:middle; }
+.shell .expense_budget_table :is(th,td):nth-child(n+2):nth-child(-n+4) { text-align:right; white-space:nowrap; font-variant-numeric:tabular-nums; }
+.shell .expense_budget_table .budget_usage { min-width:130px; white-space:nowrap; }
+.shell .budget_usage progress { width:80px; height:6px; margin-right:8px; accent-color:var(--blue); vertical-align:middle; }
+.shell .budget_usage span { font-size:12px; color:var(--muted); }
+.shell .budget_badge { display:inline-flex; align-items:center; padding:3px 8px; border-radius:5px; white-space:nowrap; font-size:12px; }
+.shell .budget_badge.neutral { background:var(--bg); color:var(--muted); }
+.shell .budget_badge.good { background:light-dark(#eaf7f1,#163b30); color:light-dark(#13734b,#92dfba); }
+.shell .budget_badge.warning { background:light-dark(#fff5df,#46371c); color:light-dark(#875b00,#f4cf7a); }
+.shell .budget_badge.exceeded { background:light-dark(#ffeded,#462626); color:light-dark(#b42323,#ffabab); }
+.shell .expense_alert_settings { padding:12px 14px; border:1px solid var(--line); border-radius:8px; background:var(--panel); align-items:center; }
+.shell .expense_alert_settings > button { margin-left:auto; }
+.shell .expense_alert_table td:nth-child(3) { max-width:460px; line-height:1.7; }
+.shell .budget_empty { display:flex; justify-content:center; align-items:center; gap:8px; padding:24px; color:var(--muted); }

@@ -48,6 +48,15 @@ pub fn Operation(db_form:DbForm,actor:Session,command:Command,on_done:EventHandl
     }}}
 }
 
+fn budget_money(value:pos_core::Money)->String {
+    let text=value.round_dp(2).normalize().to_string();
+    let (whole,fraction)=text.split_once('.').unwrap_or((&text,""));
+    let (sign,digits)=if let Some(v)=whole.strip_prefix('-'){("-",v)}else{("",whole)};
+    let mut grouped=String::new();
+    for (i,c) in digits.chars().enumerate(){if i>0&&(digits.len()-i)%3==0{grouped.push(',');}grouped.push(c);}
+    format!("{sign}{grouped}{} {}",if fraction.is_empty(){String::new()}else{format!(".{fraction}")},crate::regional::current().symbol())
+}
+
 #[component]
 pub fn BudgetPanel(db_form:DbForm,actor:Session,alerts:bool)->Element {
     let mut month=use_signal(||chrono::Local::now().format("%Y-%m").to_string());
@@ -58,9 +67,9 @@ pub fn BudgetPanel(db_form:DbForm,actor:Session,alerts:bool)->Element {
     let mut edit=use_signal(||None::<(Option<Budget>,Budget)>);let mut settings=use_signal(||None::<(Settings,Settings)>);
     let mut op=use_signal(||pending(&db_form).ok().flatten().map(|(_,c)|c));
     let mut error=use_signal(||pending(&db_form).err().map(|e|e.to_string()).unwrap_or_default());let mut checking=use_signal(||false);
-    rsx!{section{class:"phase4_panel",
+    rsx!{section{class:"phase4_panel expense_budget_panel",
         button{hidden:true,"data-page-refresh":"true",onclick:move |_|refresh+=1}
-        div{class:"phase4_toolbar",
+        div{class:"phase4_toolbar expense_budget_filters",
             label{"Month" input{r#type:"month",value:"{month}",oninput:move|e|month.set(e.value())}}
             if alerts{button{disabled:checking(),onclick:{let db=db_form.clone();let actor=actor.clone();move |_|{let db=db.clone();let actor=actor.clone();checking.set(true);spawn(async move{let result=async{core::check_alerts(&pos_core::connect(&db.database_config()?).await?,&actor,true).await}.await;checking.set(false);match result{Ok(_)=>refresh+=1,Err(e)=>error.set(format!("{e:#}"))}});}},ActionLabel{label:"Check alerts"}}}
         }
@@ -69,25 +78,31 @@ pub fn BudgetPanel(db_form:DbForm,actor:Session,alerts:bool)->Element {
             Some(Err(e))=>rsx!{p{role:"alert","{e}"}},None=>rsx!{p{"Loading..."}},
             Some(Ok((rows,config,history)))=>rsx!{
                 if alerts {
-                    div{class:"phase4_toolbar",span{if config.enable_notifications==1 {"Enabled"}else{"Disabled"}} span{"Threshold {config.warning_threshold}%"} span{"{config.check_frequency}"}
-                        button{onclick:{let c=config.clone();move |_|settings.set(Some((c.clone(),c.clone())))},ActionLabel{label:"Edit"}}
+                    div{class:"phase4_toolbar expense_alert_settings",span{class:if config.enable_notifications==1 {"budget_badge good"}else{"budget_badge neutral"},if config.enable_notifications==1 {"Alerts enabled"}else{"Alerts disabled"}} span{"Warn at {config.warning_threshold}%"} span{"{config.check_frequency}"}
+                        button{onclick:{let c=config.clone();move |_|settings.set(Some((c.clone(),c.clone())))},ActionLabel{label:"Settings"}}
                     }
-                    div{class:"phase4_table",table{thead{tr{th{"Date"}th{"Category"}th{"Message"}th{"Status"}th{}}}tbody{
+                    div{class:"budget_overview",div{small{"Alerts"}span{"{history.len()}"}} div{small{"Unread"}span{"{history.iter().filter(|a|a.is_read==0).count()}"}}}
+                    div{class:"phase4_table expense_alert_table",table{thead{tr{th{"Date"}th{"Category"}th{"Message"}th{"Status"}th{}}}tbody{
                         for a in history {
                             tr { key:"{a.id}",
                                 td {"{a.created_at}"} td {"{a.category}"} td {"{a.message}"}
-                                td { if a.is_read==1 {"Read"} else {"Unread"} }
+                                td {span{class:if a.is_read==1 {"budget_badge neutral"}else{"budget_badge warning"},if a.is_read==1 {"Read"} else {"Unread"}}}
                                 td { if a.is_read==0 {
                                     button { onclick: {let i=a.id;move |_|op.set(Some(command(Action::ReadAlert{i})))}, ActionLabel {label:"Mark read"} }
                                 } }
                             }
                         }
                     }}}
-                    if history.is_empty(){p{"No alerts for this month."}}
+                    if history.is_empty(){div{class:"budget_empty",crate::icons::Icon{name:"check_circle"}span{"No alerts this month"}}}
                 } else {
-                    div{class:"phase4_table",table{thead{tr{th{"Category"}th{"Budget"}th{"Actual"}th{"Remaining"}th{"Usage"}th{"Status"}th{}}}tbody{
-                        for r in rows {tr{key:"{r.category}",td{"{r.category}"}td{"{r.budget_amount} {crate::regional::current().symbol()}"}td{"{r.actual}"}td{"{r.budget_amount-r.actual}"}
-                            td{if r.budget_amount>0.into(){progress{max:"100",value:"{(r.actual/r.budget_amount*pos_core::Money::from(100)).min(100.into())}"}span{"{(r.actual/r.budget_amount*pos_core::Money::from(100)).round_dp(1)}%"}}}td{{core::alert_level(r.budget_amount,r.actual,config.warning_threshold).unwrap_or(if r.budget_amount.is_zero(){"No budget"}else{"Within budget"})}}
+                    div{class:"budget_overview",
+                        div{small{"Total budget"}span{"{budget_money(rows.iter().map(|r|r.budget_amount).sum())}"}}
+                        div{small{"Spent"}span{"{budget_money(rows.iter().map(|r|r.actual).sum())}"}}
+                        div{small{"Categories without budget"}span{"{rows.iter().filter(|r|r.budget_amount.is_zero()).count()}"}}
+                    }
+                    div{class:"phase4_table expense_budget_table",table{thead{tr{th{"Category"}th{"Budget"}th{"Spent"}th{"Remaining"}th{"Usage"}th{"Status"}th{}}}tbody{
+                        for r in rows {tr{key:"{r.category}",td{"{r.category}"}td{class:"budget_amount","{budget_money(r.budget_amount)}"}td{class:"budget_amount","{budget_money(r.actual)}"}td{class:"budget_amount",if r.budget_amount.is_zero(){"—"}else{"{budget_money(r.budget_amount-r.actual)}"}}
+                            td{class:"budget_usage",if r.budget_amount>0.into(){progress{aria_label:"Budget used",max:"100",value:"{(r.actual/r.budget_amount*pos_core::Money::from(100)).min(100.into())}"}span{"{(r.actual/r.budget_amount*pos_core::Money::from(100)).round_dp(1)}%"}}else{span{"—"}}}td{span{class:match core::alert_level(r.budget_amount,r.actual,config.warning_threshold){Some("exceeded")=>"budget_badge exceeded",Some(_)=>"budget_badge warning",None if r.budget_amount.is_zero()=>"budget_badge neutral",_=>"budget_badge good"},match core::alert_level(r.budget_amount,r.actual,config.warning_threshold){Some("exceeded")=>"Limit reached",Some(_)=>"Near limit",None if r.budget_amount.is_zero()=>"No budget",_=>"Within budget"}}}
                             td{button{onclick:{let r=r.clone();move |_|{if let Ok(d)=pos_core::discounts::date(&format!("{}-01",month())){let b=Budget{category:r.category.clone(),month:d.month() as i32,year:d.year(),budget_amount:r.budget_amount,notes:r.notes.clone()};edit.set(Some((r.exists.then_some(b.clone()),b)));}}},ActionLabel{label:"Edit"}}}
                         }}
                     }}}

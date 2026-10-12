@@ -27,8 +27,14 @@ kay-pos-db.json
 *.dump
 *.backup
 *.db
+*.db-wal
+*.db-shm
 *.sqlite
 *.sqlite3
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite3-wal
+*.sqlite3-shm
 *.log
 
 # Local editor/OS files

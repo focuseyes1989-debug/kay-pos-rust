@@ -1,3 +1,4 @@
+use crate::storage as sqlx;
 use crate::models::SaleItemDraft;
 use anyhow::{ensure, Context, Result};
 use sqlx::{PgConnection, Postgres, Transaction};

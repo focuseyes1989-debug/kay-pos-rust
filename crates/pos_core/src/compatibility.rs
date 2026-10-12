@@ -1,3 +1,4 @@
+use crate::storage as sqlx;
 use crate::auth::{Permission, Session};
 use anyhow::Result;
 use sqlx::{PgConnection, PgPool};
@@ -72,6 +73,12 @@ pub async fn inspect(conn: &mut PgConnection) -> Result<Vec<Check>> {
             )
             .await?,
         );
+    }
+    if conn.is_sqlite() {
+        let integrity:String=sqlx::query_scalar("SELECT integrity_check FROM pragma_integrity_check").fetch_one(&mut *conn).await?;
+        let foreign_keys:i64=sqlx::query_scalar("SELECT COUNT(*) FROM pragma_foreign_key_check").fetch_one(&mut *conn).await?;
+        checks.push(Check{area:"Standalone".into(),object:"Database integrity".into(),ok:integrity=="ok"&&foreign_keys==0,detail:format!("Integrity: {integrity}; foreign-key violations: {foreign_keys}")});
+        return Ok(checks);
     }
     use crate::employees::Section;
     for (table, update, sequence) in [("user_activity_log",false,true),("category_groups",true,true),("rust_management_requests",false,false),("rust_expense_files",false,false),("rust_held_requests",false,false),("rust_held_sessions",true,false),("rust_sale_points",true,false)] {
@@ -166,6 +173,11 @@ async fn check_table(
     table: &str,
     required: &[&str],
 ) -> Result<Check> {
+    if conn.is_sqlite() {
+        let columns:Vec<String>=sqlx::query_scalar("SELECT name FROM pragma_table_info($1)").bind(table).fetch_all(&mut *conn).await?;
+        let missing=required.iter().filter(|name|!columns.iter().any(|column|column==**name)).copied().collect::<Vec<_>>();
+        return Ok(Check{area:area.into(),object:table.into(),ok:missing.is_empty(),detail:if missing.is_empty(){"Standalone schema columns available".into()}else{format!("Missing columns: {}",missing.join(", "))}});
+    }
     let exists: bool = sqlx::query_scalar("SELECT to_regclass($1) IS NOT NULL")
         .bind(table)
         .fetch_one(&mut *conn)

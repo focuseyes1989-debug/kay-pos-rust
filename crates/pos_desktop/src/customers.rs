@@ -120,6 +120,7 @@ pub fn CustomersPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
                 }
                 aside { class: "customer_detail",
                     if let Some(customer)=selected() {
+                        div { class: "customer_detail_content",
                         header { class: "customer_detail_header",
                             span { class: "customer_avatar", {customer.name.chars().next().unwrap_or('?').to_string()} }
                             div { h3 { "{customer.name}" } small { "Customer #{customer.id}" } }
@@ -138,12 +139,13 @@ pub fn CustomersPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
                             div { dt { "Visits" } dd { "{customer.total_visit}" } }
                             div { dt { "Total spent" } dd { "{crate::format_ks(customer.total_spent)}" } }
                         }
+                        }
                         div { class: "customer_detail_actions",
-                            button { onclick: move |_| points_history.set(selected()), crate::icons::ActionLabel { label:"Points history" } }
-                            button { onclick: move |_| action.set("Ledger".into()), crate::icons::ActionLabel { label:"View ledger" } }
+                            button { class: "customer_icon_action", title: "Points history", aria_label: "Points history", onclick: move |_| points_history.set(selected()), crate::icons::Icon { name:"history" } }
+                            button { class: "customer_icon_action", title: "View ledger", aria_label: "View ledger", onclick: move |_| action.set("Ledger".into()), crate::icons::Icon { name:"receipt" } }
+                            button { class: "customer_icon_action", title: "Edit", aria_label: "Edit", onclick: move |_| editor.set(selected()), crate::icons::Icon { name:"edit" } }
+                            button { class: "customer_icon_action customer_delete_action", title: "Delete", aria_label: "Delete", onclick: move |_| action.set("Delete".into()), crate::icons::Icon { name:"delete" } }
                             button { class: "customer_primary", onclick: move |_| action.set("Payment Collection".into()), crate::icons::ActionLabel { label:"Payment Collection" } }
-                            button { onclick: move |_| editor.set(selected()), crate::icons::ActionLabel { label:"Edit" } }
-                            button { class: "customer_delete_action", onclick: move |_| action.set("Delete".into()), crate::icons::ActionLabel { label:"Delete" } }
                         }
                     } else {
                         p { class: "customer_detail_empty", "Select a customer to view details." }

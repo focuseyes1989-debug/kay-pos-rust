@@ -42,6 +42,7 @@ pub fn AttendanceSync(db_form: DbForm, on_synced: EventHandler<()>) -> Element {
         button {class:"attendance_sync_trigger",onclick:move |_|{selected.set(String::new());notice.set(String::new());synced.set(false);open.set(true);},"Attendance Sync"}
         if open(){div {class:"modal_backdrop",section {class:"customer_dialog attendance_sync_dialog",role:"dialog",aria_modal:"true",aria_label:"Attendance Sync",
             h2 {"Attendance Sync"}
+            button {class:"attendance_sync_close",title:"Close",aria_label:"Close",disabled:busy(),onclick:move |_|{open.set(false);if synced(){on_synced.call(());}},crate::icons::Icon { name:"close" }}
             label {r#for:"attendance_sync_device","Device"}
             select {id:"attendance_sync_device",disabled:busy()||!devices.finished(),value:selected(),onchange:move |e|{selected.set(e.value());notice.set(String::new());},
                 option {value:"","Select device"}
@@ -55,7 +56,6 @@ pub fn AttendanceSync(db_form: DbForm, on_synced: EventHandler<()>) -> Element {
             if busy(){div {class:"attendance_sync_progress",role:"status",span {class:"loading_spinner"} "Reading device and importing attendance..."}}
             if !notice().is_empty(){p {role:if failed(){"alert"}else{"status"},"{notice}"}}
             div {class:"employee_editor_actions",
-                button {disabled:busy(),onclick:move |_|{open.set(false);if synced(){on_synced.call(());}},crate::icons::ActionLabel { label:"Close" }}
                 button {class:"customer_primary",disabled:busy()||!devices.finished()||chosen.is_none_or(|d|d.mappings==0),onclick:move |_|{
                     if busy(){return;}
                     let Some(actor)=session.read().clone()else{return;};

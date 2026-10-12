@@ -16,12 +16,7 @@ struct Journal {
 }
 fn path(db: &DbForm) -> Result<PathBuf> {
     let root = std::env::var_os("LOCALAPPDATA").context("LOCALAPPDATA is unavailable")?;
-    let id = format!(
-        "{}:{}:{}",
-        db.host.trim().to_lowercase(),
-        db.port.trim(),
-        db.database.trim()
-    );
+    let id = db.identity()?;
     Ok(PathBuf::from(root)
         .join("KAY POS Rust/held-carts")
         .join(format!(
@@ -414,3 +409,5 @@ pub fn Controls(
         if !message().is_empty(){crate::MessageBox{title:"Held sale".to_string(),message:message(),on_close:move |_|message.set(String::new())}}
     }
 }
+
+pub(crate) fn has_pending(form:&DbForm)->Result<bool>{let j=load(form)?;Ok(j.pending.is_some()||j.active.is_some())}

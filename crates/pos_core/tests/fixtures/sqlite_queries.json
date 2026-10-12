@@ -1,0 +1,1914 @@
+[
+  {
+    "source": "activity.rs:14",
+    "sql": "INSERT INTO user_activity_log(user_id,username,action,details,ip_address,created_at) VALUES((SELECT id FROM users WHERE username=$1),$1,$2,$3,NULL,LOCALTIMESTAMP)"
+  },
+  {
+    "source": "activity.rs:46",
+    "sql": "SELECT id,username,action,COALESCE(details,'') AS details,COALESCE(ip_address,'') AS ip_address,created_at::text AS created_at FROM user_activity_log WHERE created_at >= $1::date AND created_at < $2::date + INTERVAL '1 day' AND ($3='' OR strpos(lower(username||' '||action||' '||COALESCE(details,'')),lower($3))>0) ORDER BY created_at DESC,id DESC LIMIT 51 OFFSET $4"
+  },
+  {
+    "source": "ai.rs:114",
+    "sql": "WITH lines AS (SELECT s.id AS sale_id,s.total::numeric AS receipt_total,COALESCE(c.name,'Uncategorized') AS category,i.qty::numeric AS quantity,i.total::numeric AS line_total,SUM(i.total::numeric) OVER (PARTITION BY s.id) AS subtotal FROM sales s JOIN sale_items i ON i.sale_id=s.id LEFT JOIN products p ON p.id=i.product_id LEFT JOIN categories c ON c.id=p.category_id WHERE s.created_at >= $1 AND s.created_at < $2 AND s.status='completed') SELECT category,COUNT(DISTINCT sale_id),ROUND(SUM(CASE WHEN subtotal>0 THEN line_total*receipt_total/subtotal ELSE 0 END),2)::text,SUM(quantity)::text,SUM(line_total)::text FROM lines WHERE ($3::text IS NULL OR lower(trim(category))=lower(trim($3))) GROUP BY category ORDER BY SUM(CASE WHEN subtotal>0 THEN line_total*receipt_total/subtotal ELSE 0 END) DESC,category"
+  },
+  {
+    "source": "ai.rs:116",
+    "sql": "SELECT name FROM categories WHERE lower(trim(replace(name,chr(4151)||chr(4154),chr(4154)||chr(4151))))=lower(trim($1)) OR (lower(trim($1))='service' AND lower(trim(name))='services') ORDER BY CASE WHEN lower(trim(replace(name,chr(4151)||chr(4154),chr(4154)||chr(4151))))=lower(trim($1)) THEN 0 ELSE 1 END,id LIMIT 1"
+  },
+  {
+    "source": "ai.rs:265",
+    "sql": "SELECT u.permissions,r.permissions FROM users u LEFT JOIN user_roles r ON r.name=u.role WHERE u.username=$1 AND u.is_active=1"
+  },
+  {
+    "source": "ai.rs:287",
+    "sql": "SET LOCAL statement_timeout='5s'"
+  },
+  {
+    "source": "ai.rs:309",
+    "sql": "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+  },
+  {
+    "source": "ai.rs:312",
+    "sql": "SET LOCAL statement_timeout='15s'"
+  },
+  {
+    "source": "ai.rs:316",
+    "sql": "SELECT LOCALTIMESTAMP::text"
+  },
+  {
+    "source": "ai.rs:352",
+    "sql": "SELECT EXISTS(SELECT 1 FROM sales s WHERE s.created_at >= $1 AND s.created_at < $2 AND s.status='completed' AND ($3::text IS NULL OR lower(regexp_replace(s.payment_type,'\\s','','g')) ~ $3) AND (s.total IS NULL OR s.total<0 OR s.total::text IN ('NaN','Infinity','-Infinity') OR EXISTS(SELECT 1 FROM sale_items i WHERE i.sale_id=s.id AND COALESCE(i.refunded_qty,0)>0)))"
+  },
+  {
+    "source": "ai.rs:366",
+    "sql": "SELECT json_build_array(c.name,COALESCE(parent.name,'—'),COALESCE(c.status,'active'),(SELECT COUNT(*)::text FROM products p WHERE p.category_id=c.id OR (p.category_id IS NULL AND p.category=c.name)))::text FROM categories c LEFT JOIN categories parent ON parent.id=c.parent_id WHERE strpos(lower(c.name),lower($1))>0 ORDER BY c.sort_order,c.name,c.id LIMIT 201"
+  },
+  {
+    "source": "ai.rs:387",
+    "sql": "SELECT EXISTS(SELECT 1 FROM sales s JOIN sale_items i ON i.sale_id=s.id WHERE s.created_at >= $1 AND s.created_at < $2 AND s.status='completed' AND COALESCE(i.refunded_qty,0)>0 AND ($3::text IS NULL OR EXISTS(SELECT 1 FROM sale_items matched JOIN products p ON p.id=matched.product_id LEFT JOIN categories c ON c.id=p.category_id WHERE matched.sale_id=s.id AND lower(trim(c.name))=lower(trim($3)))))"
+  },
+  {
+    "source": "ai.rs:433",
+    "sql": "SELECT id,COALESCE(invoice_no,''),created_at::text,COALESCE(total,0)::numeric::text,COALESCE(payment_type,''),COALESCE(status,'') FROM sales WHERE created_at >= $1::text::timestamp AND created_at < $2::text::timestamp"
+  },
+  {
+    "source": "ai.rs:466",
+    "sql": "SELECT p.name,COALESCE(p.sku,''),COALESCE(p.barcode,''),COALESCE(p.price::numeric::text,'Unknown'),CASE WHEN lower(COALESCE(p.sold_by,'Each'))='variants' THEN COALESCE((SELECT SUM(v.stock)::numeric::text FROM product_variants v WHERE v.product_id=p.id),'0') ELSE COALESCE(p.stock::numeric::text,'Unknown') END FROM products p WHERE strpos(lower(p.name||' '||COALESCE(p.sku,'')||' '||COALESCE(p.barcode,'')),lower($1))>0 ORDER BY p.name,p.id LIMIT 51"
+  },
+  {
+    "source": "ai.rs:496",
+    "sql": "SELECT json_build_array(COALESCE(category,'Uncategorized'),COUNT(*)::text,COALESCE(SUM(amount::numeric),0)::text)::text FROM expenses WHERE left(expense_date,10)>=$1 AND left(expense_date,10)<$2 GROUP BY category ORDER BY SUM(amount) DESC LIMIT 50"
+  },
+  {
+    "source": "ai.rs:498",
+    "sql": "SELECT json_build_array(name,COALESCE(phone,''),COALESCE(company_name,''),COALESCE(contact_person,''),COALESCE(status,'Active'))::text FROM suppliers WHERE $1::text IS NOT NULL AND $2::text IS NOT NULL ORDER BY name,id LIMIT 50"
+  },
+  {
+    "source": "ai.rs:500",
+    "sql": "SELECT json_build_array(name,COALESCE(phone,''),COALESCE(total_visit,0)::text,COALESCE(total_spent,0)::numeric::text)::text FROM customers WHERE $1::text IS NOT NULL AND $2::text IS NOT NULL ORDER BY name,id LIMIT 50"
+  },
+  {
+    "source": "ai.rs:502",
+    "sql": "SELECT json_build_array(name,COALESCE(phone,''),current_balance::numeric::text)::text FROM customers WHERE current_balance>0 AND $1::text IS NOT NULL AND $2::text IS NOT NULL ORDER BY current_balance DESC,id LIMIT 50"
+  },
+  {
+    "source": "ai.rs:504",
+    "sql": "SELECT json_build_array(employee_no,full_name,COALESCE(department,''),COALESCE(employment_status,''))::text FROM employees WHERE $1::text IS NOT NULL AND $2::text IS NOT NULL ORDER BY full_name,id LIMIT 50"
+  },
+  {
+    "source": "ai.rs:506",
+    "sql": "SELECT json_build_array(a.attendance_date::text,e.full_name,COALESCE(a.check_in::text,''),COALESCE(a.check_out::text,''),COALESCE(a.status,''),COALESCE(a.late_minutes,0)::text)::text FROM attendance a JOIN employees e ON e.id=a.employee_id WHERE left(a.attendance_date::text,10)>=$1 AND left(a.attendance_date::text,10)<$2 ORDER BY a.attendance_date DESC,a.id DESC LIMIT 50"
+  },
+  {
+    "source": "ai.rs:508",
+    "sql": "WITH stock AS (SELECT p.id,p.name,p.sku,p.barcode,COALESCE((SELECT c.name FROM categories c WHERE c.id=p.category_id),p.category,'') AS category,COALESCE(p.low_stock,0) AS threshold,CASE WHEN lower(COALESCE(p.sold_by,'Each'))='variants' THEN COALESCE((SELECT SUM(v.stock) FROM product_variants v WHERE v.product_id=p.id),0) ELSE COALESCE(p.stock,0) END AS quantity FROM products p WHERE lower(COALESCE(p.sold_by,'Each')) NOT IN ('service','restaurant')) SELECT json_build_array(name,COALESCE(sku,''),quantity::numeric::text,threshold::numeric::text)::text FROM stock WHERE quantity<=threshold AND $1::text IS NOT NULL AND $2::text IS NOT NULL ORDER BY quantity,id LIMIT 50"
+  },
+  {
+    "source": "ai.rs:510",
+    "sql": "SELECT json_build_array(COALESCE(invoice_no,''),created_at::text,COALESCE(total,0)::numeric::text,COALESCE(payment_type,''),COALESCE(status,''))::text FROM sales WHERE created_at >= $1::text::timestamp AND created_at < $2::text::timestamp ORDER BY created_at DESC,id DESC LIMIT 50"
+  },
+  {
+    "source": "ai.rs:532",
+    "sql": "SELECT COUNT(*),COALESCE(SUM(amount::numeric),0)::text FROM expenses WHERE left(expense_date,10)>=$1 AND left(expense_date,10)<$2"
+  },
+  {
+    "source": "ai.rs:560",
+    "sql": "SELECT EXISTS(SELECT 1 FROM sales WHERE created_at >= $1 AND created_at < $2 AND status IN ('completed','refunded') AND (total IS NULL OR total<0 OR total::text IN ('NaN','Infinity','-Infinity')))"
+  },
+  {
+    "source": "ai.rs:565",
+    "sql": "SELECT EXISTS(SELECT 1 FROM sales s JOIN sale_items i ON i.sale_id=s.id WHERE s.created_at >= $1 AND s.created_at < $2 AND s.status='completed' AND COALESCE(i.refunded_qty,0)>0)"
+  },
+  {
+    "source": "ai.rs:567",
+    "sql": "SELECT to_char(created_at,'YYYY-MM-DD'),COUNT(*) FILTER(WHERE status='completed'),COALESCE(SUM(total::numeric) FILTER(WHERE status='completed'),0)::text,COALESCE(SUM(gross_profit::numeric) FILTER(WHERE status='completed'),0)::text,COALESCE(SUM(total::numeric) FILTER(WHERE status='completed' AND lower(payment_type)='credit'),0)::text,COALESCE(SUM(total::numeric) FILTER(WHERE status='refunded'),0)::text FROM sales WHERE created_at >= $1 AND created_at < $2 AND status IN ('completed','refunded') GROUP BY 1 ORDER BY 1"
+  },
+  {
+    "source": "ai.rs:599",
+    "sql": "SELECT COALESCE(SUM(amount::numeric),0)::text FROM expenses WHERE left(expense_date,10)>=$1 AND left(expense_date,10)<$2"
+  },
+  {
+    "source": "ai.rs:600",
+    "sql": "SELECT COALESCE(SUM(GREATEST(current_balance::numeric,0)),0)::text FROM customers"
+  },
+  {
+    "source": "ai.rs:601",
+    "sql": "SELECT COUNT(*) FILTER(WHERE stock>0 AND stock<=COALESCE(low_stock,0)),COUNT(*) FILTER(WHERE stock<=0) FROM products WHERE lower(COALESCE(sold_by,'Each')) NOT IN ('service','restaurant')"
+  },
+  {
+    "source": "ai.rs:639",
+    "sql": "SET LOCAL statement_timeout='5s'"
+  },
+  {
+    "source": "ai.rs:1164",
+    "sql": "WITH payments AS (\n SELECT total, COALESCE(NULLIF(trim(payment_type),''),'Unknown') AS original,\n lower(regexp_replace(payment_type,'\\s','','g')) AS method\n FROM sales WHERE created_at >= $1 AND created_at < $2 AND status='completed'\n) SELECT CASE WHEN method ~ '^(kpay|kbzpay)([(][0-9]+[)])?$' THEN 'KPay' || COALESCE(substring(method from '[(][0-9]+[)]$'),'')\n WHEN method ~ '^wavepay([(][0-9]+[)])?$' THEN 'WavePay' || COALESCE(substring(method from '[(][0-9]+[)]$'),'')\n WHEN method='cash' THEN 'Cash' WHEN method='credit' THEN 'Credit' ELSE original END,\n COUNT(*), SUM(total::numeric)::text FROM payments\n WHERE ($3::text IS NULL OR method ~ $3) GROUP BY 1 ORDER BY SUM(total::numeric) DESC,1"
+  },
+  {
+    "source": "ai.rs:1243",
+    "sql": "WITH stock AS (SELECT p.id,p.name,COALESCE(p.sku,'') AS sku,CASE WHEN lower(COALESCE(p.sold_by,'Each'))='variants' THEN COALESCE((SELECT SUM(v.stock) FROM product_variants v WHERE v.product_id=p.id),0) ELSE COALESCE(p.stock,0) END AS quantity FROM products p WHERE lower(COALESCE(p.sold_by,'Each')) NOT IN ('service','restaurant')) SELECT name,sku,quantity::numeric::text FROM stock WHERE quantity>0 AND NOT EXISTS(SELECT 1 FROM sale_items i JOIN sales s ON s.id=i.sale_id WHERE i.product_id=stock.id AND s.status='completed' AND s.created_at >= $1 AND s.created_at < $2 AND i.qty>0) ORDER BY quantity DESC,name,id LIMIT 51"
+  },
+  {
+    "source": "ai.rs:1261",
+    "sql": "SELECT id,name FROM products WHERE lower(trim(name))=lower(trim($1)) OR lower(trim(sku))=lower(trim($1)) OR lower(trim(barcode))=lower(trim($1)) ORDER BY id LIMIT 2"
+  },
+  {
+    "source": "ai.rs:1262",
+    "sql": "WITH lines AS (SELECT s.id AS sale_id,s.total::numeric AS receipt_total,p.id AS product_id,p.name AS item,i.qty::numeric AS quantity,i.total::numeric AS line_total,SUM(i.total::numeric) OVER (PARTITION BY s.id) AS subtotal FROM sales s JOIN sale_items i ON i.sale_id=s.id LEFT JOIN products p ON p.id=i.product_id WHERE s.created_at >= $1 AND s.created_at < $2 AND s.status='completed') SELECT item,COUNT(DISTINCT sale_id),ROUND(SUM(CASE WHEN subtotal>0 THEN line_total*receipt_total/subtotal ELSE 0 END),2)::text,SUM(quantity)::text,SUM(line_total)::text FROM lines WHERE product_id::text=$3 GROUP BY product_id,item ORDER BY item,product_id"
+  },
+  {
+    "source": "ai.rs:1263",
+    "sql": "SELECT EXISTS(SELECT 1 FROM sales s JOIN sale_items i ON i.sale_id=s.id WHERE s.created_at >= $1 AND s.created_at < $2 AND s.status='completed' AND COALESCE(i.refunded_qty,0)>0 AND EXISTS(SELECT 1 FROM sale_items matched WHERE matched.sale_id=s.id AND matched.product_id::text=$3))"
+  },
+  {
+    "source": "assistant.rs:92",
+    "sql": "SET TRANSACTION READ ONLY"
+  },
+  {
+    "source": "assistant.rs:93",
+    "sql": "SET LOCAL statement_timeout='5s'"
+  },
+  {
+    "source": "assistant.rs:95",
+    "sql": "SELECT DISTINCT name FROM products ORDER BY name LIMIT 1000"
+  },
+  {
+    "source": "assistant.rs:95",
+    "sql": "SELECT DISTINCT name FROM customers ORDER BY name LIMIT 1000"
+  },
+  {
+    "source": "assistant.rs:95",
+    "sql": "SELECT DISTINCT name FROM suppliers ORDER BY name LIMIT 1000"
+  },
+  {
+    "source": "assistant.rs:95",
+    "sql": "SELECT DISTINCT full_name FROM employees ORDER BY full_name LIMIT 1000"
+  },
+  {
+    "source": "assistant.rs:95",
+    "sql": "SELECT DISTINCT name FROM categories ORDER BY name LIMIT 1000"
+  },
+  {
+    "source": "assistant.rs:107",
+    "sql": "SELECT EXISTS(SELECT 1 FROM products WHERE lower(trim(name))=lower(trim($1)) OR lower(trim(sku))=lower(trim($1)) OR lower(trim(barcode))=lower(trim($1)))"
+  },
+  {
+    "source": "assistant.rs:111",
+    "sql": "SELECT EXISTS(SELECT 1 FROM products WHERE strpos(lower(name||' '||COALESCE(sku,'')||' '||COALESCE(barcode,'')),lower($1))>0)"
+  },
+  {
+    "source": "assistant.rs:115",
+    "sql": "SELECT EXISTS(SELECT 1 FROM suppliers WHERE strpos(lower(name||' '||COALESCE(phone,'')||' '||COALESCE(company_name,'')||' '||COALESCE(contact_person,'')||' '||id::text),lower($1))>0)"
+  },
+  {
+    "source": "assistant.rs:115",
+    "sql": "SELECT EXISTS(SELECT 1 FROM employees WHERE strpos(lower(full_name||' '||employee_no||' '||COALESCE(phone,'')),lower($1))>0)"
+  },
+  {
+    "source": "assistant.rs:115",
+    "sql": "SELECT EXISTS(SELECT 1 FROM customers WHERE strpos(lower(name||' '||COALESCE(phone,'')||' '||id::text),lower($1))>0)"
+  },
+  {
+    "source": "assistant.rs:157",
+    "sql": "SET TRANSACTION READ ONLY"
+  },
+  {
+    "source": "assistant.rs:158",
+    "sql": "SET LOCAL statement_timeout='5s'"
+  },
+  {
+    "source": "assistant.rs:162",
+    "sql": "SELECT json_build_array(p.id::text,p.name,COALESCE(p.sku,''),COALESCE(p.barcode,''),p.price::numeric::text,CASE WHEN lower(COALESCE(p.sold_by,'Each'))='variants' THEN COALESCE((SELECT SUM(stock)::numeric::text FROM product_variants WHERE product_id=p.id),'0') ELSE p.stock::numeric::text END,COALESCE(c.name,''))::text FROM products p LEFT JOIN categories c ON c.id=p.category_id WHERE p.name=$1 AND COALESCE(p.sku,'')=$2 ORDER BY p.id LIMIT 50"
+  },
+  {
+    "source": "assistant.rs:163",
+    "sql": "SELECT json_build_array(id::text,name,COALESCE(phone,''),COALESCE(company_name,''),COALESCE(contact_person,''),COALESCE(email,''),COALESCE(address,''),COALESCE(website,''),COALESCE(payment_terms,''),COALESCE(status,'Active'))::text FROM suppliers WHERE name=$1 AND COALESCE(phone,'')=$2 ORDER BY id LIMIT 50"
+  },
+  {
+    "source": "assistant.rs:164",
+    "sql": "SELECT json_build_array(id::text,name,COALESCE(phone,''),COALESCE(email,''),COALESCE(address,''),total_spent::numeric::text)::text FROM customers WHERE name=$1 AND COALESCE(phone,'')=$2 ORDER BY id LIMIT 50"
+  },
+  {
+    "source": "assistant.rs:165",
+    "sql": "SELECT json_build_array(id::text,employee_no,full_name,COALESCE(phone,''),COALESCE(position,''),COALESCE(department,''),COALESCE(branch,''),COALESCE(hire_date::text,''),COALESCE(employment_status,''),COALESCE(address,''),COALESCE(notes,''))::text FROM employees WHERE employee_no=$1 AND full_name=$2 ORDER BY id LIMIT 50"
+  },
+  {
+    "source": "assistant.rs:166",
+    "sql": "SELECT json_build_array(id::text,name,COALESCE(phone,''),COALESCE(email,''),COALESCE(address,''),current_balance::numeric::text,total_spent::numeric::text)::text FROM customers WHERE name=$1 AND COALESCE(phone,'')=$2 ORDER BY id LIMIT 50"
+  },
+  {
+    "source": "assistant.rs:167",
+    "sql": "SELECT json_build_array(expense_no,expense_date,category,description,amount::numeric::text,payment_method,reference_no,notes)::text FROM expenses WHERE category=$1 AND left(expense_date,10)>=$2 AND left(expense_date,10)<=$3 AND strpos(lower(COALESCE(category,'')||' '||COALESCE(description,'')),lower($4))>0 ORDER BY expense_date DESC,id DESC LIMIT 51"
+  },
+  {
+    "source": "attendance_sync.rs:41",
+    "sql": "SELECT d.id,d.device_no,COALESCE(d.name,'ZKTeco Device') AS name,COUNT(e.id) AS mappings FROM zkteco_devices d LEFT JOIN zkteco_employee_mappings m ON m.device_id=d.id LEFT JOIN employees e ON e.id=m.employee_id AND e.employment_status='Active' WHERE d.is_active=1 GROUP BY d.id ORDER BY d.device_no"
+  },
+  {
+    "source": "attendance_sync.rs:55",
+    "sql": "SELECT id,device_no,COALESCE(name,'') AS name,ip_address,COALESCE(port,4370) AS port,COALESCE(comm_key,0) AS comm_key,COALESCE(serial_no,'') AS serial_no,COALESCE(last_sync_at::text,'') AS last_sync_at,COALESCE(is_active,1) AS is_active FROM zkteco_devices WHERE id=$1"
+  },
+  {
+    "source": "attendance_sync.rs:59",
+    "sql": "SELECT m.employee_id,m.device_user_id FROM zkteco_employee_mappings m JOIN employees e ON e.id=m.employee_id WHERE m.device_id=$1 AND e.employment_status='Active' ORDER BY m.employee_id,m.id"
+  },
+  {
+    "source": "attendance_sync.rs:197",
+    "sql": "LOCK TABLE zkteco_devices,zkteco_employee_mappings,employees,zkteco_attendance_logs,attendance IN SHARE ROW EXCLUSIVE MODE"
+  },
+  {
+    "source": "attendance_sync.rs:226",
+    "sql": "INSERT INTO zkteco_attendance_logs(device_id,device_user_id,employee_id,punch_time,status,punch,is_valid,validation_note) VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(device_id,device_user_id,punch_time,punch) DO NOTHING"
+  },
+  {
+    "source": "attendance_sync.rs:232",
+    "sql": "SELECT employee_id FROM zkteco_attendance_logs WHERE device_id=$1 AND device_user_id=$2 AND punch_time=$3 AND punch=$4"
+  },
+  {
+    "source": "attendance_sync.rs:243",
+    "sql": "SELECT MIN(punch_time) FILTER(WHERE punch IN (0,4)),MAX(punch_time) FILTER(WHERE punch IN (1,5)) FROM zkteco_attendance_logs WHERE employee_id=$1 AND is_valid=1 AND punch_time>=$2 AND punch_time<$3"
+  },
+  {
+    "source": "attendance_sync.rs:245",
+    "sql": "SELECT EXISTS(SELECT 1 FROM employee_leave WHERE employee_id=$1 AND status='Approved' AND $2 BETWEEN start_date AND end_date)"
+  },
+  {
+    "source": "attendance_sync.rs:246",
+    "sql": "SELECT s.start_time FROM employee_shifts a JOIN shifts s ON s.id=a.shift_id WHERE a.employee_id=$1 AND a.effective_from<=$2 AND (NULLIF(a.effective_to,'') IS NULL OR a.effective_to>=$2) ORDER BY a.effective_from DESC,a.id DESC LIMIT 1"
+  },
+  {
+    "source": "attendance_sync.rs:248",
+    "sql": "INSERT INTO attendance(employee_id,attendance_date,check_in,check_out,status,late_minutes,notes) VALUES($1,$2,$3,$4,$5,$6,'ZKTeco sync') ON CONFLICT(employee_id,attendance_date) DO UPDATE SET check_in=EXCLUDED.check_in,check_out=EXCLUDED.check_out,status=EXCLUDED.status,late_minutes=EXCLUDED.late_minutes,notes=EXCLUDED.notes,updated_at=CURRENT_TIMESTAMP WHERE COALESCE(attendance.correction_reason,'')=''"
+  },
+  {
+    "source": "attendance_sync.rs:257",
+    "sql": "UPDATE zkteco_devices SET serial_no=$1,last_sync_at=CURRENT_TIMESTAMP WHERE id=$2"
+  },
+  {
+    "source": "auth.rs:31",
+    "sql": "SELECT 'data:image/jpeg;base64,'||encode(photo_data,'base64') FROM employees WHERE user_id=$1 AND photo_data IS NOT NULL ORDER BY id DESC LIMIT 1"
+  },
+  {
+    "source": "auth.rs:47",
+    "sql": "SELECT username,role,password_hash FROM users WHERE id=$1 AND is_active=1"
+  },
+  {
+    "source": "auth.rs:77",
+    "sql": "SELECT id,username,role,password_hash,salt FROM users WHERE username=$1 AND is_active=1"
+  },
+  {
+    "source": "catalog.rs:84",
+    "sql": "SELECT COALESCE(sold_by,'Each'),COALESCE(stock,0)::float8 FROM products WHERE id=$1 FOR UPDATE"
+  },
+  {
+    "source": "catalog.rs:94",
+    "sql": "SELECT name FROM categories WHERE id=$1"
+  },
+  {
+    "source": "catalog.rs:103",
+    "sql": "INSERT INTO products (name,category_id,category,sku,barcode,price,cost,low_stock,sold_by,description,stock) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,0) RETURNING id"
+  },
+  {
+    "source": "catalog.rs:105",
+    "sql": "UPDATE products SET name=$1,category_id=$2,category=$3,sku=$4,barcode=$5,price=$6,cost=$7,low_stock=$8,sold_by=$9,description=$10 WHERE id=$11 RETURNING id"
+  },
+  {
+    "source": "catalog.rs:125",
+    "sql": "SELECT EXISTS(SELECT 1 FROM products WHERE sku=$1 AND id<>$2 UNION ALL SELECT 1 FROM product_variants WHERE sku=$1)"
+  },
+  {
+    "source": "catalog.rs:128",
+    "sql": "UPDATE products SET sku=$1 WHERE id=$2"
+  },
+  {
+    "source": "catalog.rs:133",
+    "sql": "UPDATE products SET image_data=$1,image_mime=$2,image_filename=$3 WHERE id=$4"
+  },
+  {
+    "source": "catalog.rs:161",
+    "sql": "SELECT EXISTS(SELECT 1 FROM product_variants WHERE product_id=$1 AND COALESCE(active,1)=1 AND NOT(id=ANY($2)) AND COALESCE(stock,0)<>0)"
+  },
+  {
+    "source": "catalog.rs:166",
+    "sql": "UPDATE product_variants SET active=0 WHERE product_id=$1 AND NOT(id=ANY($2))"
+  },
+  {
+    "source": "catalog.rs:174",
+    "sql": "INSERT INTO product_variants (product_id,size,color,sku,barcode,price,cost,low_stock,wholesale_min_qty,wholesale_price,stock,active) VALUES ($1,$2,$3,$4,$5,$6::float8,$7::float8,$8,$9,$10::float8,0,1)"
+  },
+  {
+    "source": "catalog.rs:176",
+    "sql": "UPDATE product_variants SET size=$2,color=$3,sku=$4,barcode=$5,price=$6::float8,cost=$7::float8,low_stock=$8,wholesale_min_qty=$9,wholesale_price=$10::float8,active=1 WHERE product_id=$1 AND id=$11"
+  },
+  {
+    "source": "catalog.rs:208",
+    "sql": "UPDATE products SET stock=(SELECT COALESCE(SUM(stock),0) FROM product_variants WHERE product_id=$1 AND active=1) WHERE id=$1"
+  },
+  {
+    "source": "catalog.rs:216",
+    "sql": "UPDATE product_price_tiers SET active=0 WHERE product_id=$1 AND NOT(id=ANY($2))"
+  },
+  {
+    "source": "catalog.rs:223",
+    "sql": "INSERT INTO product_price_tiers(product_id,min_qty,unit_label,unit_price,unit_multiplier,active) VALUES ($1,$2,$3,$4::float8,$5,1)"
+  },
+  {
+    "source": "catalog.rs:225",
+    "sql": "UPDATE product_price_tiers SET min_qty=$2,unit_label=$3,unit_price=$4::float8,unit_multiplier=$5,active=1 WHERE product_id=$1 AND id=$6"
+  },
+  {
+    "source": "catalog.rs:354",
+    "sql": "SELECT id FROM products WHERE id=$1 FOR UPDATE"
+  },
+  {
+    "source": "catalog.rs:358",
+    "sql": "SELECT EXISTS(SELECT 1 FROM sale_items WHERE product_id=$1 UNION ALL SELECT 1 FROM stock_movements WHERE product_id=$1 UNION ALL SELECT 1 FROM product_variants WHERE product_id=$1)"
+  },
+  {
+    "source": "catalog.rs:363",
+    "sql": "DELETE FROM products WHERE id=$1"
+  },
+  {
+    "source": "categories.rs:20",
+    "sql": "SELECT c.id,c.name,c.parent_id,c.group_id,COALESCE(c.description,'') AS description,COALESCE(c.status,'active') AS status,COALESCE(c.is_system,0) AS is_system,(SELECT COUNT(*) FROM products p WHERE p.category_id=c.id OR p.category=c.name) AS products,(SELECT COUNT(*) FROM categories ch WHERE ch.parent_id=c.id) AS children FROM categories c ORDER BY c.sort_order,c.name,c.id"
+  },
+  {
+    "source": "categories.rs:60",
+    "sql": "SET LOCAL lock_timeout='5s'"
+  },
+  {
+    "source": "categories.rs:61",
+    "sql": "LOCK TABLE categories, products IN SHARE ROW EXCLUSIVE MODE"
+  },
+  {
+    "source": "categories.rs:64",
+    "sql": "SELECT id,name,parent_id,group_id,COALESCE(description,'') AS description,COALESCE(status,'active') AS status,COALESCE(is_system,0) AS is_system,0::bigint AS products,0::bigint AS children FROM categories"
+  },
+  {
+    "source": "categories.rs:68",
+    "sql": "SELECT COALESCE(is_active,1) FROM category_groups WHERE id=$1 FOR SHARE"
+  },
+  {
+    "source": "categories.rs:73",
+    "sql": "INSERT INTO categories(name,parent_id,description,status,group_id) VALUES($1,$2,$3,$4,$5)"
+  },
+  {
+    "source": "categories.rs:89",
+    "sql": "UPDATE categories SET name=$1,parent_id=$2,description=$3,status=$4,group_id=$6,updated_at=CURRENT_TIMESTAMP WHERE id=$5"
+  },
+  {
+    "source": "categories.rs:90",
+    "sql": "UPDATE products SET category=$1 WHERE category_id=$2 OR category=$3"
+  },
+  {
+    "source": "categories.rs:105",
+    "sql": "SET LOCAL lock_timeout='5s'"
+  },
+  {
+    "source": "categories.rs:106",
+    "sql": "LOCK TABLE categories, products IN SHARE ROW EXCLUSIVE MODE"
+  },
+  {
+    "source": "categories.rs:110",
+    "sql": "SELECT name,COALESCE(is_system,0) FROM categories WHERE id=$1"
+  },
+  {
+    "source": "categories.rs:115",
+    "sql": "SELECT EXISTS(SELECT 1 FROM products WHERE category_id=$1 OR category=$2) OR EXISTS(SELECT 1 FROM categories WHERE parent_id=$1)"
+  },
+  {
+    "source": "categories.rs:120",
+    "sql": "DELETE FROM categories WHERE id=$1"
+  },
+  {
+    "source": "category_groups.rs:58",
+    "sql": "SELECT nextval(pg_get_serial_sequence('category_groups','id'))"
+  },
+  {
+    "source": "category_groups.rs:63",
+    "sql": "SELECT EXISTS(SELECT 1 FROM category_groups WHERE id=$1)"
+  },
+  {
+    "source": "category_groups.rs:104",
+    "sql": "SET LOCAL lock_timeout='5s'"
+  },
+  {
+    "source": "category_groups.rs:107",
+    "sql": "LOCK TABLE category_groups IN SHARE ROW EXCLUSIVE MODE"
+  },
+  {
+    "source": "category_groups.rs:123",
+    "sql": "SELECT EXISTS(SELECT 1 FROM category_groups WHERE lower(btrim(name))=lower(btrim($1)) AND id<>$2)"
+  },
+  {
+    "source": "category_groups.rs:126",
+    "sql": "UPDATE category_groups SET name=$2,description=$3,sort_order=$4,icon=$5,color=$6,is_favorite=$7,is_active=$8,updated_at=clock_timestamp() WHERE id=$1"
+  },
+  {
+    "source": "category_groups.rs:129",
+    "sql": "INSERT INTO category_groups(id,name,description,sort_order,icon,color,is_favorite,is_active) VALUES($1,$2,$3,$4,$5,$6,$7,$8)"
+  },
+  {
+    "source": "customer_credit.rs:20",
+    "sql": "SELECT cs.id, c.name AS customer, cs.invoice_no AS invoice, cs.sale_date AS date, COALESCE(cs.due_date,'') AS due, cs.total_amount::numeric AS total, COALESCE(cs.paid_amount,0)::numeric AS paid, cs.balance_amount::numeric AS balance, COALESCE(cs.status,'pending') AS status FROM credit_sales cs JOIN customers c ON c.id=cs.customer_id WHERE ($1::int IS NULL OR cs.customer_id=$1) ORDER BY COALESCE(NULLIF(cs.due_date,''),cs.sale_date), cs.id"
+  },
+  {
+    "source": "customer_credit.rs:35",
+    "sql": "SELECT cp.payment_date AS date, cs.invoice_no AS invoice, cp.amount::numeric AS amount, COALESCE(cp.payment_method,'') AS method, COALESCE(cp.reference_no,'') AS reference, COALESCE(cp.note,'') AS note FROM credit_payments cp JOIN credit_sales cs ON cs.id=cp.credit_sale_id WHERE cp.customer_id=$1 ORDER BY cp.payment_date, cp.id"
+  },
+  {
+    "source": "customer_credit.rs:40",
+    "sql": "SELECT to_regclass($1) IS NOT NULL"
+  },
+  {
+    "source": "customer_credit.rs:97",
+    "sql": "SELECT COALESCE(credit_limit,0)::numeric, COALESCE(current_balance,0)::numeric FROM customers WHERE id=$1 FOR UPDATE"
+  },
+  {
+    "source": "customer_credit.rs:99",
+    "sql": "SELECT value FROM settings WHERE key='credit_limit_enabled'"
+  },
+  {
+    "source": "customer_credit.rs:117",
+    "sql": "INSERT INTO credit_sales (invoice_no,customer_id,total_amount,paid_amount,balance_amount,sale_date,due_date,status,notes) VALUES ($1,$2,$3::numeric,$4::numeric,$5::numeric,$6,$7,$8,$9)"
+  },
+  {
+    "source": "customer_credit.rs:120",
+    "sql": "UPDATE customers SET current_balance=COALESCE(current_balance,0)+$1::numeric WHERE id=$2"
+  },
+  {
+    "source": "customer_credit.rs:162",
+    "sql": "SELECT id FROM customers WHERE id=$1 FOR UPDATE"
+  },
+  {
+    "source": "customer_credit.rs:167",
+    "sql": "SELECT EXISTS(SELECT 1 FROM payment_types WHERE name=$1 AND COALESCE(active,1)=1)"
+  },
+  {
+    "source": "customer_credit.rs:173",
+    "sql": "SELECT id,balance_amount::numeric FROM credit_sales WHERE customer_id=$1 AND ($2::int IS NULL OR id=$2) AND balance_amount>0 AND status NOT IN ('paid','refunded') ORDER BY COALESCE(NULLIF(due_date,''),sale_date),id FOR UPDATE"
+  },
+  {
+    "source": "customer_credit.rs:176",
+    "sql": "UPDATE credit_sales SET paid_amount=COALESCE(paid_amount,0)+$1::numeric, balance_amount=balance_amount-$1::numeric, status=CASE WHEN balance_amount::numeric-$1::numeric<=0 THEN 'paid' ELSE 'partial' END WHERE id=$2"
+  },
+  {
+    "source": "customer_credit.rs:177",
+    "sql": "INSERT INTO credit_payments (credit_sale_id,customer_id,amount,payment_date,payment_method,reference_no,note) VALUES ($1,$2,$3::numeric,$4,$5,$6,$7) RETURNING id"
+  },
+  {
+    "source": "customer_credit.rs:181",
+    "sql": "UPDATE customers SET current_balance=COALESCE(current_balance,0)-$1::numeric WHERE id=$2"
+  },
+  {
+    "source": "customer_credit.rs:195",
+    "sql": "SELECT password_hash,salt FROM users WHERE username=$1 AND lower(role)='admin' AND is_active=1 FOR UPDATE"
+  },
+  {
+    "source": "customer_credit.rs:206",
+    "sql": "SELECT COALESCE(current_balance,0)::float8 FROM customers WHERE id=$1 FOR UPDATE"
+  },
+  {
+    "source": "customer_credit.rs:215",
+    "sql": "SELECT EXISTS(SELECT 1 FROM credit_sales WHERE customer_id=$1 UNION ALL SELECT 1 FROM sales WHERE customer_id=$1)"
+  },
+  {
+    "source": "customer_credit.rs:220",
+    "sql": "DELETE FROM customers WHERE id=$1"
+  },
+  {
+    "source": "customers.rs:21",
+    "sql": "SELECT id, name, COALESCE(phone,'') AS phone, COALESCE(email,'') AS email, COALESCE(address,'') AS address, COALESCE(to_jsonb(c)->>'remarks','') AS remarks, COALESCE(total_visit,0)::int AS total_visit, COALESCE(total_spent,0)::float8 AS total_spent, COALESCE(points,0)::int AS points, COALESCE(credit_limit,0)::float8 AS credit_limit, COALESCE(current_balance,0)::float8 AS current_balance FROM customers c ORDER BY lower(name), id"
+  },
+  {
+    "source": "customers.rs:35",
+    "sql": "INSERT INTO customers (name, phone, email, address, remarks, credit_limit, total_visit, total_spent, points, current_balance) VALUES ($1,$2,$3,$4,$5,$6,0,0,0,0)"
+  },
+  {
+    "source": "customers.rs:38",
+    "sql": "UPDATE customers SET name=$1, phone=$2, email=$3, address=$4, remarks=$5, credit_limit=$6 WHERE id=$7"
+  },
+  {
+    "source": "dashboard.rs:23",
+    "sql": "SELECT to_char(created_at,'HH24') AS label,COALESCE(SUM(total),0)::float8 AS amount,COUNT(*) AS count FROM sales WHERE status='completed' AND created_at >= $1 AND created_at < $2 GROUP BY 1 ORDER BY 1"
+  },
+  {
+    "source": "dashboard.rs:28",
+    "sql": "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+  },
+  {
+    "source": "dashboard.rs:29",
+    "sql": "SET LOCAL statement_timeout='20s'"
+  },
+  {
+    "source": "dashboard.rs:33",
+    "sql": "SELECT to_char(created_at,'YYYY-MM-DD') AS label,COALESCE(SUM(total),0)::float8 AS amount,COUNT(*) AS count FROM sales WHERE status='completed' AND created_at >= $1 AND created_at < $2 GROUP BY 1 ORDER BY 1"
+  },
+  {
+    "source": "dashboard.rs:41",
+    "sql": "SELECT COALESCE(name,'Customer') || ' #' || id::text AS label,current_balance::float8 AS amount,1::bigint AS count FROM customers WHERE current_balance>0 ORDER BY current_balance DESC,id"
+  },
+  {
+    "source": "dashboard.rs:45",
+    "sql": "SELECT COALESCE(s.name,'Supplier') || ' #' || s.id::text AS label,COALESCE(SUM(CASE WHEN p.payment_type='Purchase' THEN p.amount WHEN p.payment_type<>'Purchase' THEN -p.amount ELSE 0 END),0)::float8 AS amount,COUNT(p.id) AS count FROM suppliers s JOIN supplier_payments p ON p.supplier_id=s.id GROUP BY s.id,s.name HAVING SUM(CASE WHEN p.payment_type='Purchase' THEN p.amount WHEN p.payment_type<>'Purchase' THEN -p.amount ELSE 0 END)<>0 ORDER BY amount DESC,s.id"
+  },
+  {
+    "source": "dashboard.rs:47",
+    "sql": "\n        SELECT 'Open service orders'::text AS label,0::float8 AS amount,COUNT(*) AS count FROM service_orders WHERE status NOT IN ('delivered','cancelled')\n        UNION ALL SELECT 'Outstanding invoices',COALESCE(SUM(balance_amount),0)::float8,COUNT(*) FROM credit_sales WHERE balance_amount>0 AND COALESCE(status,'pending')<>'refunded'\n        UNION ALL SELECT 'Overdue invoices',COALESCE(SUM(balance_amount),0)::float8,COUNT(*) FROM credit_sales WHERE balance_amount>0 AND COALESCE(status,'pending')<>'refunded' AND NULLIF(due_date,'')<to_char(CURRENT_DATE,'YYYY-MM-DD')\n        UNION ALL SELECT 'Credit marked fully paid (period)',COALESCE(SUM(total),0)::float8,COUNT(*) FROM sales WHERE status='completed' AND lower(trim(payment_type))='credit' AND payment>=total AND total>0 AND created_at >= $1 AND created_at < $2\n    "
+  },
+  {
+    "source": "dashboard.rs:54",
+    "sql": "SELECT 'Purchase orders without ledger entries'::text AS label,COALESCE(SUM(total_amount),0)::float8 AS amount,COUNT(*) AS count FROM purchase_orders po WHERE NOT EXISTS(SELECT 1 FROM supplier_payments sp WHERE sp.purchase_order_id=po.id)"
+  },
+  {
+    "source": "dashboard.rs:55",
+    "sql": "SELECT 'Active employees'::text AS label,0::float8 AS amount,COUNT(*) AS count FROM employees WHERE lower(employment_status)='active'"
+  },
+  {
+    "source": "dashboard.rs:57",
+    "sql": "SELECT to_regclass($1) IS NOT NULL"
+  },
+  {
+    "source": "db.rs:63",
+    "sql": "SELECT 1"
+  },
+  {
+    "source": "db.rs:101",
+    "sql": "INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value"
+  },
+  {
+    "source": "db.rs:111",
+    "sql": "\n        SELECT key, value\n        FROM settings\n        ORDER BY key\n        "
+  },
+  {
+    "source": "db.rs:124",
+    "sql": "\n        SELECT id, name\n        FROM payment_types\n        WHERE COALESCE(active, 1) = 1\n        ORDER BY sort_order, name\n        "
+  },
+  {
+    "source": "db.rs:148",
+    "sql": "\n            UPDATE payment_types\n            SET name = $1\n            WHERE id = $2\n            RETURNING id, name\n            "
+  },
+  {
+    "source": "db.rs:162",
+    "sql": "\n            INSERT INTO payment_types (name, active)\n            VALUES ($1, 1)\n            ON CONFLICT (name) DO UPDATE SET active = 1\n            RETURNING id, name\n            "
+  },
+  {
+    "source": "db.rs:178",
+    "sql": "\n        UPDATE payment_types\n        SET active = 0\n        WHERE id = $1\n        "
+  },
+  {
+    "source": "db.rs:263",
+    "sql": "SELECT CASE WHEN image_data IS NOT NULL THEN CONCAT('data:',COALESCE(NULLIF(image_mime,''),'image/jpeg'),';base64,',encode(image_data,'base64')) END FROM products WHERE id=$1"
+  },
+  {
+    "source": "db.rs:376",
+    "sql": "SELECT i.product_id,SUM(GREATEST(COALESCE(i.qty,0)-COALESCE(i.refunded_qty,0),0))::float8 FROM sale_items i JOIN sales s ON s.id=i.sale_id WHERE s.status='completed' AND i.product_id IS NOT NULL GROUP BY i.product_id"
+  },
+  {
+    "source": "discounts.rs:21",
+    "sql": "SELECT id,product_id,discount_percent::numeric,COALESCE(discount_type,'percentage') AS discount_type,COALESCE(manual_price,0)::numeric AS manual_price,start_date,end_date,active,COALESCE(note,'') AS note FROM product_discounts"
+  },
+  {
+    "source": "discounts.rs:71",
+    "sql": "SELECT to_regclass('product_discounts') IS NOT NULL"
+  },
+  {
+    "source": "discounts.rs:80",
+    "sql": "SELECT price::float8,CASE WHEN wholesale_min_qty>0 AND wholesale_min_qty<=$3 AND wholesale_price>0 THEN wholesale_price ELSE price END::float8 FROM product_variants WHERE id=$1 AND product_id=$2"
+  },
+  {
+    "source": "discounts.rs:82",
+    "sql": "SELECT p.price::float8,COALESCE((SELECT unit_price FROM product_price_tiers WHERE product_id=p.id AND COALESCE(active,1)=1 AND min_qty<=$2 AND unit_price>0 ORDER BY min_qty DESC,unit_price LIMIT 1),p.price)::float8 FROM products p WHERE p.id=$1"
+  },
+  {
+    "source": "discounts.rs:91",
+    "sql": "SELECT price::numeric,COALESCE(sold_by,'Each') FROM products WHERE id=$1 FOR UPDATE"
+  },
+  {
+    "source": "discounts.rs:99",
+    "sql": "SELECT EXISTS(SELECT 1 FROM product_discounts WHERE product_id=$1 AND id<>$2 AND active=1 AND start_date<=$3 AND end_date>=$4)"
+  },
+  {
+    "source": "discounts.rs:102",
+    "sql": "UPDATE product_discounts SET product_id=$1,discount_percent=$2::numeric::float8,discount_type=$3,manual_price=$4::numeric::float8,start_date=$5,end_date=$6,active=$7,note=$8,updated_at=CURRENT_TIMESTAMP WHERE id=$9 RETURNING id"
+  },
+  {
+    "source": "discounts.rs:102",
+    "sql": "INSERT INTO product_discounts(product_id,discount_percent,discount_type,manual_price,start_date,end_date,active,note) SELECT $1,$2::numeric::float8,$3,$4::numeric::float8,$5,$6,$7,$8 WHERE $9=0 RETURNING id"
+  },
+  {
+    "source": "employees.rs:490",
+    "sql": "SELECT COALESCE(u.permissions,''),COALESCE(r.permissions,''),COALESCE(u.force_password_change,0) FROM users u LEFT JOIN user_roles r ON lower(r.name)=lower(u.role) WHERE u.username=$1"
+  },
+  {
+    "source": "employees.rs:560",
+    "sql": "SELECT row_to_json(q)::text FROM (SELECT e.id,e.employee_no,e.full_name,e.branch,COUNT(s.id) AS sale_count,COALESCE(SUM(CASE WHEN s.status='completed' THEN s.total ELSE 0 END),0)::float8 AS sales_total,COUNT(s.id) FILTER(WHERE s.status='refunded') AS refund_count,COALESCE(SUM(s.discount_amount),0)::float8 AS discount_total,COALESCE(cr.rate_percent,0)::float8 AS commission_rate,COALESCE(cr.target_amount,0)::float8 AS target_amount FROM employees e LEFT JOIN users u ON u.id=e.user_id LEFT JOIN sales s ON s.created_by=u.username AND s.created_at::date BETWEEN $1::date AND $2::date LEFT JOIN commission_rules cr ON cr.employee_id=e.id AND cr.active=1 WHERE e.employment_status='Active' GROUP BY e.id,cr.rate_percent,cr.target_amount ORDER BY sales_total DESC) q"
+  },
+  {
+    "source": "employees.rs:606",
+    "sql": "SELECT json_build_object('id',id,'employee_no',employee_no,'full_name',full_name,'employment_status',employment_status)::text FROM employees ORDER BY full_name"
+  },
+  {
+    "source": "employees.rs:608",
+    "sql": "SELECT json_build_object('id',id,'username',username)::text FROM users WHERE is_active=1 ORDER BY username"
+  },
+  {
+    "source": "employees.rs:613",
+    "sql": "SELECT json_build_object('id',id,'name',name)::text FROM shifts WHERE is_active=1 ORDER BY name"
+  },
+  {
+    "source": "employees.rs:618",
+    "sql": "SELECT json_build_object('employee_id',a.employee_id,'effective_from',a.effective_from,'effective_to',a.effective_to,'start_time',s.start_time)::text FROM employee_shifts a JOIN shifts s ON s.id=a.shift_id ORDER BY a.effective_from DESC,a.id DESC"
+  },
+  {
+    "source": "employees.rs:645",
+    "sql": "SELECT MAX(attendance_date) FROM attendance"
+  },
+  {
+    "source": "employees.rs:654",
+    "sql": "SELECT COUNT(*) FROM employee_leave WHERE status='Pending'"
+  },
+  {
+    "source": "employees.rs:661",
+    "sql": "SELECT COUNT(*) FROM employee_documents WHERE NULLIF(expiry_date,'') IS NOT NULL AND expiry_date <= to_char(CURRENT_DATE+30,'YYYY-MM-DD')"
+  },
+  {
+    "source": "employees.rs:664",
+    "sql": "SELECT COALESCE(SUM(amount-COALESCE(repaid_amount,0)),0)::float8 FROM salary_advances WHERE status='Outstanding'"
+  },
+  {
+    "source": "employees.rs:708",
+    "sql": "SELECT id FROM users WHERE username=$1"
+  },
+  {
+    "source": "employees.rs:714",
+    "sql": "SELECT pg_advisory_xact_lock(hashtextextended($1,0))"
+  },
+  {
+    "source": "employees.rs:718",
+    "sql": "SELECT user_id,payload_hash,record_id FROM rust_employee_requests WHERE request_id=$1"
+  },
+  {
+    "source": "employees.rs:753",
+    "sql": "INSERT INTO rust_employee_requests(request_id,user_id,operation,payload_hash,record_id) VALUES($1,$2,$3,$4,$5)"
+  },
+  {
+    "source": "employees.rs:827",
+    "sql": "SELECT EXISTS(SELECT 1 FROM employees WHERE id=$1)"
+  },
+  {
+    "source": "employees.rs:849",
+    "sql": "SELECT EXISTS(SELECT 1 FROM shifts WHERE id=$1 AND is_active=1)"
+  },
+  {
+    "source": "employees.rs:877",
+    "sql": "SELECT EXISTS(SELECT 1 FROM cash_sessions WHERE employee_id=$1 AND status='Open')"
+  },
+  {
+    "source": "employees.rs:903",
+    "sql": "UPDATE employees SET photo_data=$1,photo_path='',updated_at=CURRENT_TIMESTAMP WHERE id=$2"
+  },
+  {
+    "source": "employees.rs:916",
+    "sql": "DELETE FROM employee_shifts WHERE id=$1"
+  },
+  {
+    "source": "employees.rs:931",
+    "sql": "UPDATE employee_leave SET status=$1,reviewed_by=$2,reviewed_at=CURRENT_TIMESTAMP,review_notes=$3 WHERE id=$4"
+  },
+  {
+    "source": "employees.rs:942",
+    "sql": "UPDATE salary_advances SET repaid_amount=$1,status=$2 WHERE id=$3"
+  },
+  {
+    "source": "employees.rs:963",
+    "sql": "SELECT full_name FROM employees WHERE id=$1"
+  },
+  {
+    "source": "employees.rs:967",
+    "sql": "INSERT INTO expenses(expense_no,category,description,amount,expense_date,payment_method,created_by,notes) VALUES($1,'Salaries',$2,$3,$4,$5,$6,$7) RETURNING id"
+  },
+  {
+    "source": "employees.rs:969",
+    "sql": "UPDATE payrolls SET status='Paid',paid_date=$1,payment_method=$2,expense_id=$3 WHERE id=$4"
+  },
+  {
+    "source": "employees.rs:974",
+    "sql": "SELECT u.username FROM employees e LEFT JOIN users u ON u.id=e.user_id WHERE e.id=$1"
+  },
+  {
+    "source": "employees.rs:979",
+    "sql": "SELECT COALESCE(SUM(total),0)::float8 FROM sales WHERE created_by=$1 AND created_at >= $2::timestamp AND created_at<=CURRENT_TIMESTAMP AND status='completed' AND LOWER(COALESCE(payment_type,'cash'))='cash'"
+  },
+  {
+    "source": "employees.rs:981",
+    "sql": "UPDATE cash_sessions SET closed_at=CURRENT_TIMESTAMP,expected_cash=$1,actual_cash=$2,difference=$3,status='Closed',closed_by=$4 WHERE id=$5"
+  },
+  {
+    "source": "employees.rs:992",
+    "sql": "SELECT s.start_time FROM employee_shifts a JOIN shifts s ON s.id=a.shift_id WHERE a.employee_id=$1 AND a.effective_from<=$2 AND (a.effective_to IS NULL OR a.effective_to='' OR a.effective_to>=$2) ORDER BY a.effective_from DESC,a.id DESC LIMIT 1"
+  },
+  {
+    "source": "employees.rs:1007",
+    "sql": "SELECT to_jsonb(a)::text FROM attendance a WHERE COALESCE(correction_reason,'')='' ORDER BY id FOR UPDATE"
+  },
+  {
+    "source": "employees.rs:1010",
+    "sql": "SELECT EXISTS(SELECT 1 FROM employee_leave WHERE employee_id=$1 AND status='Approved' AND $2 BETWEEN start_date AND end_date)"
+  },
+  {
+    "source": "employees.rs:1023",
+    "sql": "UPDATE attendance SET status=$1,late_minutes=$2,updated_at=CURRENT_TIMESTAMP WHERE id=$3"
+  },
+  {
+    "source": "expense_management.rs:30",
+    "sql": "SELECT COALESCE(enable_notifications,1) AS enable_notifications,COALESCE(warning_threshold,80) AS warning_threshold,COALESCE(check_frequency,'daily') AS check_frequency FROM expense_notification_settings ORDER BY id LIMIT 1"
+  },
+  {
+    "source": "expense_management.rs:42",
+    "sql": "WITH categories AS (SELECT name AS category FROM expense_categories UNION SELECT category FROM expense_budgets WHERE year=$1 AND month=$2 UNION SELECT category FROM expenses WHERE LEFT(expense_date,7)=$3), actual AS (SELECT category,SUM(amount::numeric) AS amount FROM expenses WHERE LEFT(expense_date,7)=$3 GROUP BY category) SELECT c.category,COALESCE(b.budget_amount,0)::numeric AS budget_amount,COALESCE(a.amount,0) AS actual,COALESCE(b.notes,'') AS notes,b.id IS NOT NULL AS exists FROM categories c LEFT JOIN expense_budgets b ON b.category=c.category AND b.year=$1 AND b.month=$2 LEFT JOIN actual a ON a.category=c.category ORDER BY c.category"
+  },
+  {
+    "source": "expense_management.rs:47",
+    "sql": "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY"
+  },
+  {
+    "source": "expense_management.rs:51",
+    "sql": "SELECT id,COALESCE(category,'') AS category,COALESCE(message,'') AS message,COALESCE(is_read,0) AS is_read,created_at::text AS created_at FROM expense_alerts_log WHERE year=$1 AND month=$2 ORDER BY created_at DESC,id DESC"
+  },
+  {
+    "source": "expense_management.rs:56",
+    "sql": "SELECT a.id,a.filename,a.file_path,COALESCE(a.file_size,0) AS file_size,COALESCE(a.mime_type,'') AS mime_type,COALESCE(a.uploaded_by,'') AS uploaded_by,EXISTS(SELECT 1 FROM rust_expense_files f WHERE f.attachment_id=a.id) AS stored FROM expense_attachments a WHERE expense_id=$1 ORDER BY a.id DESC"
+  },
+  {
+    "source": "expense_management.rs:72",
+    "sql": "SELECT a.filename,f.content,f.sha256 FROM expense_attachments a JOIN rust_expense_files f ON f.attachment_id=a.id WHERE a.id=$1 AND octet_length(f.content)<=10485760"
+  },
+  {
+    "source": "expense_management.rs:80",
+    "sql": "SET LOCAL lock_timeout='8s'"
+  },
+  {
+    "source": "expense_management.rs:81",
+    "sql": "SET LOCAL statement_timeout='30s'"
+  },
+  {
+    "source": "expense_management.rs:83",
+    "sql": "SELECT pg_advisory_xact_lock(hashtextextended($1,721007))"
+  },
+  {
+    "source": "expense_management.rs:84",
+    "sql": "SELECT username,payload_hash,result_id FROM rust_management_requests WHERE request_id=$1"
+  },
+  {
+    "source": "expense_management.rs:91",
+    "sql": "SELECT pg_advisory_xact_lock(721007,1)"
+  },
+  {
+    "source": "expense_management.rs:92",
+    "sql": "SELECT category,month,year,budget_amount::numeric,COALESCE(notes,'') AS notes FROM expense_budgets WHERE category=$1 AND month=$2 AND year=$3 FOR UPDATE"
+  },
+  {
+    "source": "expense_management.rs:94",
+    "sql": "SELECT EXISTS(SELECT 1 FROM expense_categories WHERE name=$1)"
+  },
+  {
+    "source": "expense_management.rs:96",
+    "sql": "INSERT INTO expense_budgets(category,month,year,budget_amount,notes) VALUES($1,$2,$3,$4::numeric::float8,$5) ON CONFLICT(category,month,year) DO UPDATE SET budget_amount=EXCLUDED.budget_amount,notes=EXCLUDED.notes,updated_at=CURRENT_TIMESTAMP RETURNING id"
+  },
+  {
+    "source": "expense_management.rs:103",
+    "sql": "UPDATE expense_notification_settings SET enable_notifications=$1,warning_threshold=$2,check_frequency=$3,last_checked=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=(SELECT id FROM expense_notification_settings ORDER BY id LIMIT 1) RETURNING id"
+  },
+  {
+    "source": "expense_management.rs:106",
+    "sql": "UPDATE expense_alerts_log SET is_read=1 WHERE id=$1"
+  },
+  {
+    "source": "expense_management.rs:109",
+    "sql": "SELECT id FROM expenses WHERE id=$1 FOR UPDATE"
+  },
+  {
+    "source": "expense_management.rs:110",
+    "sql": "INSERT INTO expense_attachments(expense_id,filename,file_path,file_size,mime_type,uploaded_by) VALUES($1,$2,$3,$4,$5,$6) RETURNING id"
+  },
+  {
+    "source": "expense_management.rs:112",
+    "sql": "INSERT INTO rust_expense_files(attachment_id,content,sha256) VALUES($1,$2,$3)"
+  },
+  {
+    "source": "expense_management.rs:115",
+    "sql": "SELECT EXISTS(SELECT 1 FROM rust_expense_files WHERE attachment_id=$1)"
+  },
+  {
+    "source": "expense_management.rs:117",
+    "sql": "DELETE FROM expense_attachments WHERE id=$1"
+  },
+  {
+    "source": "expense_management.rs:120",
+    "sql": "INSERT INTO rust_management_requests(request_id,username,payload_hash,result_id) VALUES($1,$2,$3,$4)"
+  },
+  {
+    "source": "expense_management.rs:130",
+    "sql": "SELECT last_checked IS NULL OR last_checked<=CURRENT_TIMESTAMP-make_interval(days=>$1) FROM expense_notification_settings ORDER BY id LIMIT 1"
+  },
+  {
+    "source": "expense_management.rs:136",
+    "sql": "SELECT EXISTS(SELECT 1 FROM expense_alerts_log WHERE category=$1 AND year=$2 AND month=$3 AND (alert_type=$4 OR alert_type='exceeded'))"
+  },
+  {
+    "source": "expense_management.rs:139",
+    "sql": "INSERT INTO expense_alerts_log(category,year,month,budget_amount,actual_amount,used_percentage,alert_type,message,is_read) VALUES($1,$2,$3,$4::numeric::float8,$5::numeric::float8,$6::numeric::float8,$7,$8,0)"
+  },
+  {
+    "source": "expense_management.rs:144",
+    "sql": "UPDATE expense_notification_settings SET last_checked=CURRENT_TIMESTAMP WHERE id=(SELECT id FROM expense_notification_settings ORDER BY id LIMIT 1)"
+  },
+  {
+    "source": "expense_management.rs:149",
+    "sql": "SET LOCAL lock_timeout='8s'"
+  },
+  {
+    "source": "expense_management.rs:150",
+    "sql": "SELECT pg_advisory_xact_lock(hashtextextended($1,721007))"
+  },
+  {
+    "source": "expense_management.rs:152",
+    "sql": "SELECT username,payload_hash,result_id FROM rust_management_requests WHERE request_id=$1"
+  },
+  {
+    "source": "expense_management.rs:154",
+    "sql": "INSERT INTO rust_management_requests(request_id,username,payload_hash,result_id) VALUES($1,$2,$3,0)"
+  },
+  {
+    "source": "expenses.rs:22",
+    "sql": "SELECT id, COALESCE(expense_no,'') AS expense_no, category, COALESCE(description,'') AS description, COALESCE(amount,0)::numeric AS amount, COALESCE(expense_date,'') AS expense_date, COALESCE(payment_method,'') AS payment_method, COALESCE(reference_no,'') AS reference_no, COALESCE(notes,'') AS notes FROM expenses ORDER BY expense_date DESC, id DESC"
+  },
+  {
+    "source": "expenses.rs:28",
+    "sql": "SELECT name FROM expense_categories WHERE COALESCE(is_active,1)=1 ORDER BY name"
+  },
+  {
+    "source": "expenses.rs:37",
+    "sql": "SELECT id FROM expenses WHERE id=$1 FOR UPDATE"
+  },
+  {
+    "source": "expenses.rs:41",
+    "sql": "SELECT to_regclass('payrolls') IS NOT NULL"
+  },
+  {
+    "source": "expenses.rs:46",
+    "sql": "SELECT EXISTS(SELECT 1 FROM payrolls WHERE expense_id=$1)"
+  },
+  {
+    "source": "expenses.rs:56",
+    "sql": "DELETE FROM expense_attachments WHERE expense_id=$1"
+  },
+  {
+    "source": "expenses.rs:60",
+    "sql": "DELETE FROM expenses WHERE id=$1"
+  },
+  {
+    "source": "expenses.rs:92",
+    "sql": "SELECT id FROM expenses WHERE id=$1 FOR UPDATE"
+  },
+  {
+    "source": "expenses.rs:93",
+    "sql": "SELECT to_regclass('payrolls') IS NOT NULL"
+  },
+  {
+    "source": "expenses.rs:95",
+    "sql": "SELECT EXISTS(SELECT 1 FROM payrolls WHERE expense_id=$1)"
+  },
+  {
+    "source": "expenses.rs:100",
+    "sql": "SELECT EXISTS(SELECT 1 FROM expense_categories WHERE name=$1)"
+  },
+  {
+    "source": "expenses.rs:106",
+    "sql": "INSERT INTO expenses (expense_no,category,description,amount,expense_date,payment_method,reference_no,notes) VALUES ($1,$2,$3,$4::numeric,$5,$6,$7,$8) RETURNING id"
+  },
+  {
+    "source": "expenses.rs:109",
+    "sql": "UPDATE expenses SET category=$2,description=$3,amount=$4::numeric,expense_date=$5,payment_method=$6,reference_no=$7,notes=$8 WHERE id=$1 RETURNING id"
+  },
+  {
+    "source": "expenses.rs:140",
+    "sql": "SELECT name FROM expense_categories ORDER BY name"
+  },
+  {
+    "source": "held_sales.rs:20",
+    "sql": "SELECT id,hold_no,cart_json,customer_id,COALESCE(customer_name,'') AS customer_name,COALESCE(payment_type,'Cash') AS payment_type,COALESCE(note,'') AS note,COALESCE(total_amount,0)::float8 AS total_amount,COALESCE(item_count,0) AS item_count,created_at::text AS created_at FROM held_sales"
+  },
+  {
+    "source": "held_sales.rs:99",
+    "sql": "SELECT username,body,state FROM rust_held_sessions WHERE token=$1"
+  },
+  {
+    "source": "held_sales.rs:127",
+    "sql": "SET LOCAL lock_timeout='8s'"
+  },
+  {
+    "source": "held_sales.rs:130",
+    "sql": "SELECT pg_advisory_xact_lock(hashtextextended($1,721008))"
+  },
+  {
+    "source": "held_sales.rs:135",
+    "sql": "SELECT username,payload_hash,result_json FROM rust_held_requests WHERE request_id=$1"
+  },
+  {
+    "source": "held_sales.rs:155",
+    "sql": "SELECT COALESCE(name,'') FROM customers WHERE id=$1"
+  },
+  {
+    "source": "held_sales.rs:165",
+    "sql": "INSERT INTO held_sales(hold_no,cart_json,customer_id,customer_name,payment_type,note,total_amount,item_count) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id"
+  },
+  {
+    "source": "held_sales.rs:168",
+    "sql": "UPDATE rust_held_sessions SET state='returned',updated_at=CURRENT_TIMESTAMP WHERE token=$1"
+  },
+  {
+    "source": "held_sales.rs:178",
+    "sql": "SELECT body FROM rust_held_sessions WHERE token=$1"
+  },
+  {
+    "source": "held_sales.rs:182",
+    "sql": "UPDATE rust_held_sessions SET state='returned',updated_at=CURRENT_TIMESTAMP WHERE token=$1"
+  },
+  {
+    "source": "held_sales.rs:194",
+    "sql": "INSERT INTO rust_held_sessions(token,username,held_id,body) VALUES($1,$2,$3,$4)"
+  },
+  {
+    "source": "held_sales.rs:202",
+    "sql": "DELETE FROM held_sales WHERE id=$1"
+  },
+  {
+    "source": "held_sales.rs:212",
+    "sql": "INSERT INTO rust_held_requests(request_id,username,payload_hash,result_json) VALUES($1,$2,$3,$4)"
+  },
+  {
+    "source": "held_sales.rs:224",
+    "sql": "SET LOCAL lock_timeout='8s'"
+  },
+  {
+    "source": "held_sales.rs:227",
+    "sql": "SELECT pg_advisory_xact_lock(hashtextextended($1,721008))"
+  },
+  {
+    "source": "held_sales.rs:233",
+    "sql": "SELECT username,payload_hash,result_json FROM rust_held_requests WHERE request_id=$1"
+  },
+  {
+    "source": "held_sales.rs:245",
+    "sql": "INSERT INTO rust_held_requests(request_id,username,payload_hash,result_json) VALUES($1,$2,$3,'null')"
+  },
+  {
+    "source": "held_sales.rs:257",
+    "sql": "SELECT username,state FROM rust_held_sessions WHERE token=$1 FOR UPDATE"
+  },
+  {
+    "source": "held_sales.rs:269",
+    "sql": "UPDATE rust_held_sessions SET state='completed',sale_id=$1,updated_at=CURRENT_TIMESTAMP WHERE token=$2 AND state='active'"
+  },
+  {
+    "source": "inventory.rs:23",
+    "sql": "SELECT m.id,COALESCE(type,'') AS kind,COALESCE(quantity,0)::float8 AS quantity,COALESCE(old_stock,0)::float8 AS old_stock,COALESCE(new_stock,0)::float8 AS new_stock,COALESCE(location,'') AS location,COALESCE(reason,'') AS reason,COALESCE(reference,'') AS reference,COALESCE(created_by,'') AS created_by,COALESCE(created_at::text,'') AS created_at,variant_id,COALESCE(notes,'') AS notes,COALESCE((SELECT concat_ws(' / ',NULLIF(v.size,''),NULLIF(v.color,''),NULLIF(v.sku,'')) FROM product_variants v WHERE v.id=m.variant_id),'') AS variant_name,COALESCE((SELECT string_agg(concat(b.batch_no,' | ',CASE WHEN b.expiry_unknown=1 THEN 'Unknown expiry' ELSE COALESCE(NULLIF(b.expire_date,''),'No expiry') END,' | ',b.delta),'; ' ORDER BY b.batch_no,b.expire_date) FROM variant_batch_changes b WHERE b.movement_id=m.id),'') AS batches FROM stock_movements m WHERE product_id=$1 ORDER BY created_at DESC,m.id DESC LIMIT $2"
+  },
+  {
+    "source": "inventory.rs:27",
+    "sql": "SELECT (COALESCE(SUM(quantity) FILTER (WHERE location=$3),0) + CASE WHEN $3='Legacy / unassigned' THEN GREATEST(COALESCE((SELECT stock FROM product_variants WHERE product_id=$1 AND id=$2),0)-COALESCE(SUM(quantity),0),0) ELSE 0 END)::float8 FROM variant_stock_batches WHERE product_id=$1 AND variant_id=$2"
+  },
+  {
+    "source": "inventory.rs:30",
+    "sql": "SELECT DISTINCT location FROM variant_stock_batches WHERE product_id=$1 AND variant_id=$2 AND location IS NOT NULL UNION SELECT 'Legacy / unassigned' ORDER BY 1"
+  },
+  {
+    "source": "inventory.rs:30",
+    "sql": "SELECT DISTINCT location FROM product_locations WHERE product_id=$1 AND $2::integer IS NULL AND location IS NOT NULL ORDER BY 1"
+  },
+  {
+    "source": "inventory.rs:35",
+    "sql": "SELECT COALESCE(SUM(quantity),0)::float8 FROM product_locations WHERE product_id=$1 AND $2::integer IS NULL AND location=$3"
+  },
+  {
+    "source": "inventory.rs:86",
+    "sql": "SELECT COALESCE(stock,0)::float8,COALESCE(sold_by,'Each') FROM products WHERE id=$1 FOR UPDATE"
+  },
+  {
+    "source": "inventory.rs:101",
+    "sql": "SELECT COALESCE(SUM(stock),0)::float8 FROM product_variants WHERE product_id=$1"
+  },
+  {
+    "source": "inventory.rs:108",
+    "sql": "SELECT COALESCE(stock,0)::float8 FROM product_variants WHERE id=$1 AND product_id=$2 AND COALESCE(active,1)=1 FOR UPDATE"
+  },
+  {
+    "source": "inventory.rs:112",
+    "sql": "SELECT COALESCE(SUM(quantity),0)::float8 FROM product_locations WHERE product_id=$1 AND $2::integer IS NULL AND location=$3"
+  },
+  {
+    "source": "inventory.rs:147",
+    "sql": "INSERT INTO variant_stock_batches(product_id,variant_id,location,batch_no,expire_date,quantity,expiry_unknown) VALUES($1,$2,'Legacy / unassigned','LEGACY-OPENING','',$3,1) ON CONFLICT(product_id,variant_id,location,batch_no,expire_date) DO UPDATE SET quantity=variant_stock_batches.quantity+EXCLUDED.quantity,expiry_unknown=1"
+  },
+  {
+    "source": "inventory.rs:159",
+    "sql": "INSERT INTO variant_stock_batches(product_id,variant_id,location,batch_no,expire_date,quantity,expiry_unknown) VALUES($1,$2,$3,$4,'',$5,1)"
+  },
+  {
+    "source": "inventory.rs:161",
+    "sql": "INSERT INTO product_locations(product_id,location,batch_no,expire_date,quantity) VALUES($1,$2,$3,'',$4)"
+  },
+  {
+    "source": "inventory.rs:195",
+    "sql": "UPDATE product_variants SET stock=$1,updated_at=CURRENT_TIMESTAMP WHERE id=$2"
+  },
+  {
+    "source": "inventory.rs:202",
+    "sql": "UPDATE products SET stock=$1,last_updated=CURRENT_TIMESTAMP WHERE id=$2"
+  },
+  {
+    "source": "inventory.rs:207",
+    "sql": "INSERT INTO stock_movements(product_id,variant_id,type,quantity,old_stock,new_stock,reason,reference,created_by,location,notes) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id"
+  },
+  {
+    "source": "inventory.rs:210",
+    "sql": "INSERT INTO variant_batch_changes(movement_id,product_id,variant_id,location,batch_no,expire_date,delta,expiry_unknown) VALUES($1,$2,$3,$4,$5,$6,$7,$8)"
+  },
+  {
+    "source": "inventory.rs:221",
+    "sql": "SET LOCAL lock_timeout='5s'"
+  },
+  {
+    "source": "inventory.rs:231",
+    "sql": "SELECT COALESCE(stock,0)::float8,COALESCE(cost,0)::float8,COALESCE(sold_by,'Each') FROM products WHERE id=$1 FOR UPDATE"
+  },
+  {
+    "source": "inventory.rs:259",
+    "sql": "SELECT COALESCE(SUM(stock),0)::float8 FROM product_variants WHERE product_id=$1"
+  },
+  {
+    "source": "inventory.rs:268",
+    "sql": "SELECT COALESCE(stock,0) FROM product_variants WHERE id=$1 AND product_id=$2 AND COALESCE(active,1)=1 FOR UPDATE"
+  },
+  {
+    "source": "inventory.rs:273",
+    "sql": "SELECT COALESCE(SUM(quantity),0)::bigint FROM variant_stock_batches WHERE product_id=$1 AND variant_id=$2"
+  },
+  {
+    "source": "inventory.rs:279",
+    "sql": "INSERT INTO variant_stock_batches(product_id,variant_id,location,batch_no,expire_date,quantity,expiry_unknown) VALUES($1,$2,'Legacy / unassigned','LEGACY-OPENING','',$3,1) ON CONFLICT(product_id,variant_id,location,batch_no,expire_date) DO UPDATE SET quantity=variant_stock_batches.quantity+EXCLUDED.quantity"
+  },
+  {
+    "source": "inventory.rs:281",
+    "sql": "INSERT INTO variant_stock_batches(product_id,variant_id,location,batch_no,expire_date,quantity,expiry_unknown) VALUES($1,$2,$3,$4,$5,$6,0) ON CONFLICT(product_id,variant_id,location,batch_no,expire_date) DO UPDATE SET quantity=variant_stock_batches.quantity+EXCLUDED.quantity"
+  },
+  {
+    "source": "inventory.rs:282",
+    "sql": "UPDATE product_variants SET stock=$1,cost=$2::float8,updated_at=CURRENT_TIMESTAMP WHERE id=$3"
+  },
+  {
+    "source": "inventory.rs:284",
+    "sql": "INSERT INTO product_locations(product_id,location,quantity,batch_no,expire_date) VALUES($1,$2,$3,$4,$5) ON CONFLICT(product_id,location,batch_no,expire_date) DO UPDATE SET quantity=product_locations.quantity+EXCLUDED.quantity,last_updated=CURRENT_TIMESTAMP"
+  },
+  {
+    "source": "inventory.rs:288",
+    "sql": "UPDATE products SET stock=$1,cost=$2,last_updated=CURRENT_TIMESTAMP WHERE id=$3"
+  },
+  {
+    "source": "inventory.rs:304",
+    "sql": "INSERT INTO stock_movements(product_id,variant_id,type,quantity,old_stock,new_stock,reason,reference,created_by,location,notes) VALUES($1,$2,'stock_in',$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id"
+  },
+  {
+    "source": "inventory.rs:306",
+    "sql": "SELECT EXISTS(SELECT 1 FROM suppliers WHERE id=$1 AND LOWER(COALESCE(NULLIF(trim(status),''),'Active'))='active')"
+  },
+  {
+    "source": "inventory.rs:309",
+    "sql": "UPDATE stock_movements SET supplier_id=$1 WHERE id=$2"
+  },
+  {
+    "source": "inventory.rs:313",
+    "sql": "INSERT INTO variant_batch_changes(movement_id,product_id,variant_id,location,batch_no,expire_date,delta,expiry_unknown) VALUES($1,$2,$3,$4,$5,$6,$7,0)"
+  },
+  {
+    "source": "inventory_reversal.rs:10",
+    "sql": "SELECT COALESCE(stock,0)::float8 FROM products WHERE id=$1 FOR UPDATE"
+  },
+  {
+    "source": "inventory_reversal.rs:12",
+    "sql": "SELECT type,quantity::float8,variant_id,COALESCE(location,''),COALESCE(notes,''),COALESCE(reference,'') FROM stock_movements WHERE id=$1 AND product_id=$2 FOR UPDATE"
+  },
+  {
+    "source": "inventory_reversal.rs:15",
+    "sql": "SELECT to_regclass('rust_purchase_movements') IS NOT NULL"
+  },
+  {
+    "source": "inventory_reversal.rs:17",
+    "sql": "SELECT EXISTS(SELECT 1 FROM rust_purchase_movements WHERE movement_id=$1)"
+  },
+  {
+    "source": "inventory_reversal.rs:23",
+    "sql": "SELECT stock::float8 FROM product_variants WHERE id=$1 AND product_id=$2 FOR UPDATE"
+  },
+  {
+    "source": "inventory_reversal.rs:28",
+    "sql": "SELECT location,batch_no,expire_date,SUM(delta)::float8,MAX(expiry_unknown) FROM variant_batch_changes WHERE movement_id=$1 AND product_id=$2 AND variant_id=$3 GROUP BY location,batch_no,expire_date ORDER BY location,batch_no,expire_date"
+  },
+  {
+    "source": "inventory_reversal.rs:32",
+    "sql": "SELECT location,batch_no,expire_date,$4::float8,0::integer FROM product_locations WHERE product_id=$1 AND location=$2 AND batch_no=$3 FOR UPDATE"
+  },
+  {
+    "source": "inventory_reversal.rs:41",
+    "sql": "UPDATE variant_stock_batches SET quantity=quantity-$6 WHERE product_id=$1 AND variant_id=$2 AND location=$3 AND batch_no=$4 AND expire_date=$5 AND quantity >= $6"
+  },
+  {
+    "source": "inventory_reversal.rs:44",
+    "sql": "UPDATE product_locations SET quantity=quantity-$5::float8,last_updated=CURRENT_TIMESTAMP WHERE product_id=$1 AND location=$2 AND batch_no=$3 AND expire_date=$4 AND quantity >= $5::float8"
+  },
+  {
+    "source": "inventory_reversal.rs:51",
+    "sql": "UPDATE product_variants SET stock=stock-$1,updated_at=CURRENT_TIMESTAMP WHERE id=$2"
+  },
+  {
+    "source": "inventory_reversal.rs:52",
+    "sql": "UPDATE products SET stock=(SELECT COALESCE(SUM(stock),0) FROM product_variants WHERE product_id=$1),last_updated=CURRENT_TIMESTAMP WHERE id=$1"
+  },
+  {
+    "source": "inventory_reversal.rs:54",
+    "sql": "UPDATE products SET stock=stock-$1,last_updated=CURRENT_TIMESTAMP WHERE id=$2"
+  },
+  {
+    "source": "inventory_reversal.rs:56",
+    "sql": "INSERT INTO stock_movements(product_id,variant_id,type,quantity,old_stock,new_stock,reason,reference,created_by,location,notes) VALUES($1,$2,'stock_out',$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id"
+  },
+  {
+    "source": "inventory_reversal.rs:60",
+    "sql": "INSERT INTO variant_batch_changes(movement_id,product_id,variant_id,location,batch_no,expire_date,delta,expiry_unknown) VALUES($1,$2,$3,$4,$5,$6,$7,$8)"
+  },
+  {
+    "source": "inventory_reversal.rs:64",
+    "sql": "UPDATE stock_movements SET notes=COALESCE(notes,'') || $1 WHERE id=$2"
+  },
+  {
+    "source": "locations.rs:27",
+    "sql": "SELECT id,name FROM locations ORDER BY LOWER(name),id"
+  },
+  {
+    "source": "locations.rs:36",
+    "sql": "LOCK TABLE locations,product_locations,products,stock_movements IN SHARE ROW EXCLUSIVE MODE"
+  },
+  {
+    "source": "locations.rs:38",
+    "sql": "SELECT to_regclass('variant_stock_batches') IS NOT NULL"
+  },
+  {
+    "source": "locations.rs:42",
+    "sql": "LOCK TABLE variant_stock_batches IN SHARE ROW EXCLUSIVE MODE"
+  },
+  {
+    "source": "locations.rs:48",
+    "sql": "SELECT EXISTS(SELECT 1 FROM locations WHERE LOWER(TRIM(name))=LOWER($1) AND id<>$2)"
+  },
+  {
+    "source": "locations.rs:58",
+    "sql": "INSERT INTO locations(name) VALUES($1)"
+  },
+  {
+    "source": "locations.rs:63",
+    "sql": "SELECT name FROM locations WHERE id=$1"
+  },
+  {
+    "source": "locations.rs:68",
+    "sql": "SELECT EXISTS(SELECT 1 FROM product_locations WHERE LOWER(TRIM(location))=LOWER(TRIM($1)))"
+  },
+  {
+    "source": "locations.rs:74",
+    "sql": "SELECT EXISTS(SELECT 1 FROM variant_stock_batches WHERE LOWER(TRIM(location))=LOWER(TRIM($1)))"
+  },
+  {
+    "source": "locations.rs:93",
+    "sql": "UPDATE variant_stock_batches SET location=$1 WHERE LOWER(TRIM(location))=LOWER(TRIM($2))"
+  },
+  {
+    "source": "locations.rs:96",
+    "sql": "DELETE FROM locations WHERE id=$1"
+  },
+  {
+    "source": "locations.rs:101",
+    "sql": "UPDATE locations SET name=$1 WHERE id=$2"
+  },
+  {
+    "source": "locations.rs:112",
+    "sql": "WITH stock AS (\n SELECT p.id,p.name,COALESCE(p.sku,'') AS sku,COALESCE(p.category,'') AS category,\n COALESCE(pl.location,'') AS location,COALESCE(SUM(pl.quantity),0)::float8 AS quantity,NULL::integer AS variant_id\n FROM product_locations pl JOIN products p ON p.id=pl.product_id\n WHERE lower(COALESCE(p.sold_by,'Each'))<>'variants' GROUP BY p.id,p.name,p.sku,p.category,pl.location\n UNION ALL\n SELECT p.id,p.name||' / '||concat_ws(' / ',NULLIF(v.size,''),NULLIF(v.color,''),NULLIF(v.sku,'')),\n COALESCE(v.sku,p.sku,''),COALESCE(p.category,''),b.location,SUM(b.quantity)::float8,v.id\n FROM variant_stock_batches b JOIN products p ON p.id=b.product_id JOIN product_variants v ON v.id=b.variant_id AND v.product_id=p.id\n GROUP BY p.id,p.name,p.sku,p.category,v.id,v.size,v.color,v.sku,b.location\n UNION ALL\n SELECT p.id,p.name||' / '||concat_ws(' / ',NULLIF(v.size,''),NULLIF(v.color,''),NULLIF(v.sku,'')),\n COALESCE(v.sku,p.sku,''),COALESCE(p.category,''),'Legacy / unassigned',\n (v.stock-COALESCE((SELECT SUM(b.quantity) FROM variant_stock_batches b WHERE b.product_id=p.id AND b.variant_id=v.id),0))::float8,v.id\n FROM product_variants v JOIN products p ON p.id=v.product_id\n WHERE lower(COALESCE(p.sold_by,''))='variants' AND v.stock>COALESCE((SELECT SUM(b.quantity) FROM variant_stock_batches b WHERE b.product_id=p.id AND b.variant_id=v.id),0)\n) SELECT id,name,sku,category,location,SUM(quantity)::float8 AS quantity,variant_id FROM stock\n GROUP BY id,name,sku,category,location,variant_id\n HAVING lower(trim(location))<>'legacy / unassigned' OR SUM(quantity)<>0\n ORDER BY LOWER(name),location,id,variant_id"
+  },
+  {
+    "source": "loyalty.rs:36",
+    "sql": "SELECT value FROM settings WHERE key='loyalty_points_per_dollar'"
+  },
+  {
+    "source": "loyalty.rs:49",
+    "sql": "SELECT value FROM settings WHERE key='points_expiry_months'"
+  },
+  {
+    "source": "loyalty.rs:62",
+    "sql": "SELECT COALESCE(points,0) FROM customers WHERE id=$1 FOR UPDATE"
+  },
+  {
+    "source": "loyalty.rs:72",
+    "sql": "INSERT INTO rust_sale_points(sale_id,customer_id,earned) VALUES($1,$2,$3)"
+  },
+  {
+    "source": "loyalty.rs:78",
+    "sql": "INSERT INTO customer_points_log(customer_id,points,type,reference,expiry_date) VALUES($1,$2,'earn',$3,$4)"
+  },
+  {
+    "source": "loyalty.rs:79",
+    "sql": "UPDATE customers SET points=$1 WHERE id=$2"
+  },
+  {
+    "source": "loyalty.rs:95",
+    "sql": "SELECT to_regclass('rust_sale_points') IS NOT NULL"
+  },
+  {
+    "source": "loyalty.rs:102",
+    "sql": "SELECT id FROM customers WHERE id=$1 FOR UPDATE"
+  },
+  {
+    "source": "loyalty.rs:107",
+    "sql": "SELECT customer_id,earned,refunded FROM rust_sale_points WHERE sale_id=$1 FOR UPDATE"
+  },
+  {
+    "source": "loyalty.rs:117",
+    "sql": "UPDATE customers SET points=COALESCE(points,0)-$1 WHERE id=$2"
+  },
+  {
+    "source": "loyalty.rs:122",
+    "sql": "INSERT INTO customer_points_log(customer_id,points,type,reference) VALUES($1,$2,'refund',$3)"
+  },
+  {
+    "source": "loyalty.rs:123",
+    "sql": "UPDATE rust_sale_points SET refunded=TRUE WHERE sale_id=$1"
+  },
+  {
+    "source": "loyalty.rs:141",
+    "sql": "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY"
+  },
+  {
+    "source": "loyalty.rs:145",
+    "sql": "SELECT COALESCE(points,0) FROM customers WHERE id=$1"
+  },
+  {
+    "source": "loyalty.rs:149",
+    "sql": "SELECT id,points,type AS kind,COALESCE(reference,'') AS reference,COALESCE(expiry_date,'') AS expiry,created_at::text AS date FROM customer_points_log WHERE customer_id=$1 ORDER BY created_at DESC,id DESC"
+  },
+  {
+    "source": "numbers.rs:7",
+    "sql": "SELECT nextval('rust_invoice_number_seq')"
+  },
+  {
+    "source": "numbers.rs:11",
+    "sql": "SELECT EXISTS(SELECT 1 FROM sales WHERE invoice_no=$1)"
+  },
+  {
+    "source": "numbers.rs:19",
+    "sql": "SELECT nextval('rust_batch_number_seq')"
+  },
+  {
+    "source": "numbers.rs:23",
+    "sql": "SELECT EXISTS(SELECT 1 FROM product_locations WHERE batch_no=$1 UNION ALL SELECT 1 FROM variant_stock_batches WHERE batch_no=$1)"
+  },
+  {
+    "source": "purchases.rs:188",
+    "sql": "SELECT d.id,d.po_no AS number,d.supplier_id,s.name AS supplier,d.order_date,d.total_amount::text AS total,d.status,d.revision,d.po_id,d.body FROM rust_purchase_drafts d JOIN suppliers s ON s.id=d.supplier_id"
+  },
+  {
+    "source": "purchases.rs:193",
+    "sql": "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+  },
+  {
+    "source": "purchases.rs:196",
+    "sql": "SET LOCAL statement_timeout='20s'"
+  },
+  {
+    "source": "purchases.rs:201",
+    "sql": "SELECT to_char(CURRENT_TIMESTAMP,'YYYY-MM-DD HH24:MI:SS TZ')"
+  },
+  {
+    "source": "purchases.rs:212",
+    "sql": "SELECT p.id,COALESCE(p.po_no,'#'||p.id::text) AS number,p.supplier_id,COALESCE(s.name,'No supplier') AS supplier,COALESCE(p.order_date,'') AS order_date,COALESCE(p.total_amount,0)::numeric::text AS total,COALESCE(p.status,'') AS status,COALESCE(p.payment_status,'Unpaid') AS payment_status,COALESCE((SELECT SUM(amount::numeric) FROM supplier_payments WHERE purchase_order_id=p.id AND payment_type<>'Purchase'),0)::text AS paid,COALESCE(p.notes,'') AS notes FROM purchase_orders p LEFT JOIN suppliers s ON s.id=p.supplier_id WHERE left(p.order_date,10)>=$1 AND left(p.order_date,10)<$2 ORDER BY p.order_date DESC,p.id DESC"
+  },
+  {
+    "source": "purchases.rs:214",
+    "sql": "SELECT s.id,s.name,lower(COALESCE(NULLIF(trim(s.status),''),'Active'))='active' AS active,COALESCE((SELECT SUM(CASE WHEN payment_type='Purchase' THEN amount::numeric WHEN payment_type<>'Purchase' THEN -amount::numeric ELSE 0 END) FROM supplier_payments WHERE supplier_id=s.id),0)::text AS balance FROM suppliers s ORDER BY lower(s.name),s.id"
+  },
+  {
+    "source": "purchases.rs:215",
+    "sql": "SELECT p.id AS product_id,NULL::int AS variant_id,concat(p.name,' / ',p.sku) AS label,COALESCE(p.cost,0)::numeric::text AS cost FROM products p WHERE lower(COALESCE(p.sold_by,'Each'))='each' UNION ALL SELECT p.id,v.id,concat(p.name,' / ',v.size,' / ',v.color,' / ',v.sku),COALESCE(v.cost,p.cost,0)::numeric::text FROM products p JOIN product_variants v ON v.product_id=p.id WHERE lower(p.sold_by)='variants' AND COALESCE(v.active,1)=1 ORDER BY label,product_id,variant_id"
+  },
+  {
+    "source": "purchases.rs:216",
+    "sql": "SELECT name FROM locations ORDER BY name"
+  },
+  {
+    "source": "purchases.rs:233",
+    "sql": "SELECT COALESCE(p.name,'Deleted product') AS name,CASE WHEN m.po_item_id IS NULL THEN 'Not recorded' ELSE COALESCE(concat_ws(' / ',v.size,v.color,v.sku),'') END AS variant,COALESCE(i.quantity,0)::numeric::text AS quantity,COALESCE(i.unit_price,0)::numeric::text AS unit_price,COALESCE(i.total,0)::numeric::text AS total,COALESCE(m.location,'Not recorded') AS location,COALESCE(m.batch_no,'') AS batch,COALESCE(m.expire_date,'') AS expiry FROM purchase_order_items i LEFT JOIN products p ON p.id=i.product_id LEFT JOIN rust_purchase_items m ON m.po_item_id=i.id LEFT JOIN product_variants v ON v.id=m.variant_id WHERE i.po_id=$1 ORDER BY i.id"
+  },
+  {
+    "source": "purchases.rs:247",
+    "sql": "SELECT p.payment_date AS date,COALESCE(p.reference_no,'') AS reference,COALESCE(p.payment_type,'Unknown') AS kind,p.amount::numeric::text AS amount,COALESCE(o.po_no,'Unallocated') AS order_number,COALESCE(p.notes,'') AS notes FROM supplier_payments p LEFT JOIN purchase_orders o ON o.id=p.purchase_order_id WHERE p.supplier_id=$1 AND left(p.payment_date,10)>=$2 AND left(p.payment_date,10)<$3 ORDER BY p.payment_date,p.id"
+  },
+  {
+    "source": "purchases.rs:253",
+    "sql": "SELECT lower(COALESCE(NULLIF(trim(status),''),'Active')) FROM suppliers WHERE id=$1 FOR UPDATE"
+  },
+  {
+    "source": "purchases.rs:259",
+    "sql": "SELECT supplier_id FROM rust_purchase_drafts WHERE id=$1"
+  },
+  {
+    "source": "purchases.rs:286",
+    "sql": "SELECT lower(COALESCE(sold_by,'Each')) FROM products WHERE id=$1"
+  },
+  {
+    "source": "purchases.rs:297",
+    "sql": "SELECT EXISTS(SELECT 1 FROM product_variants WHERE id=$1 AND product_id=$2 AND COALESCE(active,1)=1)"
+  },
+  {
+    "source": "purchases.rs:301",
+    "sql": "SELECT EXISTS(SELECT 1 FROM locations WHERE name=$1)"
+  },
+  {
+    "source": "purchases.rs:319",
+    "sql": "SELECT pg_advisory_xact_lock(hashtextextended($1,721006))"
+  },
+  {
+    "source": "purchases.rs:324",
+    "sql": "SELECT username,payload_hash,result_id,cancelled FROM rust_purchase_requests WHERE request_id=$1"
+  },
+  {
+    "source": "purchases.rs:341",
+    "sql": "SET LOCAL lock_timeout='8s'"
+  },
+  {
+    "source": "purchases.rs:344",
+    "sql": "SET LOCAL statement_timeout='30s'"
+  },
+  {
+    "source": "purchases.rs:367",
+    "sql": "UPDATE rust_purchase_drafts SET order_date=$1,body=$2,total_amount=$3,revision=revision+1,updated_at=CURRENT_TIMESTAMP WHERE id=$4"
+  },
+  {
+    "source": "purchases.rs:375",
+    "sql": "INSERT INTO rust_purchase_drafts(po_no,supplier_id,order_date,body,total_amount,created_by) VALUES($1,$2,$3,$4,$5,$6) RETURNING id"
+  },
+  {
+    "source": "purchases.rs:395",
+    "sql": "UPDATE rust_purchase_drafts SET status='cancelled',body=$1,revision=revision+1,updated_at=CURRENT_TIMESTAMP WHERE id=$2"
+  },
+  {
+    "source": "purchases.rs:415",
+    "sql": "SELECT id FROM products WHERE id=$1 FOR UPDATE"
+  },
+  {
+    "source": "purchases.rs:421",
+    "sql": "INSERT INTO purchase_orders(po_no,supplier_id,order_date,total_amount,status,discount,tax,payment_status,received_by,notes) VALUES($1,$2,$3,$4::numeric::float8,'completed',$5::numeric::float8,$6::numeric::float8,$7,$8,$9) RETURNING id"
+  },
+  {
+    "source": "purchases.rs:440",
+    "sql": "SELECT COALESCE(stock,0)::float8 FROM products WHERE id=$1"
+  },
+  {
+    "source": "purchases.rs:446",
+    "sql": "SELECT COALESCE(SUM(quantity),0)::float8 FROM product_locations WHERE product_id=$1"
+  },
+  {
+    "source": "purchases.rs:474",
+    "sql": "INSERT INTO purchase_order_items(po_id,product_id,quantity,unit_price,total) VALUES($1,$2,$3::float8,$4::numeric::float8,$5::numeric::float8) RETURNING id"
+  },
+  {
+    "source": "purchases.rs:475",
+    "sql": "INSERT INTO rust_purchase_items(po_item_id,variant_id,location,batch_no,expire_date) VALUES($1,$2,$3,$4,$5)"
+  },
+  {
+    "source": "purchases.rs:476",
+    "sql": "INSERT INTO rust_purchase_movements(movement_id,po_id) VALUES($1,$2)"
+  },
+  {
+    "source": "purchases.rs:482",
+    "sql": "INSERT INTO supplier_payments(supplier_id,amount,payment_date,reference_no,payment_type,notes,purchase_order_id) VALUES($1,$2::numeric::float8,$3,$4,'Purchase',$5,$6)"
+  },
+  {
+    "source": "purchases.rs:483",
+    "sql": "UPDATE rust_purchase_drafts SET status='received',po_id=$1,revision=revision+1,updated_at=CURRENT_TIMESTAMP WHERE id=$2"
+  },
+  {
+    "source": "purchases.rs:488",
+    "sql": "INSERT INTO rust_purchase_requests(request_id,username,payload_hash,result_id) VALUES($1,$2,$3,$4)"
+  },
+  {
+    "source": "purchases.rs:527",
+    "sql": "SELECT supplier_id,COALESCE(total_amount,0)::numeric,COALESCE(status,''),COALESCE(order_date,''),COALESCE(payment_status,'') FROM purchase_orders WHERE id=$1 FOR UPDATE"
+  },
+  {
+    "source": "purchases.rs:533",
+    "sql": "SELECT COALESCE(SUM(amount::numeric) FILTER(WHERE payment_type='Purchase'),0),COALESCE(SUM(amount::numeric) FILTER(WHERE payment_type<>'Purchase'),0),COUNT(*) FILTER(WHERE supplier_id<>$2 OR payment_type IS NULL OR amount<0) FROM supplier_payments WHERE purchase_order_id=$1"
+  },
+  {
+    "source": "purchases.rs:553",
+    "sql": "INSERT INTO supplier_payments(supplier_id,amount,payment_date,reference_no,payment_type,notes,purchase_order_id) VALUES($1,$2::numeric::float8,$3,$4,$5,$6,$7) RETURNING id"
+  },
+  {
+    "source": "purchases.rs:555",
+    "sql": "UPDATE purchase_orders SET payment_status=$1 WHERE id=$2"
+  },
+  {
+    "source": "purchases.rs:566",
+    "sql": "SET LOCAL lock_timeout='8s'"
+  },
+  {
+    "source": "purchases.rs:575",
+    "sql": "SELECT pg_advisory_xact_lock(hashtextextended($1,721006))"
+  },
+  {
+    "source": "purchases.rs:581",
+    "sql": "SELECT username,payload_hash,result_id FROM rust_purchase_requests WHERE request_id=$1"
+  },
+  {
+    "source": "purchases.rs:593",
+    "sql": "INSERT INTO rust_purchase_requests(request_id,username,payload_hash,cancelled) VALUES($1,$2,$3,1)"
+  },
+  {
+    "source": "reports.rs:102",
+    "sql": "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+  },
+  {
+    "source": "reports.rs:105",
+    "sql": "SET LOCAL statement_timeout='20s'"
+  },
+  {
+    "source": "reports.rs:110",
+    "sql": "SELECT to_char(CURRENT_TIMESTAMP,'YYYY-MM-DD HH24:MI:SS TZ')"
+  },
+  {
+    "source": "reports.rs:122",
+    "sql": "SELECT COALESCE(expense_date,'') AS day,left(expense_date,7) AS month,COALESCE(expense_no,'') AS reference,COALESCE(category,'Uncategorized') AS category,COALESCE(description,'') AS description,COALESCE(payment_method,'') AS method,COALESCE(amount,0)::numeric AS amount FROM expenses WHERE left(expense_date,10)>=$1 AND left(expense_date,10)<$2 ORDER BY expense_date,id"
+  },
+  {
+    "source": "reports.rs:124",
+    "sql": "SELECT COALESCE(SUM(amount::numeric),0) FROM credit_payments WHERE left(payment_date,10)>=$1 AND left(payment_date,10)<$2"
+  },
+  {
+    "source": "reports.rs:126",
+    "sql": "SELECT COALESCE(SUM(amount::numeric) FILTER(WHERE payment_type='Purchase'),0),COALESCE(SUM(amount::numeric) FILTER(WHERE payment_type<>'Purchase'),0) FROM supplier_payments WHERE left(payment_date,10)>=$1 AND left(payment_date,10)<$2"
+  },
+  {
+    "source": "reports.rs:128",
+    "sql": "SELECT COALESCE(c.name,'Customer') || ' #' || c.id::text AS name,COALESCE(c.current_balance,0)::numeric AS balance,COALESCE(i.invoices,0)::numeric AS invoices,COALESCE(i.overdue,0)::numeric AS overdue FROM customers c LEFT JOIN (SELECT customer_id,SUM(balance_amount::numeric) AS invoices,COALESCE(SUM(balance_amount::numeric) FILTER(WHERE NULLIF(due_date,'')<to_char(CURRENT_DATE,'YYYY-MM-DD')),0) AS overdue FROM credit_sales WHERE balance_amount>0 AND COALESCE(status,'pending')<>'refunded' GROUP BY customer_id) i ON i.customer_id=c.id WHERE COALESCE(c.current_balance,0)<>0 OR COALESCE(i.invoices,0)<>0 ORDER BY c.current_balance DESC,c.id"
+  },
+  {
+    "source": "reports.rs:130",
+    "sql": "SELECT COALESCE(s.name,'Supplier') || ' #' || s.id::text,SUM(CASE WHEN p.payment_type='Purchase' THEN p.amount::numeric WHEN p.payment_type<>'Purchase' THEN -p.amount::numeric ELSE 0 END) AS balance FROM suppliers s JOIN supplier_payments p ON p.supplier_id=s.id GROUP BY s.id,s.name HAVING SUM(CASE WHEN p.payment_type='Purchase' THEN p.amount::numeric WHEN p.payment_type<>'Purchase' THEN -p.amount::numeric ELSE 0 END)<>0 ORDER BY balance DESC,s.id"
+  },
+  {
+    "source": "sale_stock.rs:23",
+    "sql": "SELECT id FROM products WHERE id=$1 FOR UPDATE"
+  },
+  {
+    "source": "sale_stock.rs:39",
+    "sql": "SELECT COALESCE(stock,0)::float8,COALESCE(sold_by,'Each') FROM products WHERE id=$1"
+  },
+  {
+    "source": "sale_stock.rs:71",
+    "sql": "SELECT COALESCE(stock,0)::float8 FROM product_variants WHERE id=$1 AND product_id=$2 AND COALESCE(active,1)=1 FOR UPDATE"
+  },
+  {
+    "source": "sale_stock.rs:74",
+    "sql": "SELECT COALESCE(SUM(stock),0)::float8 FROM product_variants WHERE product_id=$1"
+  },
+  {
+    "source": "sale_stock.rs:83",
+    "sql": "UPDATE products SET stock=$1,last_updated=CURRENT_TIMESTAMP WHERE id=$2"
+  },
+  {
+    "source": "sale_stock.rs:111",
+    "sql": "SELECT quantity FROM variant_stock_batches WHERE product_id=$1 AND variant_id=$2 FOR UPDATE"
+  },
+  {
+    "source": "sale_stock.rs:122",
+    "sql": "INSERT INTO variant_stock_batches(product_id,variant_id,location,batch_no,expire_date,quantity,expiry_unknown) VALUES($1,$2,'Legacy / unassigned','LEGACY-OPENING','',$3,1) ON CONFLICT(product_id,variant_id,location,batch_no,expire_date) DO UPDATE SET quantity=variant_stock_batches.quantity+EXCLUDED.quantity,expiry_unknown=1"
+  },
+  {
+    "source": "sale_stock.rs:168",
+    "sql": "UPDATE product_variants SET stock=stock-$1,updated_at=CURRENT_TIMESTAMP WHERE id=$2"
+  },
+  {
+    "source": "sale_stock.rs:175",
+    "sql": "UPDATE products SET stock=stock-$1,last_updated=CURRENT_TIMESTAMP WHERE id=$2"
+  },
+  {
+    "source": "sale_stock.rs:180",
+    "sql": "INSERT INTO stock_movements(product_id,variant_id,type,quantity,old_stock,new_stock,reason,reference,created_by,location) VALUES($1,$2,'sale',$3,$4,$5,'POS sale',$6,$7,'Multiple batches')"
+  },
+  {
+    "source": "sale_summary.rs:43",
+    "sql": "\nWITH window_sales AS (\n SELECT * FROM sales WHERE status='completed' AND created_at >= $1 AND created_at < $2\n), raw AS (\n SELECT s.id AS sale_id,si.id AS line_id,\n COALESCE(si.product_name,'[Receipt without items]') AS item,\n COALESCE(c.name,p.category,'Uncategorized') AS category,\n COALESCE(parent.name,c.name,p.category,'Uncategorized') AS parent,\n COALESCE(si.qty,0)::numeric AS quantity,\n (COALESCE(si.qty,0)*COALESCE(si.price,0))::numeric AS gross,\n (COALESCE(si.qty,0)*COALESCE(si.cost,v.cost,p.cost,0))::numeric AS cost,\n COALESCE(s.discount_amount,0)::numeric AS header_discount,\n COALESCE(si.wholesale_savings,0)::numeric AS savings,\n COALESCE(si.wholesale_tier_min_qty,0) AS tier\n FROM window_sales s LEFT JOIN sale_items si ON si.sale_id=s.id\n LEFT JOIN products p ON p.id=COALESCE(si.product_id,(SELECT p2.id FROM products p2 WHERE p2.name=si.product_name ORDER BY p2.id DESC LIMIT 1))\n LEFT JOIN product_variants v ON v.id=si.variant_id AND v.product_id=p.id\n LEFT JOIN categories c ON c.id=COALESCE(p.category_id,(SELECT c2.id FROM categories c2 WHERE c2.name=p.category ORDER BY c2.id DESC LIMIT 1))\n LEFT JOIN categories parent ON parent.id=c.parent_id\n), portions AS (\n SELECT *,ROW_NUMBER() OVER(PARTITION BY sale_id ORDER BY line_id) AS pos,\n COUNT(*) OVER(PARTITION BY sale_id) AS line_count,\n ROUND(CASE WHEN SUM(gross) OVER(PARTITION BY sale_id)<>0\n THEN header_discount*gross/SUM(gross) OVER(PARTITION BY sale_id)\n ELSE header_discount/COUNT(*) OVER(PARTITION BY sale_id) END,2) AS portion\n FROM raw\n), lines AS (\n SELECT *,CASE WHEN pos=line_count THEN header_discount-(SUM(portion) OVER(PARTITION BY sale_id)-portion) ELSE portion END AS discount\n FROM portions\n)  SELECT * FROM lines"
+  },
+  {
+    "source": "sale_summary.rs:86",
+    "sql": "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+  },
+  {
+    "source": "sale_summary.rs:131",
+    "sql": "SELECT COALESCE(NULLIF(category,''),'Uncategorized') AS label,COUNT(*) AS records,COALESCE(SUM(amount),0)::float8 AS amount FROM expenses WHERE expense_date >= $1 AND expense_date < $2 GROUP BY COALESCE(NULLIF(category,''),'Uncategorized') ORDER BY SUM(amount) DESC,label"
+  },
+  {
+    "source": "sale_summary.rs:156",
+    "sql": "SET TRANSACTION READ ONLY"
+  },
+  {
+    "source": "sale_summary.rs:157",
+    "sql": "SET LOCAL statement_timeout='10s'"
+  },
+  {
+    "source": "sales.rs:40",
+    "sql": "SET LOCAL lock_timeout='10s'"
+  },
+  {
+    "source": "sales.rs:46",
+    "sql": "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))"
+  },
+  {
+    "source": "sales.rs:50",
+    "sql": "SELECT fingerprint,sale_id FROM rust_checkout_requests WHERE request_id=$1"
+  },
+  {
+    "source": "sales.rs:60",
+    "sql": "SELECT id,invoice_no,total,payment,change_amount,created_at FROM sales WHERE id=$1"
+  },
+  {
+    "source": "sales.rs:89",
+    "sql": "SELECT key,value FROM settings"
+  },
+  {
+    "source": "sales.rs:160",
+    "sql": "SELECT COALESCE(credit_limit,0)::float8,COALESCE(current_balance,0)::float8 FROM customers WHERE id=$1 FOR UPDATE"
+  },
+  {
+    "source": "sales.rs:163",
+    "sql": "SELECT COALESCE(value,'1') FROM settings WHERE key='credit_limit_enabled'"
+  },
+  {
+    "source": "sales.rs:181",
+    "sql": "\n        INSERT INTO sales (\n            invoice_no, total, payment, change_amount, customer_id,\n            status, payment_type, discount_amount, cogs, gross_profit, net_profit, created_by, created_at\n        )\n        VALUES ($1, $2, $3, $4, $5, 'completed', $6, $7, $8, $9, $10, $11, $12)\n        RETURNING id, invoice_no, total, payment, change_amount, created_at\n        "
+  },
+  {
+    "source": "sales.rs:210",
+    "sql": "INSERT INTO credit_sales(invoice_no,customer_id,total_amount,paid_amount,balance_amount,sale_date,due_date,status,notes,sale_id) VALUES($1,$2,$3::float8,$4::float8,$5::float8,$6,'',$7,'Rust POS checkout',$8)"
+  },
+  {
+    "source": "sales.rs:212",
+    "sql": "UPDATE customers SET current_balance=COALESCE(current_balance,0)+$1 WHERE id=$2"
+  },
+  {
+    "source": "sales.rs:219",
+    "sql": "UPDATE customers SET total_visit=COALESCE(total_visit,0)+1,total_spent=COALESCE(total_spent,0)+$1 WHERE id=$2"
+  },
+  {
+    "source": "sales.rs:229",
+    "sql": "\n            INSERT INTO sale_items (\n                sale_id, product_id, variant_id, product_name, qty, price, total, cost,\n                wholesale_regular_price, wholesale_savings, wholesale_tier_min_qty, wholesale_unit_label,\n                location_id, location, batch_no, expire_date\n            )\n            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)\n            "
+  },
+  {
+    "source": "sales.rs:261",
+    "sql": "INSERT INTO rust_checkout_requests(request_id,fingerprint,sale_id) VALUES($1,$2,$3)"
+  },
+  {
+    "source": "sales.rs:294",
+    "sql": "SET LOCAL lock_timeout='10s'"
+  },
+  {
+    "source": "sales.rs:305",
+    "sql": "SELECT pg_advisory_xact_lock(hashtextextended($1,0))"
+  },
+  {
+    "source": "sales.rs:310",
+    "sql": "SELECT fingerprint,sale_id FROM rust_checkout_requests WHERE request_id=$1"
+  },
+  {
+    "source": "sales.rs:321",
+    "sql": "INSERT INTO rust_checkout_requests(request_id,fingerprint,sale_id) VALUES($1,$2,NULL)"
+  },
+  {
+    "source": "sales.rs:433",
+    "sql": "SET LOCAL lock_timeout='10s'"
+  },
+  {
+    "source": "sales.rs:440",
+    "sql": "SELECT COALESCE(status,'completed'),COALESCE(payment_type,''),COALESCE(invoice_no,''),customer_id FROM sales WHERE id=$1 FOR UPDATE"
+  },
+  {
+    "source": "sales.rs:451",
+    "sql": "SELECT id FROM customers WHERE id=$1 FOR UPDATE"
+  },
+  {
+    "source": "sales.rs:456",
+    "sql": "SELECT id,total_amount::float8,COALESCE(paid_amount,0)::float8,COALESCE(balance_amount,0)::float8,COALESCE(status,'pending') FROM credit_sales WHERE customer_id=$1 AND (sale_id=$2 OR (sale_id IS NULL AND invoice_no=$3)) FOR UPDATE"
+  },
+  {
+    "source": "sales.rs:473",
+    "sql": "UPDATE customers SET current_balance=GREATEST(0,COALESCE(current_balance,0)-$1::float8) WHERE id=$2"
+  },
+  {
+    "source": "sales.rs:475",
+    "sql": "UPDATE credit_sales SET status='refunded',balance_amount=0,notes=COALESCE(notes,'') || ' [REFUNDED: Rust POS receipt refund]' WHERE id=$1"
+  },
+  {
+    "source": "sales.rs:478",
+    "sql": "INSERT INTO credit_payments(credit_sale_id,customer_id,amount,payment_date,payment_method,note) VALUES($1,$2,$3::float8,$4,'refund','Rust POS receipt refund') RETURNING id"
+  },
+  {
+    "source": "sales.rs:482",
+    "sql": "INSERT INTO credit_adjustments(customer_id,credit_sale_id,amount,adjustment_type,reason,created_by) VALUES($1,$2,$3::float8,'refund','Receipt refund',$4)"
+  },
+  {
+    "source": "sales.rs:485",
+    "sql": "SELECT product_id,variant_id,COALESCE(qty,0)::float8 AS qty,COALESCE(refunded_qty,0)::float8 AS refunded,location_id,location,COALESCE(batch_no,'') AS batch,COALESCE(expire_date,'') AS expiry FROM sale_items WHERE sale_id=$1 ORDER BY product_id,variant_id,id FOR UPDATE"
+  },
+  {
+    "source": "sales.rs:493",
+    "sql": "SELECT COALESCE(stock,0)::float8,COALESCE(sold_by,'Each') FROM products WHERE id=$1 FOR UPDATE"
+  },
+  {
+    "source": "sales.rs:500",
+    "sql": "SELECT COALESCE(stock,0)::float8 FROM product_variants WHERE id=$1 AND product_id=$2 FOR UPDATE"
+  },
+  {
+    "source": "sales.rs:507",
+    "sql": "UPDATE product_variants SET stock=COALESCE(stock,0)+$1,updated_at=$2 WHERE id=$3"
+  },
+  {
+    "source": "sales.rs:515",
+    "sql": "UPDATE products SET stock=COALESCE(stock,0)+$1,last_updated=$2 WHERE id=$3"
+  },
+  {
+    "source": "sales.rs:532",
+    "sql": "INSERT INTO variant_stock_batches(product_id,variant_id,location,batch_no,expire_date,quantity,expiry_unknown) VALUES($1,$2,$3,$4,$5,$6,0) ON CONFLICT(product_id,variant_id,location,batch_no,expire_date) DO UPDATE SET quantity=variant_stock_batches.quantity+EXCLUDED.quantity"
+  },
+  {
+    "source": "sales.rs:535",
+    "sql": "UPDATE product_locations SET quantity=COALESCE(quantity,0)+$1,last_updated=$2 WHERE id=$3 AND product_id=$4"
+  },
+  {
+    "source": "sales.rs:538",
+    "sql": "INSERT INTO product_locations(product_id,location,batch_no,expire_date,quantity) VALUES($1,$2,$3,$4,$5) ON CONFLICT(product_id,location,batch_no,expire_date) DO UPDATE SET quantity=product_locations.quantity+EXCLUDED.quantity,last_updated=EXCLUDED.last_updated"
+  },
+  {
+    "source": "sales.rs:543",
+    "sql": "INSERT INTO stock_movements(product_id,variant_id,type,quantity,old_stock,new_stock,reason,reference,created_by,location,created_at) VALUES($1,$2,'refund',$3,$4,$5,'Receipt refund',$6,$9,$7,$8)"
+  },
+  {
+    "source": "sales.rs:547",
+    "sql": "UPDATE sale_items SET refunded_qty=qty,refund_reason='Receipt refund' WHERE sale_id=$1"
+  },
+  {
+    "source": "sales.rs:552",
+    "sql": "UPDATE sales SET status='refunded' WHERE id=$1"
+  },
+  {
+    "source": "sales_comparison.rs:10",
+    "sql": "WITH selected AS (SELECT id,total::numeric AS total FROM sales WHERE status='completed' AND created_at >= $1 AND created_at < $2), lines AS (\n SELECT s.id AS sale_id,s.total,i.id AS line_id,COALESCE(i.product_name,p.name,'[Receipt without items]') AS name,\n COALESCE(i.product_id::text,'legacy:'||COALESCE(i.product_name,'')) AS product_id,\n COALESCE(c.name,p.category,'Uncategorized') AS category,\n COALESCE(i.qty,0)::numeric AS qty,COALESCE(i.refunded_qty,0)::numeric AS refunded,\n COALESCE(i.total,COALESCE(i.qty,0)*COALESCE(i.price,0))::numeric AS gross\n FROM selected s LEFT JOIN sale_items i ON i.sale_id=s.id LEFT JOIN products p ON p.id=i.product_id LEFT JOIN categories c ON c.id=p.category_id\n), portions AS (SELECT *,SUM(gross) OVER(PARTITION BY sale_id) AS subtotal FROM lines)\n SELECT sale_id,name||' [#'||product_id||']' AS product_key,category,\n CASE WHEN line_id IS NULL THEN total WHEN subtotal>0 AND qty>0 THEN total*gross/subtotal*GREATEST(qty-refunded,0)/qty ELSE 0 END::numeric AS amount,\n GREATEST(qty-refunded,0)::numeric AS quantity FROM portions"
+  },
+  {
+    "source": "sales_comparison.rs:33",
+    "sql": "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+  },
+  {
+    "source": "service_orders.rs:55",
+    "sql": "SET LOCAL lock_timeout='5s'"
+  },
+  {
+    "source": "service_orders.rs:77",
+    "sql": "SELECT nextval(pg_get_serial_sequence('service_orders','id'))"
+  },
+  {
+    "source": "service_orders.rs:83",
+    "sql": "SELECT EXISTS(SELECT 1 FROM service_orders WHERE id=$1 OR order_no=$2)"
+  },
+  {
+    "source": "service_orders.rs:92",
+    "sql": "SELECT LOCALTIMESTAMP"
+  },
+  {
+    "source": "service_orders.rs:130",
+    "sql": "INSERT INTO service_orders(id,order_no,job_title,complaint,internal_notes,status,received_at,expected_at,created_by,created_at,updated_at,customer_name,customer_phone) VALUES($1,$2,$3,$4,$5,'received',$6,$7,$8,LOCALTIMESTAMP,LOCALTIMESTAMP,$9,$10) ON CONFLICT DO NOTHING"
+  },
+  {
+    "source": "service_orders.rs:133",
+    "sql": "SELECT EXISTS(SELECT 1 FROM service_orders WHERE id=$1 AND order_no=$2 AND job_title=$3 AND complaint=$4 AND internal_notes=$5 AND received_at=$6 AND expected_at IS NOT DISTINCT FROM $7 AND created_by=$8 AND COALESCE(customer_name,'')=$9 AND COALESCE(customer_phone,'')=$10)"
+  },
+  {
+    "source": "service_orders.rs:143",
+    "sql": "UPDATE service_orders SET job_title=$1,complaint=$2,internal_notes=$3,expected_at=$4,customer_name=$7,customer_phone=$8,updated_at=clock_timestamp() WHERE id=$5 AND updated_at=$6 AND status NOT IN ('delivered','cancelled')"
+  },
+  {
+    "source": "service_orders.rs:162",
+    "sql": "INSERT INTO service_order_status_history(service_order_id,from_status,to_status,note,changed_by,changed_at) VALUES($1,$2,$3,$4,$5,LOCALTIMESTAMP)"
+  },
+  {
+    "source": "service_orders.rs:207",
+    "sql": "SELECT status,started_by,updated_at FROM service_orders WHERE id=$1 FOR UPDATE"
+  },
+  {
+    "source": "service_orders.rs:227",
+    "sql": "SELECT sale_id IS NOT NULL OR COALESCE(deposit_amount,0)<>0 OR checkout_started_at IS NOT NULL OR EXISTS(SELECT 1 FROM service_order_payments WHERE service_order_id=$1) FROM service_orders WHERE id=$1"
+  },
+  {
+    "source": "service_orders.rs:232",
+    "sql": "DELETE FROM service_orders WHERE id=$1"
+  },
+  {
+    "source": "service_orders.rs:245",
+    "sql": "UPDATE service_orders SET status=$2,updated_at=clock_timestamp(),started_by=CASE WHEN $2='in_progress' THEN $3 ELSE started_by END,started_at=CASE WHEN $2='in_progress' THEN COALESCE(started_at,LOCALTIMESTAMP) ELSE started_at END,completed_by=CASE WHEN $2='ready_for_pickup' THEN $3 ELSE completed_by END,completed_at=CASE WHEN $2='ready_for_pickup' THEN LOCALTIMESTAMP ELSE completed_at END,delivered_by=CASE WHEN $2='delivered' THEN $3 ELSE delivered_by END,delivered_at=CASE WHEN $2='delivered' THEN LOCALTIMESTAMP ELSE delivered_at END WHERE id=$1"
+  },
+  {
+    "source": "service_orders.rs:249",
+    "sql": "INSERT INTO service_order_notifications(service_order_id,event,channel,recipient,message,status,attempts,created_at) SELECT id,'ready_for_pickup','queue',COALESCE(customer_phone,''),COALESCE(NULLIF(customer_name,''),'Customer')||', service order '||order_no||' is ready for pickup.','pending',0,LOCALTIMESTAMP FROM service_orders WHERE id=$1"
+  },
+  {
+    "source": "service_orders.rs:263",
+    "sql": "SELECT to_status,COALESCE(note,'') AS note,changed_by,changed_at FROM service_order_status_history WHERE service_order_id=$1 ORDER BY changed_at DESC,id DESC"
+  },
+  {
+    "source": "service_orders.rs:279",
+    "sql": "SELECT id,title,COALESCE(category,'') AS category,prompt_text,''::text AS image_data,COALESCE(image_name,'') AS image_name,sort_order,active,updated_at FROM service_order_design_prompts ORDER BY sort_order,title,id"
+  },
+  {
+    "source": "service_orders.rs:282",
+    "sql": "SELECT COALESCE(image_data,'') FROM service_order_design_prompts WHERE id=$1"
+  },
+  {
+    "source": "service_orders.rs:285",
+    "sql": "SELECT id,title,COALESCE(category,'') AS category,prompt_text,COALESCE(image_data,'') AS image_data,COALESCE(image_name,'') AS image_name,sort_order,active,updated_at FROM service_order_design_prompts WHERE id=$1"
+  },
+  {
+    "source": "service_orders.rs:330",
+    "sql": "INSERT INTO service_order_design_prompts(title,category,prompt_text,image_data,image_name,sort_order,active,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6,$7,LOCALTIMESTAMP,LOCALTIMESTAMP)"
+  },
+  {
+    "source": "service_orders.rs:333",
+    "sql": "UPDATE service_order_design_prompts SET title=$1,category=$2,prompt_text=$3,image_data=$4,image_name=$5,sort_order=$6,active=$7,updated_at=clock_timestamp() WHERE id=$8 AND updated_at IS NOT DISTINCT FROM $9"
+  },
+  {
+    "source": "stock_alerts.rs:32",
+    "sql": "\n        WITH products_normalized AS (\n            SELECT p.*, lower(replace(trim(COALESCE(sold_by,'Each')),'_',' ')) AS mode\n            FROM products p\n        ), tracked AS (\n            SELECT p.id AS product_id, NULL::integer AS variant_id,\n                p.name, COALESCE(p.sku,'') AS sku,\n                COALESCE(p.stock,0)::float8 AS stock,\n                GREATEST(COALESCE(p.low_stock,0),0)::float8 AS threshold\n            FROM products_normalized p\n            WHERE mode NOT IN ('service','services','variant','variants')\n              AND mode NOT LIKE '% service' AND mode NOT LIKE '% variants'\n            UNION ALL\n            SELECT p.id, v.id,\n                p.name || ' / ' || COALESCE(NULLIF(concat_ws(' / ',NULLIF(v.size,''),NULLIF(v.color,'')),''),v.sku,'Variant'),\n                COALESCE(v.sku,p.sku,''), COALESCE(v.stock,0)::float8,\n                GREATEST(COALESCE(v.low_stock,0),0)::float8\n            FROM products_normalized p JOIN product_variants v ON v.product_id=p.id\n            WHERE (mode IN ('variant','variants') OR mode LIKE '% variants')\n              AND COALESCE(v.active,1)=1\n        )\n        SELECT * FROM tracked WHERE stock<=0 OR (threshold>0 AND stock<=threshold)\n        ORDER BY (stock<=0) DESC, stock, name, product_id, variant_id\n    "
+  },
+  {
+    "source": "stock_transfer.rs:55",
+    "sql": "SET TRANSACTION ISOLATION LEVEL SERIALIZABLE"
+  },
+  {
+    "source": "stock_transfer.rs:58",
+    "sql": "SET LOCAL lock_timeout='5s'"
+  },
+  {
+    "source": "stock_transfer.rs:62",
+    "sql": "LOCK TABLE locations IN SHARE MODE"
+  },
+  {
+    "source": "stock_transfer.rs:65",
+    "sql": "SELECT EXISTS(SELECT 1 FROM locations WHERE name=$1) AND (EXISTS(SELECT 1 FROM locations WHERE name=$2) OR ($2='Legacy / unassigned' AND $3::integer IS NOT NULL) OR EXISTS(SELECT 1 FROM product_locations WHERE product_id=$4 AND location=$2) OR EXISTS(SELECT 1 FROM variant_stock_batches WHERE product_id=$4 AND variant_id=$3 AND location=$2))"
+  },
+  {
+    "source": "stock_transfer.rs:68",
+    "sql": "SELECT COALESCE(stock,0)::float8,COALESCE(sold_by,'Each') FROM products WHERE id=$1 FOR UPDATE"
+  },
+  {
+    "source": "stock_transfer.rs:79",
+    "sql": "SELECT EXISTS(SELECT 1 FROM stock_movements WHERE reference=$1)"
+  },
+  {
+    "source": "stock_transfer.rs:97",
+    "sql": "SELECT stock FROM product_variants WHERE product_id=$1 AND id=$2 AND COALESCE(active,1)=1 FOR UPDATE"
+  },
+  {
+    "source": "stock_transfer.rs:116",
+    "sql": "INSERT INTO variant_stock_batches(product_id,variant_id,location,batch_no,expire_date,quantity,expiry_unknown) VALUES($1,$2,'Legacy / unassigned','LEGACY-OPENING','',$3,1) ON CONFLICT(product_id,variant_id,location,batch_no,expire_date) DO UPDATE SET quantity=variant_stock_batches.quantity+EXCLUDED.quantity,expiry_unknown=1"
+  },
+  {
+    "source": "stock_transfer.rs:152",
+    "sql": "UPDATE variant_stock_batches SET quantity=quantity-$1 WHERE ctid=$2::tid"
+  },
+  {
+    "source": "stock_transfer.rs:158",
+    "sql": "UPDATE product_locations SET quantity=quantity-$1,last_updated=CURRENT_TIMESTAMP WHERE ctid=$2::tid"
+  },
+  {
+    "source": "stock_transfer.rs:163",
+    "sql": "UPDATE variant_stock_batches SET quantity=quantity+$1,expiry_unknown=GREATEST(COALESCE(expiry_unknown,0),$3) WHERE ctid=$2::tid"
+  },
+  {
+    "source": "stock_transfer.rs:165",
+    "sql": "UPDATE product_locations SET quantity=quantity+$1,last_updated=CURRENT_TIMESTAMP WHERE ctid=$2::tid"
+  },
+  {
+    "source": "stock_transfer.rs:168",
+    "sql": "INSERT INTO variant_stock_batches(product_id,variant_id,location,batch_no,expire_date,quantity,expiry_unknown) VALUES($1,$2,$3,$4,$5,$6,$7)"
+  },
+  {
+    "source": "stock_transfer.rs:170",
+    "sql": "INSERT INTO product_locations(product_id,location,batch_no,expire_date,quantity) VALUES($1,$2,$3,$4,$5)"
+  },
+  {
+    "source": "stock_transfer.rs:197",
+    "sql": "INSERT INTO stock_movements(product_id,variant_id,type,quantity,old_stock,new_stock,reason,reference,created_by,location,notes) VALUES($1,$2,$3,$4,$5,$5,$6,$7,$8,$9,$10) RETURNING id"
+  },
+  {
+    "source": "stock_transfer.rs:201",
+    "sql": "INSERT INTO variant_batch_changes(movement_id,product_id,variant_id,location,batch_no,expire_date,delta,expiry_unknown) VALUES($1,$2,$3,$4,$5,$6,$7,$8)"
+  },
+  {
+    "source": "suppliers.rs:22",
+    "sql": "SELECT id,name,COALESCE(company_name,'') AS company_name,COALESCE(contact_person,'') AS contact_person,COALESCE(phone,'') AS phone,COALESCE(email,'') AS email,COALESCE(address,'') AS address,COALESCE(tax_number,'') AS tax_number,COALESCE(website,'') AS website,COALESCE(payment_terms,'') AS payment_terms,COALESCE(bank_account,'') AS bank_account,COALESCE(status,'Active') AS status FROM suppliers ORDER BY lower(name),id"
+  },
+  {
+    "source": "suppliers.rs:32",
+    "sql": "INSERT INTO suppliers (name,company_name,contact_person,phone,email,address,tax_number,website,payment_terms,bank_account,status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)"
+  },
+  {
+    "source": "suppliers.rs:34",
+    "sql": "UPDATE suppliers SET name=$1,company_name=$2,contact_person=$3,phone=$4,email=$5,address=$6,tax_number=$7,website=$8,payment_terms=$9,bank_account=$10,status=$11 WHERE id=$12"
+  },
+  {
+    "source": "users.rs:16",
+    "sql": "SELECT u.id,u.username,COALESCE(u.full_name,'') AS full_name,u.role,COALESCE(u.is_active,1) AS active,(SELECT 'data:image/jpeg;base64,'||encode(e.photo_data,'base64') FROM employees e WHERE e.user_id=u.id AND e.photo_data IS NOT NULL ORDER BY e.id DESC LIMIT 1) AS avatar FROM users u ORDER BY LOWER(u.username),u.id"
+  },
+  {
+    "source": "users.rs:29",
+    "sql": "LOCK TABLE users IN SHARE ROW EXCLUSIVE MODE"
+  },
+  {
+    "source": "users.rs:32",
+    "sql": "SELECT id,password_hash,salt FROM users WHERE username=$1 AND LOWER(role)='admin' AND is_active=1"
+  },
+  {
+    "source": "users.rs:47",
+    "sql": "SELECT role,COALESCE(is_active,1) FROM users WHERE id=$1"
+  },
+  {
+    "source": "users.rs:57",
+    "sql": "SELECT COUNT(*) FROM users WHERE LOWER(role)='admin' AND is_active=1 AND id<>$1"
+  },
+  {
+    "source": "users.rs:64",
+    "sql": "DELETE FROM users WHERE id=$1"
+  },
+  {
+    "source": "users.rs:90",
+    "sql": "INSERT INTO users(username,full_name,role,is_active,password_hash,salt) VALUES($1,$2,$3,$4,$5,$6)"
+  },
+  {
+    "source": "users.rs:93",
+    "sql": "UPDATE users SET username=$1,full_name=$2,role=$3,is_active=$4 WHERE id=$5"
+  },
+  {
+    "source": "users.rs:103",
+    "sql": "UPDATE users SET password_hash=$1,salt=$2 WHERE id=$3"
+  },
+  {
+    "source": "zkteco.rs:85",
+    "sql": "UPDATE zkteco_devices SET device_no=$1,name=$2,ip_address=$3,port=$4,comm_key=$5,is_active=$6 WHERE id=$7"
+  },
+  {
+    "source": "zkteco.rs:90",
+    "sql": "INSERT INTO zkteco_devices(device_no,name,ip_address,port,comm_key,is_active) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(device_no) DO NOTHING RETURNING id"
+  },
+  {
+    "source": "dashboard_period.sql",
+    "sql": "WITH period_sales AS (\n    SELECT * FROM sales WHERE created_at >= $1::text::timestamp AND created_at < $2::text::timestamp\n)\nSELECT 'Completed sales'::text AS label,COALESCE(SUM(total),0)::float8 AS amount,COUNT(*) AS count FROM period_sales WHERE status='completed'\nUNION ALL SELECT 'Received at checkout',COALESCE(SUM(GREATEST(0,COALESCE(payment,0)-COALESCE(change_amount,0))),0)::float8,COUNT(*) FROM period_sales WHERE status='completed'\nUNION ALL SELECT 'Credit sales',COALESCE(SUM(total),0)::float8,COUNT(*) FROM period_sales WHERE status='completed' AND lower(trim(payment_type))='credit'\nUNION ALL SELECT 'Discounts',COALESCE(SUM(discount_amount),0)::float8,COUNT(*) FROM period_sales WHERE status='completed' AND discount_amount>0\nUNION ALL SELECT 'Refunded sales (sale date)',COALESCE(SUM(total),0)::float8,COUNT(*) FROM period_sales WHERE status='refunded'\nUNION ALL SELECT 'Credit collections',COALESCE(SUM(amount),0)::float8,COUNT(*) FROM credit_payments WHERE left(payment_date,10)>=$1 AND left(payment_date,10)<$2\nUNION ALL SELECT 'Recorded expenses',COALESCE(SUM(amount),0)::float8,COUNT(*) FROM expenses WHERE left(expense_date,10)>=$1 AND left(expense_date,10)<$2\nUNION ALL SELECT 'Supplier payments',COALESCE(SUM(amount),0)::float8,COUNT(*) FROM supplier_payments WHERE payment_type<>'Purchase' AND left(payment_date,10)>=$1 AND left(payment_date,10)<$2\nUNION ALL SELECT 'Supplier purchases (ledger)',COALESCE(SUM(amount),0)::float8,COUNT(*) FROM supplier_payments WHERE payment_type='Purchase' AND left(payment_date,10)>=$1 AND left(payment_date,10)<$2\n"
+  },
+  {
+    "source": "report_sales.sql",
+    "sql": "WITH period AS (\n    SELECT * FROM sales WHERE created_at >= $1 AND created_at < $2\n      AND status IN ('completed','refunded')\n), costs AS (\n    SELECT si.sale_id,\n      CASE WHEN COUNT(*) FILTER (WHERE si.cost IS NULL OR si.qty IS NULL)>0\n        THEN NULL ELSE SUM(si.qty::numeric*si.cost::numeric) END AS cost,\n      COUNT(*) FILTER (WHERE COALESCE(si.refunded_qty,0)>0) AS partial\n    FROM sale_items si JOIN period s ON s.id=si.sale_id GROUP BY si.sale_id\n)\nSELECT COALESCE(s.invoice_no,'#'||s.id::text) AS invoice,\n    to_char(s.created_at,'YYYY-MM-DD HH24:MI:SS') AS day,\n    to_char(s.created_at,'YYYY-MM') AS month,\n    COALESCE(c.name,'Walk-in Customer') AS customer,\n    COALESCE(s.payment_type,'') AS method,s.status,\n    COALESCE(s.total,0)::numeric AS total,COALESCE(s.discount_amount,0)::numeric AS discount,\n    GREATEST(0,COALESCE(s.payment,0)::numeric-COALESCE(s.change_amount,0)::numeric) AS received,\n    costs.cost,COALESCE(costs.partial,0)::bigint AS partial\nFROM period s LEFT JOIN costs ON costs.sale_id=s.id\nLEFT JOIN customers c ON c.id=s.customer_id ORDER BY s.created_at,s.id\n"
+  }
+]

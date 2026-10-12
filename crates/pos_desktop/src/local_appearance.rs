@@ -6,6 +6,10 @@ use std::{
 };
 
 const KEYS: &[&str] = &[
+    "ui_theme_editor_v1",
+    "ui_theme_preset_library_v1",
+    "language",
+    "language_ui_version",
     "sidebar_hidden_pages",
     "barcode_label_width",
     "barcode_label_height",
@@ -78,7 +82,15 @@ fn resolve_at(path: &Path, mut shared: Settings) -> Result<Settings> {
             .collect();
         write_at(path, &initial, true)?;
     }
-    let local = read_at(path)?.context("Local appearance settings disappeared")?;
+    let mut local = read_at(path)?.context("Local appearance settings disappeared")?;
+    if !local.contains_key("language_ui_version") {
+        // Preserve the current language once when upgrading an existing client.
+        let language = if shared.get("language_ui_version").map(String::as_str) == Some("1")
+            && shared.get("language").map(String::as_str) == Some("en") { "en" } else { "my" };
+        local.insert("language".into(), language.into());
+        local.insert("language_ui_version".into(), "1".into());
+        write_at(path, &local, false)?;
+    }
     shared.retain(|key, _| !KEYS.contains(&key.as_str()));
     shared.extend(local);
     Ok(shared)
@@ -109,12 +121,44 @@ pub fn save(changes: &[(String, String)]) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn theme_editor_and_presets_persist_without_affecting_other_clients() {
+        let temp=tempfile::tempdir().unwrap();let a=temp.path().join("a.json");let b=temp.path().join("b.json");
+        resolve_at(&a,shared("light")).unwrap();resolve_at(&b,shared("dark")).unwrap();
+        let config=r##"{"light":{"header":{"color":"#123456","end":"#abcdef","kind":"linear","angle":90}},"dark":{},"presets":[{"name":"Ocean","light":{},"dark":{}}]}"##;
+        assert!(crate::theme_editor::validate(config).is_ok());
+        save_at(&a,&[(crate::theme_editor::KEY.into(),config.into())]).unwrap();
+        assert_eq!(resolve_at(&a,shared("dark")).unwrap()[crate::theme_editor::KEY],config);
+        assert!(!resolve_at(&b,shared("light")).unwrap().contains_key(crate::theme_editor::KEY));
+    }
     fn shared(theme: &str) -> Settings {
         [
             ("theme".into(), theme.into()),
             ("shop_name".into(), "Shop".into()),
         ]
         .into()
+    }
+    #[test]
+    fn language_is_imported_once_and_then_independent_for_each_client() {
+        let temp = tempfile::tempdir().unwrap();
+        let a = temp.path().join("a/appearance.json");
+        let b = temp.path().join("b/appearance.json");
+        // Existing local appearance files from before language became local.
+        write_at(&a, &shared("light"), false).unwrap();
+        let mut server = shared("light");
+        server.insert("language".into(), "en".into());
+        server.insert("language_ui_version".into(), "1".into());
+        assert_eq!(resolve_at(&a, server.clone()).unwrap()["language"], "en");
+        assert_eq!(resolve_at(&b, server.clone()).unwrap()["language"], "en");
+        save_at(&a, &[("language".into(), "my".into()), ("language_ui_version".into(), "1".into())]).unwrap();
+        assert_eq!(resolve_at(&a, server.clone()).unwrap()["language"], "my");
+        server.insert("language".into(), "my".into());
+        let reloaded_b = resolve_at(&b, server).unwrap();
+        assert_eq!(reloaded_b["language"], "en");
+        assert_eq!(crate::regional::Language::from_settings(&reloaded_b), crate::regional::Language::English);
+        assert!(is_key("language"));
+        assert!(is_key("language_ui_version"));
+        assert!(!is_key("currency"));
     }
     #[test]
     fn menu_visibility_survives_reload_and_stays_local() {

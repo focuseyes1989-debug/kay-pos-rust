@@ -1,3 +1,4 @@
+use crate::storage as sqlx;
 use sqlx::PgPool;
 
 pub fn is_low(stock: f64, threshold: f64) -> bool {

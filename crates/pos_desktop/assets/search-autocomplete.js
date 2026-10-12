@@ -3,6 +3,10 @@
  let input=null,root=null,timer=0,refresh=0,query='',items=[],index=-1,suppressed=false,composing=false,ready=false,pointerPicking=false;
  const popup=document.createElement('div');popup.className='kay_search_suggestions';popup.id='kay-search-suggestions';popup.setAttribute('role','listbox');popup.setAttribute('aria-label','Search suggestions');popup.hidden=true;document.body.append(popup);
  const normalize=s=>String(s||'').normalize('NFC').trim().toLocaleLowerCase();
+ // Damerau-Levenshtein also accepts swapped adjacent letters. Use code points
+ // so Myanmar characters are not split into UTF-16 surrogate halves.
+ function distance(a,b){a=Array.from(a);b=Array.from(b);const d=Array.from({length:a.length+1},()=>Array(b.length+1).fill(0));for(let i=0;i<=a.length;i++)d[i][0]=i;for(let j=0;j<=b.length;j++)d[0][j]=j;for(let i=1;i<=a.length;i++)for(let j=1;j<=b.length;j++){d[i][j]=Math.min(d[i-1][j]+1,d[i][j-1]+1,d[i-1][j-1]+Number(a[i-1]!==b[j-1]));if(i>1&&j>1&&a[i-1]===b[j-2]&&a[i-2]===b[j-1])d[i][j]=Math.min(d[i][j],d[i-2][j-2]+1);}return d[a.length][b.length];}
+ function salesScore(q,value,match){const name=normalize(value);if(name===q)return 0;if(name.startsWith(q))return 1;if(normalize(match).includes(q))return 2;const chars=Array.from(q);if(chars.length<3||chars.length>80||/^\d+$/.test(q))return Infinity;const limit=chars.length<6?1:2;let best=Infinity;for(const candidate of [name,...name.split(/\s+/)]){const part=Array.from(candidate);if(Math.abs(part.length-chars.length)<=limit)best=Math.min(best,distance(q,candidate));if(part.length>chars.length)best=Math.min(best,distance(q,part.slice(0,chars.length).join('')));}return best<=limit?3+best:Infinity;}
  const visible=n=>n.getClientRects().length&&getComputedStyle(n).visibility!=='hidden';
  const eligible=n=>n instanceof HTMLInputElement&&!n.disabled&&!n.readOnly&&!n.closest('.touch-combo')&&(n.type==='search'||/search/i.test(n.placeholder))&&n.type!=='password';
  function scope(n){return n.closest('.settings_sidebar,.categories,.products,.customers_page,.employees_page,.employee_page,.receipts_workspace,.receipts_page,[role="dialog"],section')||n.closest('main');}
@@ -11,6 +15,10 @@
  function collect(){
   if(!root)return [];
   const q=normalize(query);if(!q)return [];
+  if(input?.id==='sales_product_search'){
+   const unique=new Map();root.querySelectorAll('[data-sales-search-catalog] [data-search-value]').forEach(n=>{const value=n.dataset.searchValue,detail=n.dataset.searchDetail||'',score=salesScore(q,value,n.dataset.searchMatch);if(Number.isFinite(score)&&!unique.has(value))unique.set(value,{value,detail:score>=3?`Similar name · ${detail}`:detail,score});});
+   return [...unique.values()].sort((a,b)=>a.score-b.score||a.value.localeCompare(b.value)).slice(0,8);
+  }
   const candidates=[];const add=(value,detail,match)=>{value=String(value||'').trim();if(value&&normalize(match||`${value} ${detail}`).includes(q)&&!candidates.some(c=>c.value===value&&c.detail===detail))candidates.push({value,detail:String(detail||'').trim()});};
   root.querySelectorAll('[data-search-value]').forEach(n=>{if(visible(n))add(n.dataset.searchValue,n.dataset.searchDetail,n.dataset.searchMatch);});
   root.querySelectorAll('.product_manage_row,.category_row,.location_stock_row,.service_prompt_item,.product_list_item,.inventory_product,.inventory_list_item,.customer_list_item,.expense_list_item,.receipt_list_item,.category,.settings_sidebar nav button,.categories nav button').forEach(n=>{if(!visible(n)||n.hasAttribute('data-search-value'))return;const name=n.querySelector('strong,[title]')?.textContent||n.textContent;add(name,n.querySelector('small')?.textContent||'',n.textContent);});

@@ -1,3 +1,4 @@
+extern crate self as pos_core;
 pub mod catalog;
 pub mod dashboard;
 pub mod reports;
@@ -63,3 +64,9 @@ mod pos_only_tests {
 pub mod stock_transfer;
 
 pub mod sales_comparison;
+
+pub mod storage;
+mod sqlite_dialect;
+pub mod sqlite;
+
+pub mod data_transfer;

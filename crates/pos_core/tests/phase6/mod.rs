@@ -1,3 +1,4 @@
+use pos_core::storage as sqlx;
 use super::*;
 use pos_core::{
     activity,
@@ -10,7 +11,7 @@ use pos_core::{
 async fn credit_collection_authorization_and_audit_rollback() -> Result<()> {
     use pos_core::customer_credit as credit;
     let (pool, cashier, manager) = setup().await?;
-    sqlx::raw_sql("CREATE TABLE payment_types(name TEXT,active INTEGER); INSERT INTO payment_types VALUES('Cash',1); ALTER TABLE credit_payments ADD COLUMN reference_no TEXT;").execute(&pool).await?;
+    sqlx::raw_sql("CREATE TABLE payment_types(name TEXT,active INTEGER); INSERT INTO payment_types VALUES('Cash',1); ALTER TABLE credit_payments ADD COLUMN IF NOT EXISTS reference_no TEXT;").execute(&pool).await?;
     let date = chrono::Local::now().format("%Y-%m-%d").to_string();
     assert!(
         credit::create(&pool, &cashier, 1, "CR1", "100", "0", &date, &date, "")

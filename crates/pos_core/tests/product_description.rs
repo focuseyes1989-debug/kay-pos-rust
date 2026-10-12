@@ -1,6 +1,7 @@
+use pos_core::storage as sqlx;
 use anyhow::Result;
 use pos_core::{catalog, db, Product};
-use sqlx::postgres::PgPoolOptions;
+use ::sqlx::postgres::PgPoolOptions;
 
 #[tokio::test]
 #[ignore = "Requires isolated CATALOG_TEST_DATABASE_URL on port 55487"]
@@ -8,7 +9,7 @@ async fn description_round_trips_and_clears_without_changing_stock() -> Result<(
     let url = std::env::var("CATALOG_TEST_DATABASE_URL")?;
     anyhow::ensure!(url.contains("127.0.0.1:55487/"), "Use isolated local test server");
     // One connection keeps all test tables temporary and off the production schema.
-    let pool = PgPoolOptions::new().max_connections(1).connect(&url).await?;
+    let pool:pos_core::storage::Pool = PgPoolOptions::new().max_connections(1).connect(&url).await?.into();
     sqlx::raw_sql(r#"
         CREATE TEMP TABLE categories(id int PRIMARY KEY, name text);
         CREATE TEMP TABLE products(id serial PRIMARY KEY, name text, description text,

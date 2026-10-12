@@ -1,3 +1,4 @@
+use crate::storage as sqlx;
 use crate::models::Product;
 use anyhow::{ensure, Result};
 use base64::{engine::general_purpose::STANDARD, Engine};

@@ -14,6 +14,7 @@ const CHAT_TOPICS: &[(&str,&str,&str)] = &[
     ("amount","ငွေပမာဏအလိုက် Receipt","ဒီနေ့ 10000 ကျပ် ရောင်းရတဲ့ receipt ပြပါ"),
     ("products","ကုန်ပစ္စည်း","products"),
     ("inventory","ကုန်လက်ကျန်","inventory"),
+    ("unsold","အရောင်းထိုင်း ပစ္စည်းများ","ဒီလ အရောင်းထိုင်းတဲ့ ပစ္စည်းတွေကို ပြပါ"),
     ("low-stock","လက်ကျန်နည်းသည့် ပစ္စည်း","low stock"),
     ("expenses","အသုံးစရိတ်","ဒီလ အသုံးစရိတ် ပြပါ"),
     ("customers","ဖောက်သည်","customers"),
@@ -26,7 +27,7 @@ const CHAT_TOPICS: &[(&str,&str,&str)] = &[
 fn slash_topics(text:&str)->Vec<(&'static str,&'static str,&'static str)> {
     let Some(search)=text.trim_start().strip_prefix('/') else{return vec![]};
     let search=search.trim().to_lowercase();
-    CHAT_TOPICS.iter().copied().filter(|(key,label,_)|key.contains(&search)||label.contains(&search)).collect()
+    CHAT_TOPICS.iter().copied().filter(|(key,label,_)|key.contains(&search)||label.contains(&search)||crate::regional::text(label).to_lowercase().contains(&search)).collect()
 }
 
 #[derive(Clone, PartialEq)]
@@ -135,32 +136,32 @@ pub fn AiPage(db_form: DbForm, actor: Session, on_navigate: EventHandler<Workspa
     let mut submit_enter = submit.clone();
     rsx! {section {class:"customers_page phase6_page ai_page ai_workspace ai_codex",
         style { "{AI_CSS}" }
-        if !notice().is_empty() {p {class:"ai_error",role:"alert","{notice}"}}
+        if !notice().is_empty() {p {class:"ai_error",role:"alert",{crate::regional::text(&notice())}}}
         div {class:"phase6_filters ai_composer",
             if topics_open {
                 div {class:"ai_slash_menu",
-                    div {class:"ai_slash_heading",strong {"ဘာအကြောင်း မေးချင်ပါသလဲ?"} small {"↑ ↓ ရွေးရန် · Enter ထည့်ရန် · Esc ပိတ်ရန်"}}
-                    div {id:"ai-slash-topics",role:"listbox",aria_label:"မေးနိုင်သော အကြောင်းအရာများ",
+                    div {class:"ai_slash_heading",strong {{crate::regional::text("ဘာအကြောင်း မေးချင်ပါသလဲ?")}} small {{crate::regional::text("↑ ↓ ရွေးရန် · Enter ထည့်ရန် · Esc ပိတ်ရန်")}}}
+                    div {id:"ai-slash-topics",role:"listbox",aria_label:crate::regional::text("မေးနိုင်သော အကြောင်းအရာများ"),
                         for (index,(key,label,prompt)) in topics.iter().copied().enumerate() {
                             button {id:format!("ai-topic-{index}"),r#type:"button",role:"option",aria_selected:index==selected_topic,
                                 class:if index==selected_topic{"ai_slash_option selected"}else{"ai_slash_option"},
-                                onclick:move |_|{question.set(prompt.into());topics_dismissed.set(true);notice.set(String::new());document::eval("document.querySelector('.ai_prompt_control textarea')?.focus();");},
-                                span {"{label}"} small {"/{key}"}
+                                onclick:move |_|{question.set(crate::regional::text(prompt));topics_dismissed.set(true);notice.set(String::new());document::eval("document.querySelector('.ai_prompt_control textarea')?.focus();");},
+                                span {{crate::regional::text(label)}} small {"/{key}"}
                             }
                         }
-                        if topics.is_empty(){p {"ကိုက်ညီသည့်အကြောင်းအရာ မရှိပါ။ / တစ်ခုတည်း ရိုက်ပြီး ပြန်ရွေးပါ။"}}
+                        if topics.is_empty(){p {{crate::regional::text("ကိုက်ညီသည့်အကြောင်းအရာ မရှိပါ။ / တစ်ခုတည်း ရိုက်ပြီး ပြန်ရွေးပါ။")}}}
                     }
                 }
             }
             label {class:"ai_prompt_control",span {class:"ai_sr_only","Message"}
-                textarea {aria_label:"Message KAY Assistant",aria_expanded:topics_open,aria_controls:"ai-slash-topics",aria_activedescendant:if topics_open&&!topics.is_empty(){format!("ai-topic-{selected_topic}")}else{String::new()},rows:2,maxlength:1000,disabled:busy(),value:"{question}",placeholder:"မေးခွန်း ရိုက်ပါ၊ သို့မဟုတ် / နှိပ်ပြီး အကြောင်းအရာ ရွေးပါ",oninput:move |e|{question.set(e.value());topic_index.set(0);topics_dismissed.set(false);},
+                textarea {aria_label:"Message KAY Assistant",aria_expanded:topics_open,aria_controls:"ai-slash-topics",aria_activedescendant:if topics_open&&!topics.is_empty(){format!("ai-topic-{selected_topic}")}else{String::new()},rows:2,maxlength:1000,disabled:busy(),value:"{question}",placeholder:crate::regional::text("မေးခွန်း ရိုက်ပါ၊ သို့မဟုတ် / နှိပ်ပြီး အကြောင်းအရာ ရွေးပါ"),oninput:move |e|{question.set(e.value());topic_index.set(0);topics_dismissed.set(false);},
                     onkeydown:move |event|{
                         if topics_open {
                             match event.key() {
                                 Key::Escape=>{event.prevent_default();topics_dismissed.set(true);return;},
                                 Key::ArrowDown=>{event.prevent_default();topic_index.set((selected_topic+1).min(topics.len().saturating_sub(1)));return;},
                                 Key::ArrowUp=>{event.prevent_default();topic_index.set(selected_topic.saturating_sub(1));return;},
-                                Key::Enter=>{event.prevent_default();if let Some((_,_,prompt))=topics.get(selected_topic){question.set((*prompt).into());topics_dismissed.set(true);notice.set(String::new());}return;},
+                                Key::Enter=>{event.prevent_default();if let Some((_,_,prompt))=topics.get(selected_topic){question.set(crate::regional::text(prompt));topics_dismissed.set(true);notice.set(String::new());}return;},
                                 _=>{},
                             }
                         }
@@ -169,7 +170,7 @@ pub fn AiPage(db_form: DbForm, actor: Session, on_navigate: EventHandler<Workspa
                 }
             }
             div {class:"ai_composer_toolbar",
-                button {class:"ai_topic_toggle",r#type:"button",aria_label:"Choose question topic",title:"မေးမည့်အကြောင်းအရာ ရွေးပါ",disabled:busy(),onclick:move |_|{question.set("/".into());topic_index.set(0);topics_dismissed.set(false);document::eval("document.querySelector('.ai_prompt_control textarea')?.focus();");},crate::icons::Icon {name:"add"}}
+                button {class:"ai_topic_toggle",r#type:"button",aria_label:"Choose question topic",title:crate::regional::text("မေးမည့်အကြောင်းအရာ ရွေးပါ"),disabled:busy(),onclick:move |_|{question.set("/".into());topic_index.set(0);topics_dismissed.set(false);document::eval("document.querySelector('.ai_prompt_control textarea')?.focus();");},crate::icons::Icon {name:"add"}}
                 button {class:"ai_new_chat",r#type:"button",disabled:busy(),onclick:move |_|{history.clear();question.set(String::new());notice.set(String::new());topics_dismissed.set(true);document::eval("document.querySelector('.ai_prompt_control textarea')?.focus();");},"New chat"}
                 button {class:"ai_send",aria_label:"Send message",title:"Send · Enter",disabled:busy()||question().trim().is_empty()||question().trim_start().starts_with('/'),onclick:move |_|submit(),if busy() {span {class:"loading_spinner"}}else{svg {view_box:"0 0 24 24",width:"20",height:"20",fill:"none","aria-hidden":"true",path {d:"M12 19V5M5 12l7-7 7 7",stroke:"currentColor",stroke_width:"2",stroke_linecap:"round",stroke_linejoin:"round"}}}}
             }
@@ -185,24 +186,24 @@ pub fn AiPage(db_form: DbForm, actor: Session, on_navigate: EventHandler<Workspa
                             strong {"KAY Assistant"}
                             if let Some(text)=&entry.model_text {p {class:"ai_model_text","{text}"}}
                             if !entry.choices.is_empty() {
-                                p {"အမည်အတိအကျ မသေချာပါ။ ဘယ်အမည်ကို ဆိုလိုတာလဲ ရွေးပေးပါ။"}
-                                small {"အနီးစပ်ဆုံး အမည်များ (ပထမအမည် 1,000 အတွင်းမှ ရှာထားသည်)"}
+                                p {{crate::regional::text("အမည်အတိအကျ မသေချာပါ။ ဘယ်အမည်ကို ဆိုလိုတာလဲ ရွေးပေးပါ။")}}
+                                small {{crate::regional::text("အနီးစပ်ဆုံး အမည်များ (ပထမအမည် 1,000 အတွင်းမှ ရှာထားသည်)")}}
                                 div {class:"ai_followups",for name in &entry.choices {
                                     {let choice=name.clone();let plan=entry.plan.clone();let mut choose_run=choice_runner.clone();rsx!{button {disabled:busy(),onclick:move |_|{question.set(choice.clone());choose_run(pos_core::assistant::choose(plan.clone(),&choice));},"{name}"}}}
                                 }}
                             } else {match &entry.response {
-                                None=>rsx! {div {class:"ai_loading",role:"status",span {class:"loading_spinner"} "အချက်အလက်များ ရယူနေပါသည်…"}},
-                                Some(Err(error))=>rsx! {p {class:"ai_error",role:"alert","{error}"}},
+                                None=>rsx! {div {class:"ai_loading",role:"status",span {class:"loading_spinner"} {crate::regional::text("အချက်အလက်များ ရယူနေပါသည်…")}}},
+                                Some(Err(error))=>rsx! {p {class:"ai_error",role:"alert",{crate::regional::text(&error)}}},
                                 Some(Ok(answer))=>rsx! {
-                                    if entry.model_text.is_some() {details {class:"ai_evidence",summary {"အသုံးပြုထားသော POS အချက်အလက်"} AnswerPanel {answer:answer.clone(),request:entry.plan.request.clone(),db_form:db_form.clone(),actor:actor.clone()}}}
+                                    if entry.model_text.is_some() {details {class:"ai_evidence",summary {{crate::regional::text("အသုံးပြုထားသော POS အချက်အလက်")}} AnswerPanel {answer:answer.clone(),request:entry.plan.request.clone(),db_form:db_form.clone(),actor:actor.clone()}}}
                                     else {AnswerPanel {answer:answer.clone(),request:entry.plan.request.clone(),db_form:db_form.clone(),actor:actor.clone()}}
                                     if let Some(view)=scope_view(entry.scope) {
-                                        button {class:"ai_text_action",onclick:move |_|on_navigate.call(view), "သက်ဆိုင်ရာ page ဖွင့်ရန် →"}
+                                        button {class:"ai_text_action",onclick:move |_|on_navigate.call(view), {crate::regional::text("သက်ဆိုင်ရာ page ဖွင့်ရန် →")}}
                                     }
                                     div {class:"ai_followups",
                                         for (label,prompt) in [("ဒီနေ့","today"),("မနေ့က","yesterday"),("ဒီလ","this month")] {
-                                            if matches!(entry.scope,Scope::Analytics|Scope::ParentSales|Scope::PaymentSales|Scope::CategorySales|Scope::Dashboard|Scope::Digest|Scope::Expenses|Scope::Receipts|Scope::Attendance) {
-                                                {let entry=followup_entry.clone();rsx!{button {disabled:busy(),onclick:move |_|question.set(followup_prompt(&entry,prompt)),"{label}"}}}
+                                            if matches!(entry.scope,Scope::Analytics|Scope::ParentSales|Scope::PaymentSales|Scope::CategorySales|Scope::Dashboard|Scope::Digest|Scope::Expenses|Scope::Receipts|Scope::Attendance|Scope::UnsoldProducts) {
+                                                {let entry=followup_entry.clone();rsx!{button {disabled:busy(),onclick:move |_|question.set(followup_prompt(&entry,prompt)),{crate::regional::text(label)}}}}
                                             }
                                         }
                                     }
@@ -213,16 +214,16 @@ pub fn AiPage(db_form: DbForm, actor: Session, on_navigate: EventHandler<Workspa
                 }
             }
         } else if busy() {
-            div {class:"ai_loading",role:"status",span {class:"loading_spinner"} "အချက်အလက်များ ရယူနေပါသည်…"}
+            div {class:"ai_loading",role:"status",span {class:"loading_spinner"} {crate::regional::text("အချက်အလက်များ ရယူနေပါသည်…")}}
         } else {
             section {class:"ai_welcome panel",
                 div {class:"ai_welcome_icon",crate::icons::Icon {name:"analytics"}}
-                h3 {"ဒီနေ့ ဘာကို သိချင်ပါသလဲ?"}
-                p {"ပစ္စည်းအမည်ကို တိုက်ရိုက်ရိုက်ပါ။ အရောင်း၊ ကုန်လက်ကျန်၊ အသုံးစရိတ်နဲ့ ရက်စွဲကို မေးခွန်းထဲမှာ ထည့်မေးနိုင်ပါတယ်။"}
+                h3 {{crate::regional::text("ဒီနေ့ ဘာကို သိချင်ပါသလဲ?")}}
+                p {{crate::regional::text("ပစ္စည်းအမည်ကို တိုက်ရိုက်ရိုက်ပါ။ အရောင်း၊ ကုန်လက်ကျန်၊ အသုံးစရိတ်နဲ့ ရက်စွဲကို မေးခွန်းထဲမှာ ထည့်မေးနိုင်ပါတယ်။")}}
 
                     div {class:"ai_suggestions",
                         for (label,prompt) in [("ဒီနေ့ အရောင်း","ဒီနေ့ အရောင်း"),("ဒီလ အရောင်း","ဒီလ အရောင်း"),("အရောင်း နှိုင်းယှဉ်","ဒီလနဲ့ ပြီးခဲ့တဲ့လ အရောင်း နှိုင်းယှဉ်ပေးပါ"),("အသုံးစရိတ် နှိုင်းယှဉ်","ဒီလနဲ့ ပြီးခဲ့တဲ့လ အသုံးစရိတ် နှိုင်းယှဉ်ပေးပါ"),("လုပ်ငန်းအခြေအနေ","dashboard"),("လုပ်ငန်းအနှစ်ချုပ်","digest"),("အသုံးစရိတ်","expenses this month"),("ဖောက်သည်အကြွေး","debt"),("ကုန်လက်ကျန်နည်း","low stock"),("ဝန်ထမ်းတက်ရောက်မှု","attendance today"),("အသုံးပြုနည်း","help"),("ပစ္စည်းစာရင်း","products"),("ကုန်လက်ကျန်","inventory")] {
-                            button {r#type:"button",onclick:move |_|question.set(prompt.into()),"{label}"}
+                            button {r#type:"button",onclick:move |_|question.set(crate::regional::text(prompt)),{crate::regional::text(label)}}
                         }
                     }
 
@@ -230,7 +231,67 @@ pub fn AiPage(db_form: DbForm, actor: Session, on_navigate: EventHandler<Workspa
         }
 
         }
+        AssistantInsights { db_form:db_form.clone(), actor:actor.clone(), on_question:move |prompt:String|question.set(prompt) }
     }}
+}
+
+const INSIGHTS: &[(&str,&str,&str,&str)] = &[
+    ("Today", "ယနေ့", "analytics", "sales today vs yesterday compare"),
+    ("Weekly", "ယခုအပတ်", "calendar", "sales this week vs last week compare"),
+    ("Monthly", "ယခုလ", "calendar", "sales this month vs last month compare"),
+    ("Top products", "အရောင်းအကောင်းဆုံး", "products", "top 10 products today"),
+    ("Inventory", "ကုန်လက်ကျန်နည်း", "inventory", "low stock"),
+    ("Payments", "ငွေပေးချေမှု", "payments", "payments today"),
+];
+
+#[component]
+fn AssistantInsights(db_form: DbForm, actor: Session, on_question: EventHandler<String>) -> Element {
+    let mut data=use_resource(move || {
+        let db=db_form.clone();let actor=actor.clone();
+        async move {
+            let pool=pos_core::connect(&db.database_config()?).await?;
+            let today=chrono::Local::now().date_naive();
+            let mut cards=Vec::new();
+            for (_,_,_,prompt) in INSIGHTS {
+                let result=async {
+                    let plan=pos_core::assistant::plan(prompt,None,today)?;
+                    pos_core::assistant::answer(&pool,&actor,&plan).await
+                }.await.map_err(|e:anyhow::Error|e.to_string());
+                cards.push(result);
+            }
+            Ok::<_,anyhow::Error>(cards)
+        }
+    });
+    let state=data.read();
+    let english=crate::regional::language()==crate::regional::Language::English;
+    rsx! {
+        aside {class:"ai_insights",aria_label:"Business insights",
+            header {h3 {if english {"Insights"} else {"လုပ်ငန်းအခြေအနေ"}}
+                button {title:"Refresh insights",aria_label:"Refresh insights",disabled:!data.finished(),onclick:move |_|data.restart(),crate::icons::Icon {name:"refresh"}}
+            }
+            if !data.finished() {p {role:"status",if english {"Loading insights…"}else{"အချက်အလက်များ ရယူနေပါသည်…"}}}
+            else if let Some(Err(error))=state.as_ref() {p {class:"ai_error",role:"alert","{error}"}}
+            else if let Some(Ok(cards))=state.as_ref() {
+                for (index,(en,my,icon,prompt)) in INSIGHTS.iter().enumerate() {
+                    button {r#type:"button",class:"ai_insight_card","data-insight":index,
+                        aria_label:if english {format!("Ask about {en}")}else{format!("{my} အသေးစိတ် မေးရန်")},
+                        onclick:move |_|on_question.call(prompt.to_string()),
+                        div {class:"ai_insight_title",crate::icons::Icon {name:*icon} strong {{if english {*en} else {*my}}}}
+                        match &cards[index] {
+                            Ok(answer)=>rsx! {
+                                span {class:"ai_insight_description",{crate::regional::text(&answer.narrative)}}
+                                if matches!(index,3|4|5) {
+                                    for row in answer.rows.iter().take(3) {small {{row.join(" · ")}}}
+                                }
+                                small {"{answer.from} / {answer.to}"}
+                            },
+                            Err(error)=>rsx! {span {class:"ai_insight_description ai_insight_error",{crate::regional::text(error)}}},
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 fn followup_prompt(entry:&ChatEntry,period:&str)->String {
@@ -252,7 +313,7 @@ fn scope_view(scope: Scope) -> Option<WorkspaceView> {
         Scope::Suppliers => WorkspaceView::Suppliers,
         Scope::Categories => WorkspaceView::Categories,
         Scope::Products => WorkspaceView::Products,
-        Scope::Inventory => WorkspaceView::Inventory,
+        Scope::Inventory | Scope::UnsoldProducts => WorkspaceView::Inventory,
         Scope::Employees | Scope::Attendance => WorkspaceView::Employees,
         Scope::Receipts => WorkspaceView::Receipts,
         Scope::Dashboard | Scope::Digest => WorkspaceView::Dashboard,
@@ -298,64 +359,64 @@ fn AnswerPanel(answer: ai::Answer, request:Request, db_form: DbForm, actor: Sess
     let max_value=bars.iter().map(|(_,value,_)|*value).fold(0.0f64,f64::max);
     rsx! { section {class:"ai_answer",
         header {class:"ai_answer_header", div {
-            h3 {"{answer.title}"}
-            if matches!(answer.sources.as_str(),"products"|"products, product_variants"|"customers"|"employees") {small {"လက်ရှိအချက်အလက်"}}
+            h3 {{crate::regional::text(&answer.title)}}
+            if matches!(answer.sources.as_str(),"products"|"products, product_variants"|"customers"|"employees") {small {{crate::regional::text("လက်ရှိအချက်အလက်")}}}
             else if answer.sources!="KAY POS Rust curated guidance" {small {"{answer.from} – {answer.to}"}}
         } }
-        if !answer.narrative.is_empty() {p {class:"ai_response_intro","{answer.narrative}"}}
+        if !answer.narrative.is_empty() {p {class:"ai_response_intro",{crate::regional::text(&answer.narrative)}}}
         if matches!(answer.sources.as_str(),"sales, sale_items"|"sales, sale_items, products, categories"|"expenses"|"comparison"|"sales") {
-            details {class:"ai_calculation",summary {"တွက်ချက်ပုံနှင့် Refund သတ်မှတ်ချက်"}
-                for note in answer.notes.iter().filter(|note|note.contains("refund")||note.contains("Refund")||note.contains("discount")||note.contains("ကွာခြားချက်")||note.contains("ရှာဖွေ")) {p {"{note}"}}
-                if request.scope==Scope::Expenses {p {"အသုံးစရိတ်သည် ရွေးထားသောကာလအတွင်း မှတ်တမ်းတင်ထားသည့် amount စုစုပေါင်း ဖြစ်ပါသည်။"}}
+            details {class:"ai_calculation",summary {{crate::regional::text("တွက်ချက်ပုံနှင့် Refund သတ်မှတ်ချက်")}}
+                for note in answer.notes.iter().filter(|note|note.contains("refund")||note.contains("Refund")||note.contains("discount")||note.contains("ကွာခြားချက်")||note.contains("ရှာဖွေ")) {p {{crate::regional::text(&note)}}}
+                if request.scope==Scope::Expenses {p {{crate::regional::text("အသုံးစရိတ်သည် ရွေးထားသောကာလအတွင်း မှတ်တမ်းတင်ထားသည့် amount စုစုပေါင်း ဖြစ်ပါသည်။")}}}
             }
         }
         if answer.sources!="KAY POS Rust curated guidance" {
-            div {class:"ai_answer_scope",small {"အသုံးပြုထားသော သတ်မှတ်ချက်များ"}
+            div {class:"ai_answer_scope",small {{crate::regional::text("အသုံးပြုထားသော သတ်မှတ်ချက်များ")}}
                 p {"{answer.from} – {answer.to}"}
-                if !request.product.is_empty(){p {"ရှာဖွေမှု: {request.product}"}}
+                if !request.product.is_empty(){p {{crate::regional::text(&format!("ရှာဖွေမှု: {}",request.product))}}}
                 if !request.receipt_category.is_empty(){p {"Category: {request.receipt_category}"}}
                 if !request.receipt_payment.is_empty(){p {"Payment: {request.receipt_payment}"}}
-                if let Some(total)=&answer.total_amount {strong {"စုစုပေါင်း: {total}"}}
+                if let Some(total)=&answer.total_amount {strong {{crate::regional::text(&format!("စုစုပေါင်း: {total}"))}}}
             }
         }
         if answer.sources=="products" && answer.rows.len()==1 {
             if let Some(row)=answer.rows.first() {
-                p {class:"ai_response_intro",strong {"{row.first().cloned().unwrap_or_default()}"} " ကို ရှာတွေ့ပါတယ်။"}
+                p {class:"ai_response_intro",strong {"{row.first().cloned().unwrap_or_default()}"} {crate::regional::text(" ကို ရှာတွေ့ပါတယ်။")}}
                 dl {class:"ai_product_facts",
-                    for (heading,value) in answer.headers.iter().zip(row.iter()).skip(1) {div {dt {"{heading}"} dd {"{value}"}}}
+                    for (heading,value) in answer.headers.iter().zip(row.iter()).skip(1) {div {dt {{crate::regional::text(&heading)}} dd {"{value}"}}}
                 }
-                {let row=row.clone();let mut open=open_entity.clone();rsx!{button {class:"ai_text_action",disabled:detail_busy(),onclick:move |_|open(row.clone()),"အသေးစိတ် ကြည့်ရန် →"}}}
+                {let row=row.clone();let mut open=open_entity.clone();rsx!{button {class:"ai_text_action",disabled:detail_busy(),onclick:move |_|open(row.clone()),{crate::regional::text("အသေးစိတ် ကြည့်ရန် →")}}}}
             }
         } else if answer.sources=="KAY POS Rust curated guidance" {
-            for row in &answer.rows {div {class:"ai_guidance_text",for (index,cell) in row.iter().enumerate(){if index==0 {strong {"{cell}"}}else{p {"{cell}"}}}}}
+            for row in &answer.rows {div {class:"ai_guidance_text",for (index,cell) in row.iter().enumerate(){if index==0 {strong {{crate::regional::text(cell)}}}else{p {{crate::regional::text(cell)}}}}}}
         } else {
-            if answer.narrative.is_empty() && !answer.rows.is_empty() {p {class:"ai_response_intro","ကိုက်ညီသည့်မှတ်တမ်း {answer.rows.len()} ခု တွေ့ပါတယ်။"}}
+            if answer.narrative.is_empty() && !answer.rows.is_empty() {p {class:"ai_response_intro",{crate::regional::text(&format!("ကိုက်ညီသည့်မှတ်တမ်း {} ခု တွေ့ပါတယ်။",answer.rows.len()))}}}
         }
         if max_value>0.0 {
             div {class:"ai_chart",aria_label:"Result chart",
-                strong {"{answer.headers[value_column.unwrap()]} · first 12 rows"}
+                strong {{crate::regional::text(&answer.headers[value_column.unwrap()])} " · first 12 rows"}
                 for (label,value,text) in &bars {
-                    div {class:"ai_chart_row",span {"{label}"} div {class:"ai_chart_track",div {class:"ai_chart_bar",style:format!("width:{}%",value/max_value*100.0)}} span {"{text}"}}
+                    div {class:"ai_chart_row",span {{crate::regional::text(label)}} div {class:"ai_chart_track",div {class:"ai_chart_bar",style:format!("width:{}%",value/max_value*100.0)}} span {"{text}"}}
                 }
             }
         }
         if !answer.rows.is_empty() && !(answer.sources=="products" && answer.rows.len()==1) && answer.sources!="KAY POS Rust curated guidance" {
         div {class:"customers_table_scroll ai_answer_table",tabindex:0,aria_label:answer.title.clone(),
             table {class:"customers_table",
-                thead {tr {for heading in &answer.headers {th {scope:"col","{heading}"}}}}
+                thead {tr {for heading in &answer.headers {th {scope:"col",{crate::regional::text(&heading)}}}}}
                 tbody {for (index,row) in answer.rows.iter().enumerate() {tr {for (column,cell) in row.iter().enumerate() {td {
                     if column==0 && answer.receipt_ids.get(index).is_some() {
                         {let id=answer.receipt_ids[index];let mut open=open_receipt.clone();rsx!{button {class:"ai_text_action",disabled:detail_busy(),onclick:move |_|open(id),"{cell}"}}}
                     } else if column==0 && answer.sources!="comparison" && matches!(request.scope,Scope::Products|Scope::Inventory|Scope::Expenses|Scope::Customers|Scope::Credit|Scope::Employees|Scope::Suppliers) {
                         {let row=row.clone();let mut open=open_entity.clone();rsx!{button {class:"ai_text_action",disabled:detail_busy(),onclick:move |_|open(row.clone()),"{cell}"}}}
-                    } else {"{cell}"}
+                    } else { {if column==0 && matches!(answer.sources.as_str(),"comparison"|"sales, sale_items") && matches!(request.scope,Scope::Dashboard|Scope::Digest|Scope::CategorySales|Scope::Expenses|Scope::Analytics) {crate::regional::text(cell)} else {cell.clone()}} }
                 }}}}}
             }
         }
         }
-        if answer.rows.is_empty() && answer.narrative.is_empty() {p {class:"ai_empty","ကိုက်ညီသည့်မှတ်တမ်း မရှိပါ။"}}
-        if detail_busy(){p {role:"status","အသေးစိတ် ရယူနေပါတယ်…"}}
-        if !detail_error().is_empty(){p {class:"ai_error",role:"alert","{detail_error}"}}
+        if answer.rows.is_empty() && answer.narrative.is_empty() {p {class:"ai_empty",{crate::regional::text("ကိုက်ညီသည့်မှတ်တမ်း မရှိပါ။")}}}
+        if detail_busy(){p {role:"status",{crate::regional::text("အသေးစိတ် ရယူနေပါတယ်…")}}}
+        if !detail_error().is_empty(){p {class:"ai_error",role:"alert",{crate::regional::text(&detail_error())}}}
         if detail.read().is_some(){
             dialog {
                 class:"ai_receipt_dialog",aria_label:"Receipt detail",
@@ -365,14 +426,14 @@ fn AnswerPanel(answer: ai::Answer, request:Request, db_form: DbForm, actor: Sess
             }
         }
         if let Some(value)=entity_detail() {
-            dialog {class:"ai_receipt_dialog ai_entity_dialog",aria_label:"အသေးစိတ်",
+            dialog {class:"ai_receipt_dialog ai_entity_dialog",aria_label:crate::regional::text("အသေးစိတ်"),
                 onmounted:move |_|{document::eval("document.querySelector('.ai_entity_dialog:not([open])')?.showModal();");},
                 oncancel:move |event|{event.prevent_default();entity_detail.set(None);},
-                header {class:"receipt_detail_head",h3 {"{value.title}"} button {aria_label:"Close",onclick:move |_|entity_detail.set(None),crate::icons::Icon {name:"close"}}}
+                header {class:"receipt_detail_head",h3 {{crate::regional::text(&value.title)}} button {aria_label:"Close",onclick:move |_|entity_detail.set(None),crate::icons::Icon {name:"close"}}}
                 div {class:"ai_entity_content",
-                    p {class:"ai_entity_intro","{value.narrative}"}
-                    if value.rows.is_empty(){p {"မှတ်တမ်း မရှိတော့ပါ။ Data ပြန်စစ်ပေးပါ။"}}
-                    for row in &value.rows {dl {class:"ai_product_facts",for (heading,cell) in value.headers.iter().zip(row) {div {dt {"{heading}"} dd {if cell.trim().is_empty(){"—"}else{"{cell}"}}}}}}
+                    p {class:"ai_entity_intro",{crate::regional::text(&value.narrative)}}
+                    if value.rows.is_empty(){p {{crate::regional::text("မှတ်တမ်း မရှိတော့ပါ။ Data ပြန်စစ်ပေးပါ။")}}}
+                    for row in &value.rows {dl {class:"ai_product_facts",for (heading,cell) in value.headers.iter().zip(row) {div {dt {{crate::regional::text(&heading)}} dd {if cell.trim().is_empty(){"—"}else{"{cell}"}}}}}}
                 }
             }
         }
@@ -387,11 +448,26 @@ fn AnswerPanel(answer: ai::Answer, request:Request, db_form: DbForm, actor: Sess
                 }
             });
         }, "Export CSV"}
-        if !export_notice().is_empty() {p {role:"status","{export_notice}"}}
-        details {class:"ai_sources",summary {"ဒေတာရင်းမြစ်နှင့် မှတ်ချက်များ"}
+        if !export_notice().is_empty() {p {role:"status",{crate::regional::text(&export_notice())}}}
+        details {class:"ai_sources",summary {{crate::regional::text("ဒေတာရင်းမြစ်နှင့် မှတ်ချက်များ")}}
             p {"{answer.sources}"}
             small {"Updated {answer.generated_at}"}
-            for note in &answer.notes {p {"{note}"}}
+            for note in &answer.notes {p {{crate::regional::text(&note)}}}
         }
     }}
+}
+
+#[cfg(test)]
+mod language_tests {
+    use super::*;
+    #[test]
+    fn english_topic_prompts_keep_the_same_requests() {
+        let today=chrono::NaiveDate::from_ymd_opt(2026,10,9).unwrap();
+        for (_,_,prompt) in CHAT_TOPICS {
+            let english=crate::regional::translate(prompt,crate::regional::Language::English);
+            let a=pos_core::assistant::plan(prompt,None,today).unwrap();
+            let b=pos_core::assistant::plan(&english,None,today).unwrap();
+            assert_eq!(a,b,"{prompt} => {english}");
+        }
+    }
 }

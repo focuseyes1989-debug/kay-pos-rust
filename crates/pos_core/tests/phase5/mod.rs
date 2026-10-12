@@ -1,3 +1,4 @@
+use pos_core::storage as sqlx;
 use super::*;
 use pos_core::{
     held_sales::{self as holds, Action, Command, Hold},

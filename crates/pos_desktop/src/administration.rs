@@ -51,7 +51,16 @@ pub fn ActivityPage(db_form: DbForm, actor: Session) -> Element {
         }
         match data.read().as_ref(){None=>rsx!{p{"Loading..."}},Some(Err(e))=>rsx!{p{role:"alert","{e}"}},Some(Ok(rows))=>rsx!{
             div{class:"customers_table_scroll",table{class:"customers_table",thead{tr{th{"Date"}th{"User"}th{"Action"}th{"Details"}th{"IP address"}}}tbody{
-                for r in rows.iter().take(50){tr{key:"{r.id}",td{"{r.created_at}"}td{"{r.username}"}td{"{r.action}"}td{class:"phase6_details","{r.details}"}td{"{r.ip_address}"}}}
+                for r in rows.iter().take(50){tr{key:"{r.id}",td{"{r.created_at}"}td{"{r.username}"}td{title:"{r.action}",{crate::regional::text(&pos_core::activity::action_label(&r.action))}}td{class:"phase6_details",
+                    if pos_core::activity::readable_details(&r.details).is_empty() {"{r.details}"} else {
+                        for (label,value) in pos_core::activity::readable_details(&r.details) {
+                            div { strong { {crate::regional::text(&label)} ": " } {if label=="အချက်အလက်ရင်းမြစ်" && crate::regional::language()==crate::regional::Language::English {value.split('၊').map(|part|crate::regional::text(part.trim())).collect::<Vec<_>>().join(", ")} else if matches!(label.as_str(),"အကြောင်းအရာ"|"ဖြေဆိုနည်း"|"ရလဒ်") {crate::regional::text(&value)} else {value.clone()}} }
+                        }
+                        details { style:"margin-top:6px", summary { style:"cursor:pointer;color:#64748b", {crate::regional::text("မူရင်း code ကြည့်ရန်")} }
+                            pre { style:"white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;max-width:600px", "{r.details}" }
+                        }
+                    }
+                }td{"{r.ip_address}"}}}
             }}}
             if rows.is_empty(){p{"No activity found."}}
             footer{class:"customers_actions",button{ title:"Previous page", aria_label:"Previous page",disabled:page()==0,onclick:move |_|page-=1,crate::icons::Icon { name:"arrow_circle_left" }}span{"Page {page()+1}"}button{ title:"Next page", aria_label:"Next page",disabled:rows.len()<=50,onclick:move |_|page+=1,crate::icons::Icon { name:"arrow_circle_right" }}}

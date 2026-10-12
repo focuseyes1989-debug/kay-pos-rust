@@ -1,4 +1,5 @@
 //! Model-backed chat over an already authorized, read-only POS snapshot.
+use crate::storage as sqlx;
 use crate::{
     ai::{self, Answer, Request},
     auth::Session,

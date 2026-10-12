@@ -1,3 +1,4 @@
+use crate::storage as sqlx;
 use crate::auth::{Permission, Session};
 use anyhow::{ensure, Context, Result};
 use sqlx::PgPool;
@@ -249,19 +250,19 @@ mod database_tests {
         let path = std::env::var("KAY_TRANSFER_TEST_CONFIG")?;
         let bytes = std::fs::read_to_string(path)?;
         let config: serde_json::Value = serde_json::from_str(bytes.trim_start_matches('\u{feff}'))?;
-        let options = sqlx::postgres::PgConnectOptions::new()
+        let options = ::sqlx::postgres::PgConnectOptions::new()
             .host(config["host"].as_str().context("host")?)
             .port(config["port"].as_u64().unwrap_or(5432) as u16)
             .database(config["database"].as_str().context("database")?)
             .username(config["username"].as_str().context("username")?)
             .password(config["password"].as_str().context("password")?);
-        let pool = sqlx::postgres::PgPoolOptions::new()
+        let pool:PgPool = ::sqlx::postgres::PgPoolOptions::new()
             .max_connections(1)
             .min_connections(1)
             .max_lifetime(None)
             .idle_timeout(None)
             .connect_with(options)
-            .await?;
+            .await?.into();
         for sql in [
    "CREATE TEMP TABLE users(id integer PRIMARY KEY,username text,role text,password_hash text,salt text,is_active integer)",
    "CREATE TEMP TABLE locations(id integer,name text)",

@@ -13,12 +13,7 @@ fn path(form: &DbForm) -> Result<PathBuf> {
         .context("LOCALAPPDATA is unavailable; cannot safely save checkout")?;
     let directory = PathBuf::from(root).join("KAY POS Rust").join("pending");
     fs::create_dir_all(&directory)?;
-    let identity = format!(
-        "{}:{}:{}",
-        form.host.trim().to_lowercase(),
-        form.port.trim(),
-        form.database.trim()
-    );
+    let identity = form.identity()?;
     Ok(directory.join(format!(
         "{}.json",
         pos_core::auth::fingerprint(identity.as_bytes())

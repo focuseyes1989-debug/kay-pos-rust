@@ -1,3 +1,4 @@
+use crate::storage as sqlx;
 use crate::auth::{Permission, Session};
 use anyhow::{ensure, Context, Result};
 use serde::{Deserialize, Serialize};

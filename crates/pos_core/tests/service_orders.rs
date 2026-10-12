@@ -1,9 +1,11 @@
+use pos_core::storage as sqlx;
 use anyhow::Result;
 use pos_core::{
     auth::{self, Session},
     service_orders::{self as jobs, Action, Job, Prompt},
 };
-use sqlx::{postgres::PgPoolOptions, PgPool};
+use ::sqlx::postgres::PgPoolOptions;
+use pos_core::storage::PgPool;
 
 #[tokio::test]
 #[ignore="requires isolated P1_TEST_DATABASE_URL"]
@@ -29,21 +31,21 @@ async fn fixture() -> Result<(PgPool, Session, Session)> {
         .connect(&url)
         .await?;
     let schema = format!("jobs_{}", auth::new_request_id().replace("RUST-", ""));
-    sqlx::query(&format!("CREATE SCHEMA {schema}"))
+    ::sqlx::query(&format!("CREATE SCHEMA {schema}"))
         .execute(&bootstrap)
         .await?;
     bootstrap.close().await;
-    let pool = PgPoolOptions::new()
+    let pool:pos_core::storage::Pool = PgPoolOptions::new()
         .max_connections(4)
         .after_connect(move |conn, _| {
             let command = format!("SET search_path TO {schema}");
             Box::pin(async move {
-                sqlx::query(&command).execute(conn).await?;
+                ::sqlx::query(&command).execute(conn).await?;
                 Ok(())
             })
         })
         .connect(&url)
-        .await?;
+        .await?.into();
     sqlx::raw_sql(include_str!("fixtures/service_orders.sql"))
         .execute(&pool)
         .await?;

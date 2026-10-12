@@ -1,5 +1,7 @@
+use crate::storage as sqlx;
 use anyhow::{Context, Result};
-use sqlx::{postgres::PgPoolOptions, PgPool};
+use crate::storage::PgPool;
+use ::sqlx::postgres::PgPoolOptions;
 
 use crate::models::{AppSetting, Category, PaymentType, Product, ProductPriceTier, ProductVariant};
 
@@ -33,12 +35,16 @@ pub async fn connect(config: &DatabaseConfig) -> Result<PgPool> {
     {
         return Ok(pool);
     }
-    let pool = PgPoolOptions::new()
-        .max_connections(config.max_connections)
-        .acquire_timeout(std::time::Duration::from_secs(10))
-        .connect(&config.database_url)
-        .await
-        .context("failed to connect to PostgreSQL")?;
+    let pool: PgPool = if config.database_url.starts_with("sqlite:") {
+        crate::sqlite::connect(&config.database_url).await?
+    } else {
+        PgPoolOptions::new()
+            .max_connections(config.max_connections)
+            .acquire_timeout(std::time::Duration::from_secs(10))
+            .connect(&config.database_url)
+            .await
+            .context("failed to connect to PostgreSQL")?.into()
+    };
     let mut cache = pools.lock().unwrap();
     if cache.len() >= 4 {
         cache.retain(|_, p| !p.is_closed());

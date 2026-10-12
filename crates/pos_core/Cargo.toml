@@ -26,3 +26,23 @@ sqlx.workspace = true
 rustzk = "=1.1.0"
 
 tokio.workspace = true
+
+[dependencies.storage_derive]
+path = "../storage_derive"
+
+[dependencies.sqlparser]
+version = "0.59.0"
+features = ["visitor"]
+
+[dependencies.regex]
+version = "1"
+
+[dependencies.tempfile]
+version = "3"
+
+[dependencies.futures-util]
+version = "0.3"
+
+[dependencies.rusqlite]
+version="0.32.1"
+features=["functions"]

@@ -1,0 +1,1114 @@
+[
+  [
+    "မူရင်း code ကြည့်ရန်",
+    "View original code"
+  ],
+  [
+    "အရောင်း",
+    "Sales"
+  ],
+  [
+    "ဒီနေ့ အရောင်း ပြပါ",
+    "Show sales today"
+  ],
+  [
+    "Category ရောင်းရငွေ",
+    "Category sales"
+  ],
+  [
+    "ဒီနေ့ Service ရောင်းရငွေ ပြပါ",
+    "Show Service sales today"
+  ],
+  [
+    "Receipt များ",
+    "Receipts"
+  ],
+  [
+    "ဒီနေ့ receipt ပြပါ",
+    "Show receipts today"
+  ],
+  [
+    "Category ပါသည့် Receipt",
+    "Receipts by category"
+  ],
+  [
+    "ဒီနေ့ ရေခဲမုန့် (category) ရောင်းထားတဲ့ Receipt ပြပေးပါ",
+    "today ရေခဲမုန့် (category) receipts"
+  ],
+  [
+    "ငွေပမာဏအလိုက် Receipt",
+    "Receipts by amount"
+  ],
+  [
+    "ဒီနေ့ 10000 ကျပ် ရောင်းရတဲ့ receipt ပြပါ",
+    "receipts 10000 today"
+  ],
+  [
+    "ကုန်ပစ္စည်း",
+    "Products"
+  ],
+  [
+    "ကုန်လက်ကျန်",
+    "Inventory"
+  ],
+  [
+    "အရောင်းထိုင်း ပစ္စည်းများ",
+    "Unsold products"
+  ],
+  [
+    "ဒီလ အရောင်းထိုင်းတဲ့ ပစ္စည်းတွေကို ပြပါ",
+    "Show unsold products this month"
+  ],
+  [
+    "လက်ကျန်နည်းသည့် ပစ္စည်း",
+    "Low-stock products"
+  ],
+  [
+    "အသုံးစရိတ်",
+    "Expenses"
+  ],
+  [
+    "ဒီလ အသုံးစရိတ် ပြပါ",
+    "expenses this month"
+  ],
+  [
+    "ဖောက်သည်",
+    "Customers"
+  ],
+  [
+    "ဖောက်သည်အကြွေး",
+    "Customer credit"
+  ],
+  [
+    "ဝန်ထမ်း",
+    "Employees"
+  ],
+  [
+    "ဝန်ထမ်းတက်ရောက်မှု",
+    "Employee attendance"
+  ],
+  [
+    "လုပ်ငန်းအနှစ်ချုပ်",
+    "Business summary"
+  ],
+  [
+    "အသုံးပြုနည်း",
+    "Help"
+  ],
+  [
+    "အချက်အလက်ရယူရာတွင် အမှားဖြစ်နေပါသည် - {e:#}",
+    "Could not load data - {e:#}"
+  ],
+  [
+    "စာရင်းထဲမှ အကြောင်းအရာတစ်ခု ရွေးပြီး မေးခွန်းကို ပြင်ရေးပါ။",
+    "Choose a topic and edit your question."
+  ],
+  [
+    "မေးခွန်းကို ရိုက်ထည့်ပါ",
+    "Enter a question"
+  ],
+  [
+    "ဘာအကြောင်း မေးချင်ပါသလဲ?",
+    "What would you like to ask?"
+  ],
+  [
+    "↑ ↓ ရွေးရန် · Enter ထည့်ရန် · Esc ပိတ်ရန်",
+    "↑ ↓ Select · Enter Insert · Esc Close"
+  ],
+  [
+    "မေးနိုင်သော အကြောင်းအရာများ",
+    "Question topics"
+  ],
+  [
+    "ကိုက်ညီသည့်အကြောင်းအရာ မရှိပါ။ / တစ်ခုတည်း ရိုက်ပြီး ပြန်ရွေးပါ။",
+    "No matching topics. Type / to see all topics."
+  ],
+  [
+    "မေးခွန်း ရိုက်ပါ၊ သို့မဟုတ် / နှိပ်ပြီး အကြောင်းအရာ ရွေးပါ",
+    "Type a question, or / to choose a topic"
+  ],
+  [
+    "မေးမည့်အကြောင်းအရာ ရွေးပါ",
+    "Choose a question topic"
+  ],
+  [
+    "အမည်အတိအကျ မသေချာပါ။ ဘယ်အမည်ကို ဆိုလိုတာလဲ ရွေးပေးပါ။",
+    "The exact name is unclear. Choose the name you meant."
+  ],
+  [
+    "အနီးစပ်ဆုံး အမည်များ (ပထမအမည် 1,000 အတွင်းမှ ရှာထားသည်)",
+    "Closest names (searched among the first 1,000 names)"
+  ],
+  [
+    "အချက်အလက်များ ရယူနေပါသည်…",
+    "Loading data…"
+  ],
+  [
+    "အသုံးပြုထားသော POS အချက်အလက်",
+    "POS data used"
+  ],
+  [
+    "သက်ဆိုင်ရာ page ဖွင့်ရန် →",
+    "Open related page →"
+  ],
+  [
+    "ဒီနေ့",
+    "Today"
+  ],
+  [
+    "မနေ့က",
+    "Yesterday"
+  ],
+  [
+    "ဒီလ",
+    "This month"
+  ],
+  [
+    "ဒီနေ့ ဘာကို သိချင်ပါသလဲ?",
+    "What would you like to know today?"
+  ],
+  [
+    "ပစ္စည်းအမည်ကို တိုက်ရိုက်ရိုက်ပါ။ အရောင်း၊ ကုန်လက်ကျန်၊ အသုံးစရိတ်နဲ့ ရက်စွဲကို မေးခွန်းထဲမှာ ထည့်မေးနိုင်ပါတယ်။",
+    "Type a product name, or ask about sales, inventory and expenses. Include dates to choose a period."
+  ],
+  [
+    "ဒီနေ့ အရောင်း",
+    "Sales today"
+  ],
+  [
+    "ဒီလ အရောင်း",
+    "Sales this month"
+  ],
+  [
+    "အရောင်း နှိုင်းယှဉ်",
+    "Compare sales"
+  ],
+  [
+    "ဒီလနဲ့ ပြီးခဲ့တဲ့လ အရောင်း နှိုင်းယှဉ်ပေးပါ",
+    "Compare sales this month and last month"
+  ],
+  [
+    "အသုံးစရိတ် နှိုင်းယှဉ်",
+    "Compare expenses"
+  ],
+  [
+    "ဒီလနဲ့ ပြီးခဲ့တဲ့လ အသုံးစရိတ် နှိုင်းယှဉ်ပေးပါ",
+    "Compare expenses this month and last month"
+  ],
+  [
+    "လုပ်ငန်းအခြေအနေ",
+    "Business overview"
+  ],
+  [
+    "ကုန်လက်ကျန်နည်း",
+    "Low stock"
+  ],
+  [
+    "ပစ္စည်းစာရင်း",
+    "Product list"
+  ],
+  [
+    "Detail မရပါ: {error:#}",
+    "Could not load details: {error:#}"
+  ],
+  [
+    "Receipt detail မရပါ: {error:#}",
+    "Could not load receipt details: {error:#}"
+  ],
+  [
+    "လက်ရှိအချက်အလက်",
+    "Current data"
+  ],
+  [
+    "တွက်ချက်ပုံနှင့် Refund သတ်မှတ်ချက်",
+    "Calculations and refund rules"
+  ],
+  [
+    "အသုံးပြုထားသော သတ်မှတ်ချက်များ",
+    "Applied filters"
+  ],
+  [
+    "ရှာဖွေမှု: {request.product}",
+    "Search: {request.product}"
+  ],
+  [
+    "စုစုပေါင်း: {total}",
+    "Total: {total}"
+  ],
+  [
+    " ကို ရှာတွေ့ပါတယ်။",
+    " found."
+  ],
+  [
+    "အသေးစိတ် ကြည့်ရန် →",
+    "View details →"
+  ],
+  [
+    "ကိုက်ညီသည့်မှတ်တမ်း {answer.rows.len()} ခု တွေ့ပါတယ်။",
+    "Found {answer.rows.len()} matching records."
+  ],
+  [
+    "ကိုက်ညီသည့်မှတ်တမ်း မရှိပါ။",
+    "No matching records."
+  ],
+  [
+    "အသေးစိတ် ရယူနေပါတယ်…",
+    "Loading details…"
+  ],
+  [
+    "အသေးစိတ်",
+    "Details"
+  ],
+  [
+    "မှတ်တမ်း မရှိတော့ပါ။ Data ပြန်စစ်ပေးပါ။",
+    "The record is no longer available. Refresh the data."
+  ],
+  [
+    "CSV သိမ်းပြီးပါပြီ",
+    "CSV saved"
+  ],
+  [
+    "CSV သိမ်းမရပါ: {error}",
+    "Could not save CSV: {error}"
+  ],
+  [
+    "ဒေတာရင်းမြစ်နှင့် မှတ်ချက်များ",
+    "Data sources and notes"
+  ],
+  [
+    "အသုံးစရိတ်သည် ရွေးထားသောကာလအတွင်း မှတ်တမ်းတင်ထားသည့် amount စုစုပေါင်း ဖြစ်ပါသည်။",
+    "Expenses are the total recorded amounts within the selected period."
+  ],
+  [
+    "ရွေးထားသောကာလ / filter နှင့် ကိုက်ညီသည့် attendance မှတ်တမ်း မရှိပါ။",
+    "No attendance records match the selected period and filters."
+  ],
+  [
+    "နောက်ဆုံး attendance ရက်: {latest}",
+    "Latest attendance date: {latest}"
+  ],
+  [
+    "နောက်ဆုံးမှတ်တမ်းများ ကြည့်ရန်",
+    "View latest records"
+  ],
+  [
+    "Attendance Sync ဖြင့် device မှ data ရယူပါ သို့မဟုတ် Record Attendance ဖြင့် မှတ်တမ်းတင်ပါ။",
+    "Use Attendance Sync to fetch device data, or Record Attendance to add a record."
+  ],
+  [
+    "Receipt total သည် category တစ်ခုတည်း၏ ရောင်းရငွေ မဟုတ်ဘဲ ဘောင်ချာတစ်ခုလုံး၏ စုစုပေါင်း ဖြစ်ပါသည်။",
+    "Receipt total is the total of the whole receipt, rather than revenue for one category."
+  ],
+  [
+    "အကြောင်းအရာ",
+    "Topic"
+  ],
+  [
+    "ကာလ",
+    "Period"
+  ],
+  [
+    "အချက်အလက်ရင်းမြစ်",
+    "Data sources"
+  ],
+  [
+    "ဖြေဆိုနည်း",
+    "Response method"
+  ],
+  [
+    "ရလဒ်",
+    "Result"
+  ],
+  [
+    "အရောင်း ID",
+    "Sale ID"
+  ],
+  [
+    "ဘောင်ချာ",
+    "Invoice"
+  ],
+  [
+    "အသုံးစရိတ် ID",
+    "Expense ID"
+  ],
+  [
+    "အသုံးစရိတ်အမှတ်",
+    "Expense number"
+  ],
+  [
+    "ပစ္စည်း ID",
+    "Product ID"
+  ],
+  [
+    "အရေအတွက်",
+    "Quantity"
+  ],
+  [
+    "ငွေပမာဏ",
+    "Amount"
+  ],
+  [
+    "ဖောက်သည် ID",
+    "Customer ID"
+  ],
+  [
+    "အကြောင်းရင်း",
+    "Reason"
+  ],
+  [
+    "အခြေအနေ",
+    "Status"
+  ],
+  [
+    "အရောင်းထိုင်း / မရောင်းရသော ပစ္စည်းများ",
+    "Unsold products"
+  ],
+  [
+    "Category အလိုက် အရောင်း",
+    "Sales by category"
+  ],
+  [
+    "Parent category အလိုက် အရောင်း",
+    "Sales by parent category"
+  ],
+  [
+    "အရောင်းအနှစ်ချုပ်",
+    "Sales summary"
+  ],
+  [
+    "အရောင်းအချက်အလက် ခွဲခြမ်းစိတ်ဖြာမှု",
+    "Sales analytics"
+  ],
+  [
+    "လက်ရှိကုန်လက်ကျန်",
+    "Current inventory"
+  ],
+  [
+    "အရောင်းဘောင်ချာများ",
+    "Sales receipts"
+  ],
+  [
+    "POS ဒေတာမှ တိုက်ရိုက်တွက်ချက်",
+    "Calculated directly from POS data"
+  ],
+  [
+    "AI model ဖြင့် ဖြေဆို",
+    "AI model response"
+  ],
+  [
+    "အသုံးပြုခွင့်မရှိခြင်း သို့မဟုတ် လုပ်ဆောင်မှုမအောင်မြင်ခြင်း",
+    "Access denied or operation failed"
+  ],
+  [
+    "ကုန်ပစ္စည်း၊ ပစ္စည်းအမျိုးကွဲ၊ အရောင်း၊ ရောင်းထားသောပစ္စည်း",
+    "Products, product variants, sales, sale items"
+  ],
+  [
+    "Assistant မေးခွန်း",
+    "Assistant question"
+  ],
+  [
+    "Assistant AI စကားပြော",
+    "Assistant AI chat"
+  ],
+  [
+    "Assistant မေးခွန်း မအောင်မြင်",
+    "Assistant question failed"
+  ],
+  [
+    "Assistant အသေးစိတ်ကြည့်ခြင်း",
+    "Assistant detail viewed"
+  ],
+  [
+    "အရောင်းပြီးစီး",
+    "Sale completed"
+  ],
+  [
+    "အရောင်းပြန်အမ်း",
+    "Sale refunded"
+  ],
+  [
+    "အသုံးစရိတ် သိမ်းဆည်း",
+    "Expense saved"
+  ],
+  [
+    "အသုံးစရိတ် ဖျက်ခြင်း",
+    "Expense deleted"
+  ],
+  [
+    "Category သိမ်းဆည်း",
+    "Category saved"
+  ],
+  [
+    "Category ဖျက်ခြင်း",
+    "Category deleted"
+  ],
+  [
+    "Category group သိမ်းဆည်း",
+    "Category group saved"
+  ],
+  [
+    "အကြွေးငွေ ကောက်ခံ",
+    "Credit payment collected"
+  ],
+  [
+    "အကြွေးစာရင်း ဖွင့်ခြင်း",
+    "Credit invoice created"
+  ],
+  [
+    "အရောင်း ယာယီသိမ်း",
+    "Sale held"
+  ],
+  [
+    "ယာယီအရောင်း ပြန်ဖွင့်",
+    "Held sale resumed"
+  ],
+  [
+    "ကုန်လက်ကျန် ညှိခြင်း",
+    "Stock adjusted"
+  ],
+  [
+    "ကုန်ပစ္စည်း လက်ခံ",
+    "Stock received"
+  ],
+  [
+    "ကုန်ပစ္စည်း ထုတ်ခြင်း",
+    "Stock issued"
+  ],
+  [
+    "ကုန်လက်ကျန်စာရင်း ပြန်ပယ်ဖျက်",
+    "Inventory entry reversed"
+  ],
+  [
+    "ကုန်ပစ္စည်း နေရာပြောင်း",
+    "Stock transferred"
+  ],
+  [
+    "Service order ပြင်ဆင်",
+    "Service order edited"
+  ],
+  [
+    "Service order ဖျက်ခြင်း",
+    "Service order deleted"
+  ],
+  [
+    "Service order အခြေအနေပြောင်း",
+    "Service order status changed"
+  ],
+  [
+    "အရောင်းထိုင်း (မရောင်းရသော ပစ္စည်းများ)",
+    "Unsold products"
+  ],
+  [
+    "ရွေးထားသောကာလအတွင်း မရောင်းရဘဲ လက်ကျန်ရှိသည့် ပစ္စည်း မတွေ့ပါ။",
+    "No unsold products with current stock were found in the selected period."
+  ],
+  [
+    "ရွေးထားသောကာလအတွင်း အရောင်းမရှိဘဲ လက်ရှိလက်ကျန်ရှိသော ပစ္စည်းများ ဖြစ်ပါတယ်။",
+    "These products have current stock and no sales in the selected period."
+  ],
+  [
+    "ပထမ 50 ပစ္စည်းသာ ပြထားသည်။",
+    "Only the first 50 products are shown."
+  ],
+  [
+    "ရွေးထားသောကာလအတွင်း completed အရောင်းတွင် အရေအတွက်အပေါင်းဖြင့် ပါဝင်ခြင်းမရှိသော ပစ္စည်းများကိုသာ ပြထားသည်။ Refund လုပ်ထားသော အရောင်းကိုလည်း ရောင်းဖူးသည့်မှတ်တမ်းအဖြစ် သတ်မှတ်ထားသည်။",
+    "Only products absent from completed positive-quantity sales in the selected period are shown. Refunded sales still count as previous sales."
+  ],
+  [
+    "လက်ကျန်သည် လက်ရှိပမာဏဖြစ်သည်။ Service/Restaurant နှင့် လက်ကျန်မရှိသော ပစ္စည်းများ မပါဝင်ပါ။ ကာလမထည့်လျှင် ဒီနေ့အတွက် စစ်ဆေးသည်။",
+    "Stock is current. Service/Restaurant products and products with no stock are excluded. Without a period, today is used."
+  ],
+  [
+    "လက်ရှိလက်ကျန်",
+    "Current stock"
+  ],
+  [
+    "ဤအဖြေကို PostgreSQL ဒေတာနှင့် သတ်မှတ်ထားသော စည်းမျဉ်းများဖြင့် စက်တွင်း၌ တွက်ချက်ထားပြီး ပြင်ပ AI ဝန်ဆောင်မှုကို မဆက်သွယ်ပါ။",
+    "This answer is calculated locally from PostgreSQL data using fixed rules, without contacting an external AI service."
+  ],
+  [
+    "အများဆုံး 50 records ပြထားသည်။",
+    "Up to 50 records are shown."
+  ],
+  [
+    "လက်ရှိစာရင်းဖြစ်ပြီး ရွေးထားသောကာလ၏ သမိုင်းစာရင်းမဟုတ်ပါ။",
+    "These are current records, not historical records for the selected period."
+  ],
+  [
+    "လက်ကျန်အရေအတွက်သည် လက်ရှိစုစုပေါင်းဖြစ်ပြီး ယခင်ကာလလက်ကျန်မဟုတ်ပါ။ ဈေးနှုန်းကို database ထဲရှိ ငွေကြေးအတိုင်းပြထားပြီး ငွေလဲနှုန်းပြောင်းလဲမထားပါ။",
+    "Stock quantities are current totals, not historical stock. Prices use the database currency without currency conversion."
+  ],
+  [
+    "Service / restaurant ပစ္စည်းများ မပါဝင်ပါ။ Variant ပစ္စည်းများ၏ လက်ကျန်သည် variants စုစုပေါင်းဖြစ်သည်။",
+    "Service/Restaurant products are excluded. Variant stock is the sum of all variants."
+  ],
+  [
+    "ကိုက်ညီသည့်ကုန်ပစ္စည်းများ ထပ်ရှိနေပါသည်။ ရှာဖွေစာသားကို ပိုမိုတိကျစွာ ရိုက်ထည့်ပါ။",
+    "More matching products exist. Refine your search."
+  ],
+  [
+    "မေးခွန်းကို ရိုက်ထည့်ပါ။",
+    "Enter a question."
+  ],
+  [
+    "Category အလိုက် ရောင်းရငွေ",
+    "Sales by category"
+  ],
+  [
+    "Parent Category အလိုက် ရောင်းရငွေ",
+    "Sales by parent category"
+  ],
+  [
+    "Payment အလိုက် ရောင်းရငွေ",
+    "Sales by payment type"
+  ],
+  [
+    "လက်ရှိ Category စာရင်း",
+    "Current categories"
+  ],
+  [
+    "ကုန်ပစ္စည်း အကူအညီ",
+    "Product information"
+  ],
+  [
+    "လုပ်ငန်းအခြေအနေ အကူအညီ",
+    "Business overview"
+  ],
+  [
+    "လုပ်ငန်းအကျဉ်းချုပ်",
+    "Business summary"
+  ],
+  [
+    "လက်ရှိဖောက်သည်အကြွေး",
+    "Current customer credit"
+  ],
+  [
+    "ဖောက်သည်စာရင်း",
+    "Customers"
+  ],
+  [
+    "ဝန်ထမ်းစာရင်း",
+    "Employees"
+  ],
+  [
+    "KAY POS အသုံးပြုနည်း",
+    "KAY POS help"
+  ],
+  [
+    "Error ဖြေရှင်းနည်း",
+    "Error diagnostics"
+  ],
+  [
+    "ရောင်းရငွေ (ကျပ်)",
+    "Revenue (Ks)"
+  ],
+  [
+    "ပစ္စည်းစုစုပေါင်း (ကျပ်)",
+    "Item total (Ks)"
+  ],
+  [
+    "Category အားလုံး",
+    "All categories"
+  ],
+  [
+    "Parent Category အားလုံး",
+    "All parent categories"
+  ],
+  [
+    "မေးထားတဲ့ကာလအတွင်း {name} ရောင်းရငွေမှတ်တမ်း မရှိပါဘူး။ စုစုပေါင်း 0 ကျပ်ပါ။",
+    "No sales for {name} in the selected period. Total: 0 Ks."
+  ],
+  [
+    "မေးထားတဲ့ကာလအတွင်း {name} ရောင်းရငွေ စုစုပေါင်း {total} ကျပ် ရှိပါတယ်။",
+    "Total revenue for {name} in the selected period: {total} Ks."
+  ],
+  [
+    "{name} · ရောင်းအားအကောင်းဆုံးပစ္စည်းများ",
+    "{name} · Best-selling products"
+  ],
+  [
+    "ရွေးထားသောကာလအတွင်း {name} အတွက် ရောင်းထားသည့်ပစ္စည်း မရှိပါ။",
+    "No products sold for {name} in the selected period."
+  ],
+  [
+    "{name} ထဲမှ ပစ္စည်းများကို ရောင်းရငွေ အများဆုံးမှ အနည်းဆုံး စီထားပါသည်။ ပထမ 50 ပစ္စည်းအထိ ပြထားပါသည်။",
+    "Products in {name} are sorted by revenue, highest first. Up to 50 products are shown."
+  ],
+  [
+    "Category သည် ပစ္စည်း၏ လက်ရှိ category ဖြစ်သည်။ Receipt အရေအတွက်ကို category တစ်ခုချင်းစီအလိုက်တွက်ထား၍ category များကြား ထပ်နိုင်သည်။",
+    "Categories are the current product categories. Receipt counts are calculated per category and may overlap between categories."
+  ],
+  [
+    "ပြီးစီးသည့် receipt များသာ ပါဝင်သည်။ Category ရောင်းရငွေကို receipt Total (discount/tax အပါအဝင်) မှ ပစ္စည်းတန်ဖိုးအချိုးအလိုက် ခွဲတွက်ထားသည်။ Cash နှင့် Credit နှစ်ခုလုံး ပါဝင်ပြီး လက်ခံရရှိပြီးသော ငွေသားသီးသန့် မဟုတ်ပါ။",
+    "Only completed receipts are included. Category revenue allocates receipt totals, including discount/tax, in proportion to item values. Cash and credit are included; this is not cash received alone."
+  ],
+  [
+    "အဆင့်သတ်မှတ်မှုသည် အရေအတွက် မဟုတ်ဘဲ receipt discount/tax ခွဲဝေပြီး ရောင်းရငွေအပေါ် အခြေခံသည်။ စုစုပေါင်းတွင် ကိုက်ညီသည့် ပစ္စည်းအားလုံး ပါဝင်သည်။",
+    "Ranking uses revenue after allocating receipt discounts/tax, rather than quantity. The total includes all matching products."
+  ],
+  [
+    "မေးထားသော category ကို မတွေ့ပါ။ Category အမည်အတိအကျဖြင့် ပြန်မေးပါ။",
+    "Category not found. Ask again using the exact category name."
+  ],
+  [
+    "မေးထားတဲ့ကာလအတွင်း ကိုက်ညီတဲ့ အသုံးစရိတ်မှတ်တမ်း မရှိသေးပါဘူး။ မှတ်တမ်းတင်ထားတဲ့ စုစုပေါင်းက 0 ပါ။",
+    "No matching expenses in the selected period. Recorded total: 0."
+  ],
+  [
+    "မေးထားတဲ့ကာလအတွင်း အသုံးစရိတ် စုစုပေါင်း {total} ရှိပါတယ်။ မှတ်တမ်း {count} ခုအပေါ် အခြေခံထားပါတယ်။ အမျိုးအစားအလိုက် အသေးစိတ်ကို အောက်မှာ ကြည့်နိုင်ပါတယ်။",
+    "Total expenses in the selected period: {total}, based on {count} records. See the breakdown below."
+  ],
+  [
+    "အရောင်းရက်စွဲ",
+    "Sale date"
+  ],
+  [
+    "ပြီးစီးသည့် receipt အရေအတွက်",
+    "Completed receipts"
+  ],
+  [
+    "ပြီးစီးသည့် အရောင်းစုစုပေါင်း",
+    "Completed sales total"
+  ],
+  [
+    "အကြမ်းအမြတ်",
+    "Gross profit"
+  ],
+  [
+    "အကြွေးရောင်းစုစုပေါင်း",
+    "Credit sales total"
+  ],
+  [
+    "Refund receipt စုစုပေါင်း",
+    "Refunded receipt total"
+  ],
+  [
+    "အချက်အလက်",
+    "Metric"
+  ],
+  [
+    "တန်ဖိုး",
+    "Value"
+  ],
+  [
+    "အကြွေးရောင်းစုစုပေါင်း (အရောင်းစုစုပေါင်းတွင် ပါဝင်သည်)",
+    "Credit sales (included in total sales)"
+  ],
+  [
+    "မှတ်တမ်းတင်ထားသော အသုံးစရိတ်",
+    "Recorded expenses"
+  ],
+  [
+    "လက်ရှိရရန်ရှိ ဖောက်သည်အကြွေး",
+    "Current customer receivables"
+  ],
+  [
+    "လက်ကျန်နည်းနေသော ကုန်ပစ္စည်း",
+    "Low-stock products"
+  ],
+  [
+    "လက်ကျန်ကုန်နေသော ကုန်ပစ္စည်း",
+    "Out-of-stock products"
+  ],
+  [
+    "အရောင်းစုစုပေါင်း",
+    "Total sales"
+  ],
+  [
+    "အသုံးစရိတ်စုစုပေါင်း",
+    "Total expenses"
+  ],
+  [
+    "အရောင်း − အသုံးစရိတ်",
+    "Sales minus expenses"
+  ],
+  [
+    "အရောင်း − အသုံးစရိတ်သည် တွက်ချက်ထားသော ကျန်ငွေဖြစ်ပြီး လက်ဝယ်ငွေသား သို့မဟုတ် ဘဏ်လက်ကျန် မဟုတ်ပါ။ အကြွေးရောင်း ပါဝင်နိုင်ပါသည်။",
+    "Sales minus expenses is a calculated remainder, not cash on hand or a bank balance. Credit sales may be included."
+  ],
+  [
+    "ရွေးချယ်ထားသောကာလအတွင်း ပြီးစီးသည့် receipt {count} စောင်၊ အရောင်းစုစုပေါင်း {total}၊ အကြမ်းအမြတ် {gross_profit} နှင့် အကြွေးရောင်း {credit} ရှိပါသည်။ လက်ရှိကုန်လက်ကျန်သတိပေးချက်တွင် လက်ကျန်နည်း {low} မျိုးနှင့် လက်ကျန်ကုန် {out} မျိုးရှိပါသည်။ ကုန်ဝယ်ယူခြင်း သို့မဟုတ် အကြွေးကောက်ခံခြင်းမပြုမီ မှတ်တမ်းများကို ပြန်လည်စစ်ဆေးပါ။",
+    "Selected period: {count} completed receipts, sales {total}, gross profit {gross_profit}, and credit sales {credit}. Current alerts: {low} low-stock and {out} out-of-stock products. Review records before purchasing stock or collecting credit."
+  ],
+  [
+    "ဖောက်သည်အကြွေးနှင့် ကုန်လက်ကျန်များသည် လက်ရှိတန်ဖိုးများဖြစ်ပြီး ယခင်ကာလတန်ဖိုးများ မဟုတ်ပါ။ အသုံးစရိတ်တွင် လစာစာရင်း ပါဝင်နိုင်ပါသည်။ ဤတန်ဖိုးသည် အသားတင်အမြတ် သို့မဟုတ် လက်ဝယ်ငွေ မဟုတ်ပါ။",
+    "Receivables and stock are current values, not historical values. Expenses may include payroll. These values are not net profit or cash on hand."
+  ],
+  [
+    "Refund စုစုပေါင်းကို refund လုပ်သည့်ရက်မဟုတ်ဘဲ မူလအရောင်းရက်အလိုက် စုစည်းထားပါသည်။ အကြွေးရောင်းသည် လက်ခံရရှိပြီးသောငွေ မဟုတ်ပါ။ တန်ဖိုးအားလုံးကို database ထဲရှိ ငွေကြေးအတိုင်းပြထားပြီး ငွေလဲနှုန်းပြောင်းလဲမထားပါ။",
+    "Refund totals are grouped by the original sale date, rather than the refund date. Credit sales are not cash received. Values use the database currency without conversion."
+  ],
+  [
+    "ပြီးစီးသည့် အရောင်းများသာ ပါဝင်သည်။ Refund မပါဝင်ပါ။ ရောင်းရငွေဖြစ်ပြီး အကြွေးပြန်ဆပ်ငွေ မပါဝင်ပါ။",
+    "Only completed sales are included. Refunds and credit repayments are excluded."
+  ],
+  [
+    "မေးထားတဲ့ ရက်စွဲနဲ့ သတ်မှတ်ချက်တွေ ကိုက်ညီတဲ့ receipt မရှိပါဘူး။",
+    "No receipts match the requested dates and filters."
+  ],
+  [
+    "{payment} Receipt များ",
+    "{payment} receipts"
+  ],
+  [
+    "{category} ပါသည့် Receipt များ",
+    "Receipts containing {category}"
+  ],
+  [
+    "ငွေပေးချေမှုနည်းလမ်း: {payment}။ ပြီးစီးသည့် receipt များသာ ပြထားပါသည်။",
+    "Payment method: {payment}. Only completed receipts are shown."
+  ],
+  [
+    "ကိုက်ညီတဲ့ receipt {count} ခု{limit} ပြထားပါတယ်။ Receipt နံပါတ်ကို နှိပ်ပြီး အသေးစိတ် ကြည့်နိုင်ပါတယ်။",
+    "Showing {count} matching receipts{limit}. Click a receipt number for details."
+  ],
+  [
+    "ပြီးစီးသည့် receipt များ၏ နောက်ဆုံး Total {amount} ကျပ်ကို အတိအကျ စစ်ထားပါသည်။",
+    "Completed receipts are filtered by an exact final total of {amount} Ks."
+  ],
+  [
+    "{category} category ပစ္စည်း ရောင်းထားသော ပြီးစီးသည့် receipt များသာ ပါဝင်သည်။ Total သည် receipt တစ်စောင်လုံး၏ တန်ဖိုးဖြစ်ပြီး category သီးသန့် ရောင်းရငွေ မဟုတ်ပါ။ လက်ရှိ product category ကို အသုံးပြုထားသည်။",
+    "Only completed receipts containing {category} products are included. Total is for the whole receipt, rather than this category alone. Current product categories are used."
+  ],
+  [
+    "ထပ်ရှိသေးပါသည်။ ရက်အပိုင်းအခြားကို ကျဉ်းပြီး ပြန်မေးပါ။",
+    "More records exist. Narrow the date range and ask again."
+  ],
+  [
+    "လက်ရှိ Category စာရင်း {count} ခု ပြထားပါသည်။",
+    "Showing {count} current categories."
+  ],
+  [
+    "လက်ရှိ category စာရင်း ဖြစ်ပြီး ရက်စွဲဖြင့် စစ်ထားသည့် အရောင်းစာရင်း မဟုတ်ပါ။",
+    "This is the current category list, not sales filtered by date."
+  ],
+  [
+    "ပထမ 200 categories သာ ပြထားသည်။ အမည်ထည့်ပြီး ထပ်ရှာနိုင်ပါသည်။",
+    "Only the first 200 categories are shown. Enter a name to refine the search."
+  ],
+  [
+    "ပထမ category 50 ခုသာ ပြထားသည်။ စုစုပေါင်းတွင် category အားလုံး ပါဝင်သည်။",
+    "Only the first 50 categories are shown. Totals include all categories."
+  ],
+  [
+    "{title} · ကာလနှစ်ခု နှိုင်းယှဉ်ချက်",
+    "{title} · Period comparison"
+  ],
+  [
+    "လက်ရှိကာလ {a}၊ ယခင်ကာလ {b}။ ကွာခြားချက် {change} ({percent})။",
+    "Current period: {a}; previous period: {b}. Difference: {change} ({percent})."
+  ],
+  [
+    "ယခင်ကာလ 0 ဖြစ်သောကြောင့် ရာခိုင်နှုန်း မတွက်နိုင်ပါ",
+    "Percentage unavailable because the previous period is zero"
+  ],
+  [
+    "ရက်အပိုင်းအခြား",
+    "Date range"
+  ],
+  [
+    "လက်ရှိကာလ",
+    "Current period"
+  ],
+  [
+    "ယခင်ကာလ",
+    "Previous period"
+  ],
+  [
+    "ယခင်ကာလ {from} – {to}။ ကာလနှစ်ခု၏ ရက်အရေအတွက် မတူနိုင်ပါ။ ကွာခြားချက် = လက်ရှိ − ယခင်; ရာခိုင်နှုန်း = ကွာခြားချက် / ယခင် × 100။",
+    "Previous period: {from} – {to}. Period lengths may differ. Difference = current − previous; percentage = difference / previous × 100."
+  ],
+  [
+    "သတ်မှတ်ချက်နှင့် ကိုက်ညီသည့် data မရှိပါ။ ရက်စွဲ သို့မဟုတ် အမည်ကို ပြန်စစ်ကြည့်ပါ။",
+    "No matching data. Check the dates or name."
+  ],
+  [
+    "ပစ္စည်းရှာ/scan → quantity စစ် → customer နှင့် payment ရွေး → အရောင်းအတည်ပြုပါ။ Credit အရောင်းအတွက် customer နှင့် ခွင့်ပြုချက်လိုအပ်သည်။",
+    "Search/scan a product → check quantity → choose customer and payment → confirm the sale. Credit sales require a customer and permission."
+  ],
+  [
+    "Products တွင် name၊ SKU၊ barcode၊ price သတ်မှတ်ပါ။ Inventory တွင် Stock In/Out/Adjustment ကို reason ဖြင့်လုပ်ပါ။",
+    "Set the name, SKU, barcode and price in Products. Use Stock In/Out/Adjustment in Inventory with a reason."
+  ],
+  [
+    "Customer profile တွင် purchase history နှင့် balance စစ်ပါ။ Credit page တွင် invoice ရွေးပြီး လက်ခံငွေမှတ်တမ်းတင်ပါ။",
+    "Check purchase history and balance in the customer profile. Select an invoice in Credit to record a payment."
+  ],
+  [
+    "Date range နှင့် invoice ဖြင့်ရှာပြီး receipt details၊ print နှင့် refund ကို သက်ဆိုင်ရာခွင့်ပြုချက်ဖြင့်လုပ်ပါ။",
+    "Search by date range and invoice. View details, print or refund with the required permissions."
+  ],
+  [
+    "Employee စာရင်းနှင့် attendance ကို သက်ဆိုင်ရာ page တွင်ကြည့်ပါ။ လစာနှင့် payroll မေးခွန်းများကို chat က မပံ့ပိုးသေးပါ။",
+    "View employees and attendance on their pages. Chat does not support salary/payroll questions yet."
+  ],
+  [
+    "sales today၊ expenses this month၊ customers၊ debt၊ low stock၊ receipts၊ employees၊ attendance today၊ product <name>၊ error <message>။ ရက်စွဲ YYYY-MM-DD တစ်ရက် သို့မဟုတ် နှစ်ရက် သတ်မှတ်နိုင်သည်။",
+    "Try sales today, expenses this month, customers, debt, low stock, receipts, employees, attendance today, product <name> or error <message>. Include one or two YYYY-MM-DD dates."
+  ],
+  [
+    "ပစ္စည်းအမည်",
+    "Product name"
+  ],
+  [
+    "လက်ကျန်",
+    "Stock"
+  ],
+  [
+    "ဈေးနှုန်း",
+    "Price"
+  ],
+  [
+    "ရောင်းထားသောပစ္စည်း",
+    "Sale items"
+  ],
+  [
+    "ပစ္စည်းအမျိုးကွဲ",
+    "Product variants"
+  ],
+  [
+    "မေးခွန်းသည် ရှည်လွန်းနေပါသည်",
+    "The question is too long"
+  ],
+  [
+    "SQL command များကို အသုံးပြုခွင့်မပြုပါ",
+    "SQL commands are not allowed"
+  ],
+  [
+    "Chat မှ data ပြောင်းလဲခြင်းကို ခွင့်မပြုပါ",
+    "Changing records through chat is not allowed"
+  ],
+  [
+    "ဤမေးခွန်းအမျိုးအစားကို မပံ့ပိုးသေးပါ။ ဝန်ထမ်းဘဏ္ဍာရေး page တွင် စစ်ဆေးပါ။",
+    "This question is not supported yet. Check the employee finance page."
+  ],
+  [
+    "AI အသုံးပြုခွင့် လိုအပ်ပါသည် - {required}",
+    "AI permission required - {required}"
+  ],
+  [
+    "တစ်စိတ်တစ်ပိုင်း refund လုပ်ထားသော receipt များကို ပြန်လည်စစ်ဆေးပြီးမှ အရောင်းအကျဉ်းချုပ်တွက်နိုင်ပါမည်",
+    "Review partially refunded receipts before generating the sales summary."
+  ],
+  [
+    "မမှန်ကန်သော receipt စုစုပေါင်းများကို ပြန်လည်စစ်ဆေးပြီးမှ အကျဉ်းချုပ်ထုတ်နိုင်ပါမည်",
+    "Review invalid receipt totals before generating the summary."
+  ],
+  [
+    "ဤ category တွင် တစ်စိတ်တစ်ပိုင်း refund မှတ်တမ်းရှိပါသည်။ ရောင်းရငွေမတွက်မီ receipt များကို စစ်ဆေးပါ။",
+    "This category has partial refunds. Review receipts before calculating revenue."
+  ],
+  [
+    " (ပထမ 50 ခု)",
+    " (first 50)"
+  ],
+  [
+    "{from} – {to}: {payment} ရောင်းရငွေစုစုပေါင်း {total} Ks",
+    "{from} – {to}: {payment} total sales {total} Ks"
+  ],
+  [
+    "Payment အားလုံး",
+    "All payments"
+  ],
+  [
+    "Server IP၊ PostgreSQL service၊ network နှင့် database configuration ကို စစ်ပါ။ မသိမ်းဆည်းရသေးသောအရောင်းကို စစ်ပြီးမှ ပြန်စမ်းပါ။",
+    "Check the server IP, PostgreSQL service, network and database configuration. Check unsaved sales before retrying."
+  ],
+  [
+    "Settings > Roles & Permissions တွင် account ရဲ့ page permission ကိုစစ်ပါ။ ပြင်ပြီးနောက် logout/login ပြုလုပ်ပါ။",
+    "Check the account page permissions in Settings > Roles & Permissions. Sign out and back in after changing permissions."
+  ],
+  [
+    "Error message၊ ဖြစ်သည့် page နှင့် လုပ်ခဲ့သည့်အဆင့်များကို မှတ်သားပါ။ သိထားသည့် error ပုံစံနှင့် မကိုက်သေးပါ။ Database နှင့် app log ကိုစစ်ရန် လိုအပ်သည်။",
+    "Note the error message, page and steps. This error is not recognized yet. Check the database and app logs."
+  ],
+  [
+    "Database migration မပြည့်စုံနိုင်ပါ။ Error ထဲက table အမည်နှင့် project migration ကို စစ်ပါ။ ERP rust_erp_outbox အတွက် migrations 010–014 လိုအပ်သည်။ Backup ယူပြီးမှ migration ပြုလုပ်ပါ။",
+    "Database migrations may be incomplete. Check the table name in the error and the project migrations. ERP rust_erp_outbox requires migrations 010–014. Back up before applying migrations."
+  ],
+  [
+    "ERP worker မှ status မပို့ရသေးပါ။ ERP connection configuration နှင့် worker ဖွင့်ထားသော client ကို စစ်ဆေးပါ။",
+    "No status has been received from the ERP worker. Check the ERP connection configuration and the client running the worker."
+  ],
+  [
+    "ဤ client တွင် ERP delivery configuration မသတ်မှတ်ထားပါ သို့မဟုတ် မမှန်ပါ။ ERP API/Webhook URL ချိတ်ဆက်ပြီး app ပြန်ဖွင့်မှ delivery worker စတင်ပါမည်။ Pending သည် ERP ဆီ ပို့ရန်စောင့်နေသည့် မှတ်တမ်းဖြစ်ပြီး POS အရောင်းမသိမ်းရသေးဟု မဆိုလိုပါ။ အခြား client တွင် worker ဖွင့်ထားပါက ထို client ၏ status ကို အောက်တွင် စစ်ပါ။",
+    "ERP delivery configuration is missing or invalid on this client. Configure the ERP API/Webhook URL and restart the app to start the worker. Pending means waiting for ERP delivery; the POS sale has already been saved. If another client runs the worker, check its status below."
+  ],
+  [
+    "ရက်အပိုင်းအခြားကို 366 ရက်အတွင်း ရွေးပါ",
+    "Choose a period of up to 366 days"
+  ],
+  [
+    "ကုန်ပစ္စည်းရှာဖွေစာသား ရှည်လွန်းနေပါသည်",
+    "The product search text is too long"
+  ],
+  [
+    "Category အမည် ရှည်လွန်းပါသည်",
+    "The category name is too long"
+  ],
+  [
+    "ရက်စွဲသည် ခွင့်ပြုအပိုင်းအခြားပြင်ပ ရောက်နေပါသည်",
+    "The date is outside the supported range"
+  ],
+  [
+    "လက်ရှိ စုစုပေါင်းလက်ကျန်",
+    "Current total stock"
+  ],
+  [
+    "လမ်းညွှန်",
+    "Guidance"
+  ],
+  [
+    "Category / description ရှာဖွေစာသား: {search}",
+    "Category / description search: {search}"
+  ],
+  [
+    "လက်ကျန်ကုန်နေသောပစ္စည်းများ",
+    "Out-of-stock products"
+  ],
+  [
+    "လက်ကျန်နည်းနေသောပစ္စည်းများ",
+    "Low-stock products"
+  ],
+  [
+    "လက်ရှိကုန်လက်ကျန်စာရင်း",
+    "Current inventory"
+  ],
+  [
+    "ကုန်လက်ကျန်: {search}",
+    "Inventory: {search}"
+  ],
+  [
+    " အများဆုံး category က {name} ဖြစ်ပြီး {amount} ရှိပါတယ်။",
+    " Highest expense category: {name}, amount {amount}."
+  ],
+  [
+    "ရက်စွဲ {from} မှ {to} အထိ (နှစ်ဖက်စလုံးပါဝင်)။ ရှာဖွေစာသား: {search}။ Receipt category: {category}။ Payment: {payment}။",
+    "Dates: {from} to {to} (inclusive). Search: {search}. Receipt category: {category}. Payment: {payment}."
+  ],
+  [
+    "Detail မပံ့ပိုးသော အကြောင်းအရာပါ။",
+    "Details are not supported for this topic."
+  ],
+  [
+    "ပထမ 50 မှတ်တမ်းသာ ပြထားသည်။",
+    "Only the first 50 records are shown."
+  ],
+  [
+    "လက်ရှိ database မှ အသေးစိတ်အချက်အလက်။ တူညီသောအမည်ရှိပါက ID အလိုက် စစ်ကြည့်ပါ။",
+    "Current database details. Check IDs to distinguish records with the same name."
+  ],
+  [
+    "မေးထားတဲ့ကာလအတွင်း ကိုက်ညီတဲ့ အသုံးစရိတ်မှတ်တမ်း မရှိသေးပါဘူး။ မှတ်တမ်းတင်ထားတဲ့ စုစုပေါင်းက 0 ပါ။ အများဆုံး category က {name} ဖြစ်ပြီး {amount} ရှိပါတယ်။",
+    "No matching expenses in the selected period. Recorded total: 0. Highest expense category: {name}, amount {amount}."
+  ],
+  [
+    "မေးထားတဲ့ကာလအတွင်း အသုံးစရိတ် စုစုပေါင်း {total} ရှိပါတယ်။ မှတ်တမ်း {count} ခုအပေါ် အခြေခံထားပါတယ်။ အမျိုးအစားအလိုက် အသေးစိတ်ကို အောက်မှာ ကြည့်နိုင်ပါတယ်။ အများဆုံး category က {name} ဖြစ်ပြီး {amount} ရှိပါတယ်။",
+    "Total expenses in the selected period: {total}, based on {count} records. See the breakdown below. Highest expense category: {name}, amount {amount}."
+  ],
+  [
+    "မေးလိုသည့်အကြောင်းအရာကို ရိုက်ထည့်ပါ",
+    "Enter the topic you want to ask about"
+  ],
+  [
+    "ပစ္စည်းရှာဖွေစာသား ရှည်လွန်းနေပါသည်။ မေးခွန်းတွင် အရောင်း၊ အသုံးစရိတ်၊ ကုန်လက်ကျန် စသည့်အကြောင်းအရာကို ထည့်ပါ။",
+    "The product search text is too long. Include a topic such as sales, expenses or inventory."
+  ],
+  [
+    "လက်ရှိလ ရက်စွဲမမှန်ပါ",
+    "Invalid current-month date"
+  ],
+  [
+    "ရက်စွဲ တစ်ရက် သို့မဟုတ် နှစ်ရက်သာ သတ်မှတ်ပါ",
+    "Specify only one or two dates"
+  ],
+  [
+    "ရက်စွဲမမှန်ပါ။ ဥပမာ 5.10.2026 ကို သုံးပါ။",
+    "Invalid date. Use a date such as 5.10.2026."
+  ],
+  [
+    "မပံ့ပိုးသော ငွေပေးချေမှုနည်းလမ်းပါ",
+    "Unsupported payment method"
+  ],
+  [
+    "Receipt မေးခွန်းတွင် category အမည် ထည့်ပါ။",
+    "Include a category name in the receipt question."
+  ],
+  [
+    "Receipt ငွေပမာဏမမှန်ပါ",
+    "Invalid receipt amount"
+  ],
+  [
+    "ငွေပမာဏ အနုတ်မဖြစ်ရပါ",
+    "The amount cannot be negative"
+  ],
+  [
+    "Receipt ငွေပမာဏ တစ်ခုသာ ထည့်မေးပါ။ ဥပမာ 5.10.2026 ရက်နေ့ 10000 ကျပ် receipt ပြပါ။",
+    "Specify only one receipt amount. For example: receipts 10000 on 5.10.2026."
+  ],
+  [
+    "လွန်ခဲ့သော ရက်အရေအတွက်ကို ထည့်ပါ။ ဥပမာ လွန်ခဲ့သော ၃ ရက်က",
+    "Specify the number of days ago, for example 3 days ago."
+  ],
+  [
+    "ရက်အရေအတွက် မမှန်ပါ",
+    "Invalid number of days"
+  ],
+  [
+    "လွန်ခဲ့သော ၃ ရက်က ပုံစံဖြင့် မေးပါ",
+    "Ask using a date, for example 2026-10-06."
+  ],
+  [
+    "ရက်အရေအတွက် များလွန်းပါသည်",
+    "The number of days is too large"
+  ],
+  [
+    "အရင်မေးခွန်း မရှိသေးပါ။ ဘာအကြောင်း မေးချင်တာလဲ ထည့်ရေးပါ။",
+    "There is no previous question. Include the topic you want to ask about."
+  ],
+  [
+    "ဘယ်အချက်အလက်ကို ဆိုလိုတာလဲ ပြန်ရေးပေးပါ။",
+    "Specify which data you mean."
+  ],
+  [
+    "ဤအဖြေမှ receipt သို့ မပြောင်းနိုင်ပါ။ Category သို့မဟုတ် ရက်စွဲကို ထည့်မေးပါ။",
+    "Cannot switch this answer to receipts. Include a category or date in your question."
+  ],
+  [
+    "ကာလနှစ်ခုအတွက် စရက်/ဆုံးရက် လေးရက် သတ်မှတ်ပါ။",
+    "Specify four dates: the start and end for each period."
+  ],
+  [
+    "အရောင်း သို့မဟုတ် အသုံးစရိတ်ကို ထည့်မေးပါ။",
+    "Include sales or expenses in your question."
+  ],
+  [
+    "အရောင်း သို့မဟုတ် အသုံးစရိတ်ကို ကာလနှစ်ခု နှိုင်းယှဉ်မေးပါ။",
+    "Ask to compare sales or expenses across two periods."
+  ],
+  [
+    "အရောင်း၊ Category ရောင်းရငွေနှင့် အသုံးစရိတ်ကိုသာ ကာလနှိုင်းယှဉ်နိုင်ပါသည်။",
+    "Period comparisons support sales, category sales and expenses only."
+  ],
+  [
+    "ရက်အပိုင်းအခြားကို စရက်မှဆုံးရက်အထိ 366 ရက်အတွင်း ရွေးပါ။",
+    "Choose a start and end within a 366-day period."
+  ],
+  [
+    "တူညီသော ပစ္စည်းအမည်များရှိပါသည်။ SKU သို့မဟုတ် barcode ဖြင့် ပြန်မေးပါ။",
+    "Multiple products have this name. Ask using an exact SKU or barcode."
+  ],
+  [
+    "မေးထားသော category သို့မဟုတ် ပစ္စည်းကို မတွေ့ပါ။ အမည်၊ SKU သို့မဟုတ် barcode အတိအကျဖြင့် ပြန်မေးပါ။",
+    "Category or product not found. Ask using the exact name, SKU or barcode."
+  ],
+  [
+    "{name} · ကုန်ပစ္စည်း အရောင်း",
+    "{name} · Product sales"
+  ],
+  [
+    "ပစ္စည်းတစ်မျိုးတည်း၏ အရောင်းဖြစ်သည်။ ပြီးစီးသည့် receipt များမှ discount/tax ကို ပစ္စည်းတန်ဖိုးအချိုးအလိုက် ခွဲတွက်ထားသည်။ Cash နှင့် Credit နှစ်ခုလုံး ပါဝင်သည်။",
+    "Sales for this product only. Completed receipt discounts/tax are allocated in proportion to item values. Cash and credit are both included."
+  ]
+]

@@ -11,7 +11,7 @@ pub const FIELDS: [(&str, &str, &str); 9] = [
     ("ui_sidebar_color", "Side menu", "#101827"),
     ("ui_icon_hover_color", "Icon hover", "#60a5fa"),
 ];
-const PRESETS: [(&str, [&str; 9]); 9] = [
+pub(crate) const PRESETS: [(&str, [&str; 9]); 9] = [
     (
         "Blue",
         [
@@ -74,7 +74,7 @@ pub fn valid(value: &str) -> bool {
         && value.as_bytes()[1..].iter().all(u8::is_ascii_hexdigit)
 }
 
-fn foreground(color: &str) -> &'static str {
+pub(crate) fn foreground(color: &str) -> &'static str {
     let rgb = u32::from_str_radix(&color[1..], 16).unwrap_or(0);
     let channel = |shift: u32| {
         let v = f64::from((rgb >> shift) & 255u32) / 255.0;

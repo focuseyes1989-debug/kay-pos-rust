@@ -1,3 +1,4 @@
+use crate::storage as sqlx;
 use crate::{ai::{self, Answer, Request, Scope}, auth::Session};
 use anyhow::{ensure, Context, Result};
 use chrono::{Datelike, Duration, NaiveDate};
@@ -99,6 +100,13 @@ pub async fn candidates(pool:&PgPool,actor:&Session,r:&Request)->Result<Vec<Stri
         tx.commit().await?;return Ok(choices);
     }
     if matches!(r.scope,Scope::CategorySales|Scope::Receipts) && q=="service" && names.iter().any(|n|normalized(n)=="services") {tx.commit().await?;return Ok(vec![]);}
+    if r.scope==Scope::CategorySales {
+        // A named sales subject can be a product, not just a category.
+        // Exact product matches must win over approximate category suggestions.
+        ai::authorize(&mut tx,actor,Scope::Products).await?;
+        let exists:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM products WHERE lower(trim(name))=lower(trim($1)) OR lower(trim(sku))=lower(trim($1)) OR lower(trim(barcode))=lower(trim($1)))").bind(term.trim()).fetch_one(&mut *tx).await?;
+        if exists {tx.commit().await?;return Ok(vec![]);}
+    }
     if r.scope==Scope::Products {
         let exists:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM products WHERE strpos(lower(name||' '||COALESCE(sku,'')||' '||COALESCE(barcode,'')),lower($1))>0)").bind(term).fetch_one(&mut *tx).await?;
         if exists {tx.commit().await?;return Ok(vec![]);}
@@ -192,7 +200,7 @@ mod tests {
     #[test]
     fn amount_payment_and_category_filters_survive_followups() {
         let today=NaiveDate::from_ymd_opt(2026,10,5).unwrap();
-        let previous=Request {best_sellers:false,scope:Scope::Receipts,from:"2026-10-05".into(),to:"2026-10-05".into(),product:"amount:10000".into(),receipt_category:"Services".into(),receipt_payment:"kpay".into()};
+        let previous=Request {best_sellers:false,best_seller_limit:None,scope:Scope::Receipts,from:"2026-10-05".into(),to:"2026-10-05".into(),product:"amount:10000".into(),receipt_category:"Services".into(),receipt_payment:"kpay".into()};
         let next=plan("မနေ့ကရော?",Some(&previous),today).unwrap();
         assert_eq!(next.request.product,previous.product);assert_eq!(next.request.receipt_category,previous.receipt_category);assert_eq!(next.request.receipt_payment,previous.receipt_payment);
         assert!(plan("today",None,today).is_err());

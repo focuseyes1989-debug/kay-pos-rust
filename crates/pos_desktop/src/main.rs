@@ -8,9 +8,11 @@ mod service_orders;
 mod app_icon;
 mod icons;
 mod appearance_colors;
+mod theme_editor;
 mod local_appearance;
 mod employees;
 mod regional;
+mod language_switcher;
 mod cash_drawer;
 mod categories;
 mod customer_display;
@@ -63,7 +65,7 @@ use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fs, path::PathBuf};
 use tokio::time::{sleep, Duration};
 
-const APP_CSS: &str = concat!(include_str!("../assets/app.css"), "\n", include_str!("../assets/myanmar-text.css"), "\n", include_str!("../assets/compact-controls.css"));
+const APP_CSS: &str = concat!(include_str!("../assets/app.css"), "\n", include_str!("../assets/myanmar-text.css"), "\n", include_str!("../assets/compact-controls.css"), "\n", include_str!("../assets/theme-editor.css"), "\n", include_str!("../assets/database-dialog.css"));
 const PRODUCT_BATCH_SIZE: usize = 60;
 
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
@@ -118,6 +120,10 @@ enum WorkspaceView {
 
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
 struct DbForm {
+    #[serde(default)]
+    standalone: bool,
+    #[serde(default = "default_sqlite_path")]
+    sqlite_path: String,
     host: String,
     port: String,
     database: String,
@@ -128,6 +134,8 @@ struct DbForm {
 impl Default for DbForm {
     fn default() -> Self {
         Self {
+            standalone: false,
+            sqlite_path: default_sqlite_path(),
             host: "192.168.110.112".to_string(),
             port: "5432".to_string(),
             database: "zay_pos".to_string(),
@@ -195,6 +203,7 @@ fn App() -> Element {
     });
     let mut products = use_signal(Vec::<Product>::new);
     use_effect(|| { let _ = document::eval(include_str!("../assets/page-refresh.js")); });
+    use_effect(|| { let _ = document::eval(include_str!("../assets/receipt-sticky.js")); });
     use_effect(|| {let _=document::eval(include_str!("../assets/receipt-drag.js"));});
     use_effect(|| {let _=document::eval(include_str!("../assets/search-autocomplete.js"));});
     let mut categories = use_signal(Vec::<UiCategory>::new);
@@ -259,6 +268,10 @@ fn App() -> Element {
     // Apply local colors on the first render, before asynchronous database loading.
     let mut app_settings = use_signal(|| local_appearance::load().unwrap_or_default());
     use_context_provider(move || regional::RegionalSettings(app_settings));
+    use_effect(move || {
+        let lang=if regional::Language::from_settings(&app_settings.read())==regional::Language::English {"en"} else {"my"};
+        document::eval(&format!("document.documentElement.lang='{lang}';"));
+    });
     let profile_image = use_resource(move || {
         let visible=show_side_menu();
         let user=session.read().clone();
@@ -540,6 +553,7 @@ fn App() -> Element {
 
     rsx! {
         style { "{APP_CSS}" }
+        style { "{theme_editor::stylesheet(&app_settings.read())}" }
         main { class: "shell",
             "data-theme": appearance_mode(&app_settings.read()),
             style: appearance_colors::style(&app_settings.read()),
@@ -592,6 +606,7 @@ fn App() -> Element {
                         onclick:move |_| { let _ = document::eval("window.KayPageRefresh?.refresh()"); },
                         icons::Icon {name:"refresh"}
                     }
+                    language_switcher::LanguageSwitcher {}
                 }
             }
 
@@ -795,7 +810,11 @@ fn App() -> Element {
                     payment_status: payment_status.read().clone(),
                     on_query: move |value| settings_query.set(value),
                     on_page: move |value| settings_page.set(value),
-                    on_open_db: move |_| show_db_dialog.set(true),
+                    on_open_db: move |_| {
+                        if !cart.read().is_empty()||checkout_saving()||show_checkout()||!matches!(&*pending.read(),Ok(None))||held_token().is_some() {
+                            message_box.set(Some("Finish or hold the current sale and resolve pending checkout before changing databases.".into()));
+                        }else{show_db_dialog.set(true);}
+                    },
                     on_back: move |_| active_view.set(WorkspaceView::Sales),
                     on_payment_select: move |selection: (i32, String)| {
                         selected_payment_id.set((selection.0 > 0).then_some(selection.0));
@@ -1076,6 +1095,16 @@ fn App() -> Element {
                             }
                         }
                     }
+                    // Keep suggestions independent of the filtered/paginated cards.
+                    div { hidden: true, "data-sales-search-catalog": "true",
+                        for product in products.read().iter().filter(|p| selected_category().map(|id| p.category_id == Some(id)).unwrap_or(true)) {
+                            span {
+                                "data-search-value": product.name.clone(),
+                                "data-search-detail": format!("SKU: {} · {} Ks", product.sku.as_deref().unwrap_or("—"), format_ks(product.price)),
+                                "data-search-match": format!("{} {} {}", product.name, product.sku.as_deref().unwrap_or(""), product.barcode.as_deref().unwrap_or("")),
+                            }
+                        }
+                    }
                     div { class: "product_grid",
                         if *product_cards_loading.read() || !sales_catalog.finished() {
                             div { class: "product_loading",
@@ -1203,7 +1232,7 @@ fn App() -> Element {
                                         String::new()
                                     });
                                     if held_token().is_none(){checkout_sale_type.set(default_payment_type(&settings, &available_payment_types));}
-                                    received.set(if held_token().is_some()&&checkout_sale_type().eq_ignore_ascii_case("credit"){ "0".into() }else{format!("{payable_total:.0}")});
+                                    received.set(checkout_default_received(&checkout_sale_type(), payable_total));
                                     show_checkout.set(true);
                                     if held_token().is_none(){checkout_customer.set(None);}
                                 },
@@ -1503,8 +1532,10 @@ fn CheckoutDialog(
     on_cancel: EventHandler<()>,
     on_save: EventHandler<()>,
 ) -> Element {
+    let loading_sale_type = sale_type.clone();
     let checkout_data = use_resource(move || {
         let source = db_form.clone();
+        let initial_sale_type = loading_sale_type.clone();
         async move {
             let result = async {
                 let pool = connect(&source.database_config()?).await?;
@@ -1520,9 +1551,9 @@ fn CheckoutDialog(
             if let Ok((_, settings)) = &result {
                 let value = checkout_default_discount(settings, total);
                 on_discount.call(format!("{value:.2}"));
-                on_received.call(format!(
-                    "{:.2}",
-                    (total - value).max(0.0) + checkout_tax(settings, total - value)
+                on_received.call(checkout_default_received(
+                    &initial_sale_type,
+                    (total - value).max(0.0) + checkout_tax(settings, total - value),
                 ));
             }
             result.map_err(|e| format!("{e:#}"))
@@ -1545,6 +1576,7 @@ fn CheckoutDialog(
     let received_value = received.parse::<f64>().unwrap_or(0.0);
     let change = (received_value - payable_total).max(0.0);
     let credit = sale_type.eq_ignore_ascii_case("Credit");
+    let displayed_balance = if credit { (payable_total - received_value).max(0.0) } else { change };
     let ready_to_save = received_value.is_finite()
         && received_value >= 0.0
         && (if credit {
@@ -1597,7 +1629,7 @@ fn CheckoutDialog(
                             div { span { "Tax" } strong { "{format_ks(tax)}" } }
                             div { class: "checkout_total_row", span { "Total" } strong { "{format_ks(payable_total)}" } }
                             div { span { "Received" } strong { "{format_ks(received_value)}" } }
-                            div { span { "Change" } strong { "{format_ks(change)}" } }
+                            div { span { if credit { "Credit balance" } else { "Change" } } strong { "{format_ks(displayed_balance)}" } }
                         }
                         div { class: "checkout_form",
                             label {
@@ -1891,8 +1923,8 @@ fn SettingsCenterPage(
                             title: "Appearance",
                             key: "{active_page}",
                             db_form: db_form.clone(), on_saved,
-                            description: "Appearance values loaded from PostgreSQL settings.",
-                            rows: settings_rows(&settings, &["theme", "follow_system_theme", "window_resolution", "ui_header_color", "ui_status_color", "ui_button_color", "ui_hover_color", "ui_focus_color", "ui_category_color", "ui_product_hover_color", "ui_sidebar_color", "ui_icon_hover_color"])
+                            description: "Appearance and presets are saved on this computer.",
+                            rows: settings_rows(&settings, &["theme", "follow_system_theme", "window_resolution", "ui_header_color", "ui_status_color", "ui_button_color", "ui_hover_color", "ui_focus_color", "ui_category_color", "ui_product_hover_color", "ui_sidebar_color", "ui_icon_hover_color", "ui_theme_editor_v1", "ui_theme_preset_library_v1"])
                         }
                     } else if active_page == "receipt" {
                         SettingsSection {
@@ -1945,7 +1977,7 @@ fn SettingsOverview(
             }
             SettingsCard {
                 title: "Database",
-                value: format!("{}:{} / {}", db_form.host, db_form.port, db_form.database),
+                value: db_form.label(),
                 action: db_status
             }
             SettingsCard {
@@ -1973,27 +2005,75 @@ fn SettingsOverview(
 }
 
 #[component]
-fn SettingsDatabase(
-    db_form: DbForm,
-    db_status: String,
-    on_open_db: EventHandler<MouseEvent>,
-) -> Element {
+fn SettingsDatabase(db_form:DbForm,db_status:String,on_open_db:EventHandler<MouseEvent>)->Element {
+    let mut backup_status=use_signal(String::new);
+    let mut backing_up=use_signal(||false);
+    let backup_form=db_form.clone();
+    let export_form=db_form.clone();let import_form=db_form.clone();
+    let session=use_context::<Signal<Option<pos_core::auth::Session>>>();
+    let actor=session.read().clone();let export_actor=actor.clone();let import_actor=actor.clone();
+    let mut transferring=use_signal(||false);
+    let mut transfer_status=use_signal(String::new);
+
     rsx! {
-        div { class: "settings_form_page",
-            div { class: "settings_info_block",
-                strong { "PostgreSQL Database" }
-                span { "The Rust POS client reads and writes to the configured PostgreSQL server." }
+        div {class:"settings_form_page",
+            div {class:"settings_info_block",
+                strong {if db_form.standalone{"SQLite Standalone"}else{"PostgreSQL Server"}}
+                span {if db_form.standalone{"Shop records are stored on this computer. No database server or automatic sync is used."}else{"Shop records are stored on your configured PostgreSQL server."}}
             }
-            div { class: "settings_kv",
-                div { span { "Host" } strong { "{db_form.host}" } }
-                div { span { "Port" } strong { "{db_form.port}" } }
-                div { span { "Database" } strong { "{db_form.database}" } }
-                div { span { "Username" } strong { "{db_form.username}" } }
-                div { span { "Status" } strong { "{db_status}" } }
+            div {class:"settings_kv",
+                div {span {"Database"} strong {"{db_form.label()}"}}
+                div {span {"Status"} strong {"{db_status}"}}
             }
-            div { class: "settings_page_actions",
-                button { onclick: move |event| on_open_db.call(event), crate::icons::ActionLabel { label:"Open DB Settings" } }
+            div {class:"settings_page_actions",
+                button {onclick:move |e|on_open_db.call(e),crate::icons::ActionLabel {label:"Open DB Settings"}}
+                if db_form.standalone {
+                    button {disabled:backing_up(),onclick:move |_|{
+                        let form=backup_form.clone();backing_up.set(true);backup_status.set(String::new());
+                        spawn(async move {
+                            if let Some(file)=rfd::AsyncFileDialog::new().set_file_name(format!("kay-pos-backup-{}.db",chrono::Local::now().format("%Y%m%d-%H%M%S"))).add_filter("SQLite backup",&["db"]).save_file().await {
+                                let result=async {let pool=connect(&form.database_config()?).await?;pos_core::sqlite::backup(&pool,file.path()).await}.await;
+                                backup_status.set(match result{Ok(())=>format!("Backup saved: {}",file.path().display()),Err(e)=>format!("Backup failed: {e:#}")});
+                            }
+                            backing_up.set(false);
+                        });
+                    },if backing_up(){"Creating backup..."}else{"Back up standalone database"}}
+                }
             }
+            if actor.as_ref().is_some_and(|a|a.allows(pos_core::auth::Permission::Admin)) {
+                div {class:"settings_info_block",
+                    strong {"Import / Export shop data"}
+                    span {"Export a complete standalone .db snapshot, including shop records and accounts. Import creates a new local file. No merge or automatic sync."}
+                }
+                div {class:"settings_page_actions",
+                    button {disabled:transferring(),onclick:move |_|{
+                        let form=export_form.clone();let actor=export_actor.clone();
+                        transferring.set(true);transfer_status.set(String::new());
+                        spawn(async move {
+                            if let Some(file)=rfd::AsyncFileDialog::new().set_file_name(format!("kay-pos-export-{}.db",chrono::Local::now().format("%Y%m%d-%H%M%S"))).add_filter("KAY POS database export",&["db"]).save_file().await {
+                                let result=async {let actor=actor.context("Sign in as an administrator")?;let pool=connect(&form.database_config()?).await?;pos_core::data_transfer::export(&pool,&actor,file.path()).await}.await;
+                                transfer_status.set(match result {Ok(report)=>format!("Export saved: {} ({} tables, {} records). Keep this file private; it contains shop accounts.",file.path().display(),report.tables,report.rows),Err(e)=>format!("Export failed: {e:#}")});
+                            }
+                            transferring.set(false);
+                        });
+                    },if transferring(){"Please wait…"}else{"Export shop data"}}
+                    button {disabled:transferring(),onclick:move |_|{
+                        let form=import_form.clone();let actor=import_actor.clone();
+                        transferring.set(true);transfer_status.set(String::new());
+                        spawn(async move {
+                            if let Some(source)=rfd::AsyncFileDialog::new().add_filter("KAY POS export or backup",&["db","sqlite3"]).pick_file().await {
+                                if let Some(destination)=rfd::AsyncFileDialog::new().set_file_name(format!("kay-pos-imported-{}.db",chrono::Local::now().format("%Y%m%d-%H%M%S"))).add_filter("New standalone database",&["db"]).save_file().await {
+                                    let result=async {let actor=actor.context("Sign in as an administrator")?;let pool=connect(&form.database_config()?).await?;let mut conn=pool.acquire().await?;actor.authorize(&mut conn,pos_core::auth::Permission::Admin).await?;drop(conn);pos_core::data_transfer::import(source.path(),destination.path()).await}.await;
+                                    transfer_status.set(match result {Ok(report)=>format!("Import complete: {} ({} records). Open DB Settings, select SQLite and this file, then sign in with the imported account.",destination.path().display(),report.rows),Err(e)=>format!("Import failed: {e:#}")});
+                                }
+                            }
+                            transferring.set(false);
+                        });
+                    },"Import to new standalone file"}
+                }
+                if !transfer_status().is_empty(){p {role:"status","{transfer_status}"}}
+            }
+            if !backup_status().is_empty(){p {role:"status","{backup_status}"}}
         }
     }
 }
@@ -2151,12 +2231,12 @@ fn SettingsSection(
                                     span { "{label}" }
                                     select {
                                         disabled: saving(),
-                                        value: draft.read().get(key).cloned().or_else(|| original.iter().find(|(k,_)| k == key).map(|(_,v)| v.clone())).unwrap_or_else(|| if key == "language" { "en".into() } else { String::new() }),
+                                        value: draft.read().get(key).cloned().or_else(|| original.iter().find(|(k,_)| k == key).map(|(_,v)| v.clone())).unwrap_or_else(|| if key == "language" { "my".into() } else { String::new() }),
                                         onchange: move |event| { draft.write().insert(key.into(), event.value()); notice.set(String::new()); },
                                         if key == "currency" { option { value: "", "Currency" } }
                                         for (value, name) in options {
                                             option { value,
-                                                selected: draft.read().get(key).or_else(|| original.iter().find(|(k,_)| k == key).map(|(_,v)| v)).map(|v| v == value).unwrap_or(key == "language" && value == "en"),
+                                                selected: draft.read().get(key).or_else(|| original.iter().find(|(k,_)| k == key).map(|(_,v)| v)).map(|v| v == value).unwrap_or(key == "language" && value == "my"),
                                                 "{name}"
                                             }
                                         }
@@ -2194,7 +2274,7 @@ fn SettingsSection(
                     }
                 }
                 div { class: "tax_discount_form",
-                    appearance_colors::ColorPreferences { draft, original: original.clone(), saving: saving() }
+                    theme_editor::Editor { draft, original: original.clone(), saving: saving(), on_saved }
                 }
             } else if title == "Tax & Discount" {
                 div { class: "tax_discount_form",
@@ -2292,11 +2372,20 @@ fn SettingsSection(
                     let mut values = draft.read().iter().filter(|(key, _)| allowed.contains(key)).map(|(key, value)| (key.clone(), value.clone())).collect::<Vec<_>>();
                     if title=="Receipt" {let mut merged:HashMap<String,String>=original.clone().into_iter().collect();merged.extend(draft.read().clone());if let Err(e)=receipt_editor::validate(&merged){error.set(true);notice.set(e.to_string());return;}}
                     if title == "Regional" {
+                        if values.iter().any(|(key,_)|key=="language") {
+                            values.push(("language_ui_version".into(),"1".into()));
+                        }
                         if let Some(symbol) = values.iter().find(|(k,_)| k == "currency").and_then(|(_,v)| match v.as_str() { "Kyats (Ks)" => Some("Ks"), "Dollar ($)" => Some("$"), "Baht (B)" => Some("B"), _ => None }) {
                             values.push(("currency_symbol".into(), symbol.into()));
                         }
                     }
                     for (key, value) in &values {
+                        if key == theme_editor::KEY {
+                            if let Err(message) = theme_editor::validate(value) { error.set(true); notice.set(message); return; }
+                        }
+                        if key == theme_editor::LIBRARY_KEY {
+                            if let Err(message) = theme_editor::validate_library(value) { error.set(true); notice.set(message); return; }
+                        }
                         if appearance_colors::FIELDS.iter().any(|(color_key,_,_)| *color_key == key.as_str()) && !appearance_colors::valid(value) {
                             error.set(true); notice.set("Choose a valid color.".into()); return;
                         }
@@ -2312,8 +2401,14 @@ fn SettingsSection(
                             if local_only {
                                 return local_appearance::save(&values);
                             }
-                            let pool = connect(&form.database_config()?).await?;
-                            pos_core::db::save_settings(&pool, &values).await
+                            let (local, shared): (Vec<_>, Vec<_>) = values.iter().cloned()
+                                .partition(|(key, _)| local_appearance::is_key(key));
+                            if !shared.is_empty() {
+                                let pool = connect(&form.database_config()?).await?;
+                                pos_core::db::save_settings(&pool, &shared).await?;
+                            }
+                            if !local.is_empty() { local_appearance::save(&local)?; }
+                            Ok(())
                         }.await;
                         saving.set(false);
                         match result {
@@ -3251,68 +3346,74 @@ fn filter_receipts(
 
 
 #[component]
-fn DbSettingsDialog(
-    form: DbForm,
-    on_cancel: EventHandler<MouseEvent>,
-    on_save: EventHandler<DbForm>,
-) -> Element {
-    let mut draft = use_signal(|| form);
-
+fn DbSettingsDialog(form:DbForm,on_cancel:EventHandler<MouseEvent>,on_save:EventHandler<DbForm>)->Element {
+    let mut draft=use_signal(||form);
+    let mut admin_name=use_signal(||"admin".to_string());
+    let mut admin_password=use_signal(String::new);
+    let mut busy=use_signal(||false);
+    let mut error=use_signal(String::new);
     rsx! {
-        div { class: "modal_backdrop",
-            section { class: "db_dialog",
-                div { class: "dialog_head",
-                    div {
-                        strong { "PostgreSQL Connection" }
-                        small { "Connect this POS client to the Server PC database." }
-                    }
-                    button { onclick: move |event| on_cancel.call(event), "x" }
+        div {class:"modal_backdrop",
+            section {class:"db_dialog db_setup",role:"dialog",aria_modal:"true",aria_labelledby:"database-dialog-title",
+                div {class:"dialog_head",div {strong {id:"database-dialog-title","Database connection"} small {"Choose where this POS stores its data."}}
+                    button {class:"dialog_close_icon",aria_label:"Close database settings",disabled:busy(),onclick:move |e|on_cancel.call(e),"×"}
                 }
-                div { class: "dialog_grid",
-                    label {
-                        "Server IP / Host"
-                        input {
-                            value: "{draft.read().host}",
-                            oninput: move |event| draft.write().host = event.value()
+                div {class:"dialog_grid db_setup_body",
+                    div {class:"full db_mode_switch",role:"group",aria_label:"Database mode",
+                        button {class:if draft.read().standalone{"db_mode active"}else{"db_mode"},aria_pressed:draft.read().standalone,disabled:busy(),onclick:move |_|draft.write().standalone=true,
+                            strong {"SQLite"} small {"Standalone · This computer"}
+                        }
+                        button {class:if !draft.read().standalone{"db_mode active"}else{"db_mode"},aria_pressed:!draft.read().standalone,disabled:busy(),onclick:move |_|draft.write().standalone=false,
+                            strong {"PostgreSQL"} small {"Server · Shared database"}
                         }
                     }
-                    label {
-                        "Port"
-                        input {
-                            value: "{draft.read().port}",
-                            oninput: move |event| draft.write().port = event.value()
+                    if draft.read().standalone {
+                        label {class:"full","Database file"
+                            div {class:"db_file_row",
+                                input {disabled:busy(),title:"{draft.read().sqlite_path}",value:"{draft.read().sqlite_path}",oninput:move |e|draft.write().sqlite_path=e.value()}
+                                button {class:"db_browse",r#type:"button",disabled:busy(),onclick:move |_|{spawn(async move {
+                                    if let Some(file)=rfd::AsyncFileDialog::new().set_file_name("pos.db").add_filter("SQLite database",&["db","sqlite3"]).save_file().await {
+                                        draft.write().sqlite_path=file.path().to_string_lossy().into_owned();
+                                    }
+                                });},"Browse…"}
+                            }
                         }
-                    }
-                    label {
-                        "Database"
-                        input {
-                            value: "{draft.read().database}",
-                            oninput: move |event| draft.write().database = event.value()
+                        p {class:"full db_setup_hint","Stored on this computer. New files start empty; existing files keep their data. No automatic sync."}
+                        fieldset {class:"full db_admin_setup",
+                            legend {"New database setup"}
+                            div {class:"db_admin_fields",
+                                label {"Admin username" input {disabled:busy(),autocomplete:"username",value:admin_name(),oninput:move |e|admin_name.set(e.value())}}
+                                label {"Admin password" input {disabled:busy(),r#type:"password",autocomplete:"new-password",placeholder:"At least 8 characters",value:admin_password(),oninput:move |e|admin_password.set(e.value())}}
+                            }
+                            p {class:"db_setup_hint","Only needed for a new database. Existing accounts stay unchanged."}
                         }
-                    }
-                    label {
-                        "Username"
-                        input {
-                            value: "{draft.read().username}",
-                            oninput: move |event| draft.write().username = event.value()
-                        }
-                    }
-                    label { class: "full",
-                        "Password"
-                        input {
-                            r#type: "password",
-                            value: "{draft.read().password}",
-                            oninput: move |event| draft.write().password = event.value()
-                        }
+                    }else{
+                        label {"Server IP / Host" input {disabled:busy(),value:"{draft.read().host}",oninput:move |e|draft.write().host=e.value()}}
+                        label {"Port" input {disabled:busy(),value:"{draft.read().port}",oninput:move |e|draft.write().port=e.value()}}
+                        label {"Database" input {disabled:busy(),value:"{draft.read().database}",oninput:move |e|draft.write().database=e.value()}}
+                        label {"Username" input {disabled:busy(),value:"{draft.read().username}",oninput:move |e|draft.write().username=e.value()}}
+                        label {class:"full","Password" input {disabled:busy(),r#type:"password",value:"{draft.read().password}",oninput:move |e|draft.write().password=e.value()}}
                     }
                 }
-                div { class: "dialog_actions",
-                    button { onclick: move |event| on_cancel.call(event), crate::icons::ActionLabel { label:"Cancel" } }
-                    button {
-                        class: "primary",
-                        onclick: move |_| on_save.call(draft.read().clone()),
-                        "Save & Test"
-                    }
+                if !error().is_empty(){p {class:"db_setup_error",role:"alert","{error}"}}
+                div {class:"dialog_actions",
+                    button {disabled:busy(),onclick:move |e|on_cancel.call(e),"Cancel"}
+                    button {class:"primary",disabled:busy(),onclick:move |_|{
+                        let candidate=draft();let username=admin_name();let password=admin_password();
+                        busy.set(true);error.set(String::new());
+                        spawn(async move {
+                            let result=async {
+                                validate_database_switch(&load_saved_db_form(),&candidate)?;
+                                let pool=connect(&candidate.database_config()?).await?;
+                                if candidate.standalone&&pos_core::sqlite::needs_admin(&pool).await? {
+                                    pos_core::sqlite::create_initial_admin(&pool,&username,&password).await?;
+                                }
+                                Ok::<_,anyhow::Error>(())
+                            }.await;
+                            busy.set(false);
+                            match result{Ok(())=>{admin_password.set(String::new());on_save.call(candidate);},Err(e)=>error.set(format!("{e:#}"))}
+                        });
+                    },if busy(){"Testing database..."}else{"Save & Test"}}
                 }
             }
         }
@@ -3320,7 +3421,45 @@ fn DbSettingsDialog(
 }
 
 impl DbForm {
+    fn local_database_path(&self)->anyhow::Result<PathBuf> {
+        anyhow::ensure!(!self.sqlite_path.trim().is_empty(),"Choose a standalone database file");
+        let path=PathBuf::from(self.sqlite_path.trim());
+        anyhow::ensure!(!self.sqlite_path.starts_with("\\\\")&&!self.sqlite_path.starts_with("//"),"Standalone databases must be on this computer, not a network share");
+        let path=if path.is_absolute(){path}else{std::env::current_dir()?.join(path)};
+        anyhow::ensure!(path.file_name().is_some(),"Choose a database file");
+        // Resolve existing parents as well as lexical aliases before the file exists,
+        // so the recovery identity remains the same after first creation.
+        let mut normalized=PathBuf::new();
+        for component in path.components() {
+            match component {
+                std::path::Component::CurDir=>{},
+                std::path::Component::ParentDir=>{normalized.pop();},
+                other=>normalized.push(other.as_os_str()),
+            }
+        }
+        let mut ancestor=normalized.as_path();let mut missing=Vec::new();
+        while !ancestor.exists() {
+            if let Some(name)=ancestor.file_name(){missing.push(name.to_os_string());}
+            ancestor=ancestor.parent().context("Invalid standalone path")?;
+        }
+        let mut resolved=ancestor.canonicalize()?;
+        for name in missing.into_iter().rev(){resolved.push(name);}
+        Ok(PathBuf::from(resolved.to_string_lossy().trim_start_matches("\\\\?\\")))
+    }
+    fn identity(&self)->anyhow::Result<String> {
+        if self.standalone {
+            let path=self.local_database_path()?;
+            let normalized=path.canonicalize().unwrap_or(path).to_string_lossy().trim_start_matches("\\\\?\\").replace('\\',"/");
+            return Ok(format!("sqlite:{}",if cfg!(windows){normalized.to_lowercase()}else{normalized}));
+        }
+        Ok(format!("{}:{}:{}",self.host.trim().to_lowercase(),self.port.trim(),self.database.trim()))
+    }
+    fn label(&self)->String {if self.standalone{format!("Standalone · {}",self.sqlite_path)}else{format!("PostgreSQL · {}:{} / {}",self.host,self.port,self.database)}}
     fn database_config(&self) -> anyhow::Result<DatabaseConfig> {
+        if self.standalone {
+            let path = self.local_database_path()?;
+            return Ok(DatabaseConfig {database_url:format!("sqlite://{}", path.to_string_lossy().replace('\\',"/").replace('%',"%25").replace('?',"%3F").replace('#',"%23")),max_connections:1});
+        }
         let port = self.port.trim().parse::<u16>()?;
         Ok(DatabaseConfig {
             database_url: format!(
@@ -3336,6 +3475,19 @@ impl DbForm {
     }
 }
 
+fn default_sqlite_path()->String {
+    PathBuf::from(std::env::var_os("LOCALAPPDATA").unwrap_or_else(||".".into()))
+        .join("KAY POS Rust").join("standalone").join("pos.db").to_string_lossy().into_owned()
+}
+fn validate_database_switch(old:&DbForm,new:&DbForm)->anyhow::Result<()> {
+    if old.identity()?==new.identity()?{return Ok(())}
+    anyhow::ensure!(pending_checkout::load(old)?.is_none(),"Resolve the pending checkout before changing databases");
+    anyhow::ensure!(purchase_pending::load(old)?.is_none(),"Resolve the pending purchase before changing databases");
+    anyhow::ensure!(!employees::has_pending(old)?,"Resolve the pending employee request before changing databases");
+    anyhow::ensure!(!held_sales::has_pending(old)?,"Return or finish the active held sale before changing databases");
+    Ok(())
+}
+
 fn load_saved_db_form() -> DbForm {
     fs::read_to_string(db_config_path())
         .ok()
@@ -3349,7 +3501,11 @@ fn save_db_form(form: &DbForm) -> anyhow::Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
-    fs::write(path, serde_json::to_string_pretty(form)?)?;
+    use std::io::Write;
+    let mut temporary=tempfile::NamedTempFile::new_in(path.parent().unwrap())?;
+    temporary.write_all(serde_json::to_string_pretty(form)?.as_bytes())?;
+    temporary.as_file().sync_all()?;
+    temporary.persist(&path)?;
     Ok(())
 }
 
@@ -3376,6 +3532,8 @@ fn parse_database_url(url: &str) -> Option<DbForm> {
         .map(|(host, port)| (host.to_string(), port.to_string()))
         .unwrap_or_else(|| (host_port.to_string(), "5432".to_string()));
     Some(DbForm {
+        standalone: false,
+        sqlite_path: default_sqlite_path(),
         host,
         port,
         database: database_part
@@ -3905,4 +4063,50 @@ fn manual_cart_quantity_preserves_line_and_rejects_invalid_stock() {
     lines[0]=CartLine {variant:Some(variant.variants[0].clone()),product:variant,qty:1.0,unit_price_override:None};
     for value in ["11","1.5"] {assert!(set_cart_quantity(&mut lines,0,value).is_err());assert_eq!(lines[0].qty,1.0);}
     set_cart_quantity(&mut lines,0,"10").unwrap();assert_eq!(lines[0].qty,10.0);
+}
+
+fn checkout_default_received(sale_type: &str, total: f64) -> String {
+    if sale_type.eq_ignore_ascii_case("Credit") { "0".into() } else { format!("{total:.2}") }
+}
+#[test]
+fn credit_checkout_defaults_to_unpaid() {
+    assert_eq!(checkout_default_received("Credit", 20000.0), "0");
+    assert_eq!(checkout_default_received("credit", 18000.0), "0");
+    assert_eq!(checkout_default_received("Cash", 20000.0), "20000.00");
+}
+
+#[cfg(test)]
+mod database_mode_tests {
+    use super::*;
+    #[test]
+    fn old_postgres_configs_keep_the_same_backend_and_recovery_identity() {
+        let old=r#"{"host":"SERVER","port":"5432","database":"shop","username":"user","password":"secret"}"#;
+        let form:DbForm=serde_json::from_str(old).unwrap();
+        assert!(!form.standalone);
+        assert_eq!(form.identity().unwrap(),"server:5432:shop");
+        assert!(form.database_config().unwrap().database_url.starts_with("postgresql://"));
+    }
+    #[tokio::test]
+    async fn standalone_path_aliases_and_first_creation_keep_identity() {
+        let root=tempfile::tempdir().unwrap();
+        let path=root.path().join("nested").join("shop%23#local.db");
+        let form=DbForm{standalone:true,sqlite_path:path.to_string_lossy().into_owned(),..Default::default()};
+        let alias=DbForm{sqlite_path:root.path().join("unused").join("..").join("nested").join("shop%23#local.db").to_string_lossy().into_owned(),..form.clone()};
+        let before=form.identity().unwrap();assert_eq!(before,alias.identity().unwrap());
+        let pool=connect(&form.database_config().unwrap()).await.unwrap();
+        assert!(path.exists());assert_eq!(before,form.identity().unwrap());
+        pool.close().await;
+    }
+    #[test]
+    fn standalone_configs_and_files_do_not_share_recovery_identity() {
+        let root=tempfile::tempdir().unwrap();
+        let a=DbForm{standalone:true,sqlite_path:root.path().join("a.db").to_string_lossy().into_owned(),..Default::default()};
+        let b=DbForm{sqlite_path:root.path().join("b.db").to_string_lossy().into_owned(),..a.clone()};
+        assert_ne!(a.identity().unwrap(),b.identity().unwrap());
+        assert_ne!(a.identity().unwrap(),DbForm::default().identity().unwrap());
+        let encoded=serde_json::to_string(&a).unwrap();let decoded:DbForm=serde_json::from_str(&encoded).unwrap();
+        assert_eq!(a.identity().unwrap(),decoded.identity().unwrap());
+        assert!(a.database_config().unwrap().database_url.starts_with("sqlite://"));
+        assert_eq!(a.database_config().unwrap().max_connections,1);
+    }
 }

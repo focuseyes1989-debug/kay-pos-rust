@@ -137,7 +137,7 @@ fn CategoryReceiptsDialog(db_form:DbForm,category:String,from:String,to:String,o
     button {onclick:move |_|selected.set(None),"← Back to receipts"}
     if !detail.finished(){p {role:"status","Loading receipt…"}}else{match detail_state.as_ref(){Some(Ok(value))=>rsx!{crate::ReceiptDetailPanel {detail:value.clone(),read_only:true,on_close:move |_|selected.set(None),on_print:move |_|{},on_refund:move |_|{}}},Some(Err(e))=>rsx!{p {role:"alert","{e}"}},_=>rsx!{p {"Receipt not found"}}}}
    }else{
-    p {class:"summary_receipts_note","Receipt total သည် category တစ်ခုတည်း၏ ရောင်းရငွေ မဟုတ်ဘဲ ဘောင်ချာတစ်ခုလုံး၏ စုစုပေါင်း ဖြစ်ပါသည်။"}
+    p {class:"summary_receipts_note",{crate::regional::text("Receipt total သည် category တစ်ခုတည်း၏ ရောင်းရငွေ မဟုတ်ဘဲ ဘောင်ချာတစ်ခုလုံး၏ စုစုပေါင်း ဖြစ်ပါသည်။")}}
     if !receipts.finished(){p {role:"status","Loading receipts…"}}else if let Some(Err(e))=state.as_ref(){p {role:"alert","{e}"}}else{
      div {class:"summary_table",table {thead {tr {for heading in ["Receipt","Date","Customer","Receipt total","Payment"] {th {"{heading}"}}}} tbody {
       if rows.is_empty(){tr {td {colspan:"5","No receipts in this date range."}}}
