@@ -1,0 +1,21 @@
+.display_editor_page {color:var(--ink);}
+.cd_description {margin:0 0 18px;color:var(--muted);font-size:13px;line-height:1.6;}
+.cd_editor {display:grid;grid-template-columns:minmax(240px,300px) minmax(0,1fr);gap:18px;align-items:start;}
+.cd_controls {display:grid;gap:14px;padding:16px;border:1px solid var(--line);border-radius:10px;background:var(--panel);}
+.cd_group_heading {display:grid;gap:4px;}
+.cd_group_heading strong {font-size:13px;}
+.cd_group_heading small,.cd_preview_hint {color:var(--muted);font-size:12px;line-height:1.5;}
+.cd_controls label {display:grid;gap:7px;font-size:12px;}
+.shell .cd_controls input:not([type=range]):not([type=checkbox]):not([type=color]) {width:100%;min-height:38px;padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:var(--panel);color:var(--ink);font:inherit;}
+.cd_controls input[type=range] {width:100%;accent-color:var(--accent);cursor:pointer;}
+.cd_colors {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;}
+.shell .cd_colors input[type=color] {width:100%;height:36px;min-height:36px;padding:4px;border:1px solid var(--line);border-radius:7px;background:var(--panel);cursor:pointer;}
+.cd_checks {display:grid;gap:10px;padding-top:4px;}
+.cd_checks label,.cd_preview header label {display:flex;align-items:center;gap:8px;font-size:12px;}
+.shell .display_editor_page input[type=checkbox] {width:17px;height:17px;min-height:17px;margin:0;accent-color:var(--accent);}
+.cd_preview {min-width:0;padding:16px;border:1px solid var(--line);border-radius:10px;background:var(--panel);}
+.cd_preview header {display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;margin-bottom:12px;gap:10px;font-size:13px;}
+.cd_preview iframe {display:block;width:100%;height:440px;border:1px solid var(--line);border-radius:8px;background:white;}
+.cd_preview_hint {display:block;margin-top:10px;}
+.shell .display_editor_page .cd_actions {margin-top:18px;padding-top:14px;border-top:1px solid var(--line);}
+@media(max-width:1000px) {.cd_editor {grid-template-columns:1fr;} .cd_preview iframe {height:380px;}}

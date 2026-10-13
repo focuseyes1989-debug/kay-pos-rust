@@ -6,6 +6,7 @@ use std::{
 };
 
 const KEYS: &[&str] = &[
+    "customer_display_editor_v1",
     "ui_theme_editor_v1",
     "ui_theme_preset_library_v1",
     "language",
@@ -188,6 +189,21 @@ mod tests {
         assert_eq!(client_b["shop_name"], "New Shop");
         assert!(!client_b.contains_key("ui_sidebar_color"));
         assert!(!read_at(&a).unwrap().unwrap().contains_key("shop_name"));
+    }
+    #[test]
+    fn customer_display_design_persists_only_on_this_client() {
+        let temp=tempfile::tempdir().unwrap();
+        let a=temp.path().join("a/appearance.json");
+        let b=temp.path().join("b/appearance.json");
+        resolve_at(&a,shared("light")).unwrap();
+        resolve_at(&b,shared("light")).unwrap();
+        let mut design=crate::customer_display_editor::Design::default();
+        design.font_size=24;
+        let key=crate::customer_display_editor::KEY;
+        let value=serde_json::to_string(&design).unwrap();
+        save_at(&a,&[(key.into(),value.clone())]).unwrap();
+        assert_eq!(resolve_at(&a,shared("light")).unwrap()[key],value);
+        assert!(!resolve_at(&b,shared("light")).unwrap().contains_key(key));
     }
     #[test]
     fn invalid_files_and_nonappearance_writes_are_not_overwritten() {

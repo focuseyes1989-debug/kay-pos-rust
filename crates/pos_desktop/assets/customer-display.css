@@ -1,20 +1,25 @@
 * { box-sizing: border-box; }
-body { margin: 0; background: #fff; color: #19252a; font: 22px/1.9 "Segoe UI", "Myanmar Text", sans-serif; }
-main { height: 100vh; display: flex; flex-direction: column; padding: 24px 40px; }
-header { padding-bottom: 16px; border-bottom: 1px solid #dce2e5; font-size: 26px; overflow-wrap: anywhere; }
+body { margin: 0; background: #fff; color: #19252a; font: 20px/1.65 "Segoe UI", "Myanmar Text", sans-serif; }
+main { height: 100vh; height: 100dvh; display: flex; flex-direction: column; padding: 18px 28px; }
+header { padding-bottom: 10px; border-bottom: 1px solid #dce2e5; font-size: 23px; font-weight: 600; overflow-wrap: anywhere; }
+.display_brand {display:flex;align-items:center;gap:12px;flex-shrink:0;}
+.display_brand img {width:48px;height:48px;object-fit:contain;flex-shrink:0;}
+.display_brand span {min-width:0;overflow-wrap:anywhere;}
 .welcome { flex: 1; display: grid; place-items: center; }
-.welcome h1 { font-size: 40px; font-weight: 400; }
+.welcome h1 { margin: 0; font-size: 36px; font-weight: 400; }
 .sale { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .items { flex: 1; min-height: 0; overflow: auto; }
 table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-th { color: #58676f; font-weight: 400; background: #fff; position: sticky; top: 0; }
-th, td { text-align: left; padding: 12px 8px; border-bottom: 1px solid #edf0f2; overflow-wrap: anywhere; }
+th { color: #58676f; font-size: 15px; font-weight: 400; background: #fff; position: sticky; top: 0; }
+th, td { text-align: left; padding: 8px 8px; border-bottom: 1px solid #edf0f2; overflow-wrap: anywhere; }
 th:first-child { width: 58%; } th:nth-child(2) { width: 12%; }
-th:nth-child(2), td:nth-child(2) { text-align: center; }
-th:last-child, td:last-child { text-align: right; }
-footer { padding-top: 16px; border-top: 1px solid #dce2e5; }
-footer > div { display: flex; justify-content: space-between; gap: 24px; }
+th:nth-child(2), td:nth-child(2) { text-align: center; font-variant-numeric: tabular-nums; }
+th:last-child, td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+footer { flex-shrink: 0; padding-top: 10px; border-top: 1px solid #dce2e5; }
+footer > div { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+footer > div:not(.total) { font-size: 17px; color: #58676f; }
 footer strong { overflow-wrap: anywhere; text-align: right; }
-.total { color: #08665b; font-size: 36px; }
-footer p { margin: 8px 0 0; text-align: center; color: #58676f; }
-@media (max-width: 800px) { main { padding: 16px; } body { font-size: 18px; } .total { font-size: 28px; } }
+.total { color: #08665b; font-size: 32px; font-variant-numeric: tabular-nums; }
+footer p { margin: 6px 0 0; text-align: center; color: #58676f; font-size: 16px; }
+@media (max-width: 800px) { main { padding: 14px 18px; } body { font-size: 18px; } header { font-size: 21px; } .total { font-size: 28px; } }
+@media (max-height: 600px) { main { padding-top: 10px; padding-bottom: 10px; } header { padding-bottom: 6px; } th, td { padding-top: 6px; padding-bottom: 6px; } footer { padding-top: 6px; } }

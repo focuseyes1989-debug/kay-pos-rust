@@ -16,6 +16,7 @@ mod language_switcher;
 mod cash_drawer;
 mod categories;
 mod customer_display;
+mod customer_display_editor;
 mod customers;
 mod live_search;
 mod expenses;
@@ -507,6 +508,7 @@ fn App() -> Element {
     let customer_display_visible = customer_display::use_customer_display(
         customer_display::DisplaySnapshot {
             shop: setting_value(&display_settings, "shop_name", "KAY POS"),
+            logo: receipt_layout::logo(&display_settings),
             lines: display_lines
                 .iter()
                 .map(|line| customer_display::DisplayLine {
@@ -536,6 +538,7 @@ fn App() -> Element {
                     })
                 }),
             completed: display_receipt.is_some(),
+            design: customer_display_editor::Design::from_settings(&display_settings),
         },
         customer_display_enabled,
     );
@@ -1792,6 +1795,7 @@ fn settings_nav_items() -> Vec<SettingsNavItem> {
             title: "Appearance",
             keywords: "theme display touch mode",
         },
+        SettingsNavItem { id: "customer_display", title: "Display Editor", keywords: "customer display screen monitor preview font color compact shop logo" },
         SettingsNavItem {
             id: "receipt",
             title: "Receipt",
@@ -1918,6 +1922,8 @@ fn SettingsCenterPage(
                         }
                     } else if active_page == "menu" {
                         menu_visibility::MenuVisibility {settings:settings.clone(),on_saved}
+                    } else if active_page == "customer_display" {
+                        customer_display_editor::Editor { settings:settings.clone(),on_saved }
                     } else if active_page == "appearance" {
                         SettingsSection {
                             title: "Appearance",
@@ -2458,6 +2464,7 @@ fn settings_page_subtitle(page: &str) -> &'static str {
         "payments" => "Configure sale payment options.",
         "tax_discount" => "Discount and future tax behavior.",
         "appearance" => "Display and workspace behavior.",
+        "customer_display" => "Customize the customer screen on this computer.",
         "receipt" => "Receipt output and print behavior.",
         "regional" => "Currency and language display.",
         "database" => "PostgreSQL connection used by this client.",

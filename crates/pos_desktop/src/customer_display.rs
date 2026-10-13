@@ -17,11 +17,13 @@ pub struct DisplayLine {
 #[derive(Clone, Default, PartialEq)]
 pub struct DisplaySnapshot {
     pub shop: String,
+    pub logo: Option<String>,
     pub lines: Vec<DisplayLine>,
     pub total: String,
     pub received: Option<String>,
     pub change: Option<String>,
     pub completed: bool,
+    pub design: crate::customer_display_editor::Design,
 }
 
 type SharedDisplay = Arc<Mutex<DisplaySnapshot>>;
@@ -111,10 +113,14 @@ fn CustomerDisplay() -> Element {
     let state = snapshot.read();
     rsx! {
         style { {include_str!("../assets/customer-display.css")} }
+        style { "{state.design.css()}" }
         main {
-            header { "{state.shop}" }
+            header { class:"display_brand",
+                if let Some(logo)=&state.logo {img {src:"{logo}",alt:"Shop logo"}}
+                span {"{state.shop}"}
+            }
             if state.lines.is_empty() {
-                section { class: "welcome", h1 { "Welcome" } }
+                section { class: "welcome", h1 { "{state.design.welcome}" } }
             } else {
                 section { class: "sale",
                     div { class: "items",
@@ -127,9 +133,9 @@ fn CustomerDisplay() -> Element {
                     }
                     footer {
                         div { class: "total", span { "Total" } strong { "{state.total}" } }
-                        if let Some(received) = &state.received { div { span { "Received" } strong { "{received}" } } }
-                        if let Some(change) = &state.change { div { span { "Change" } strong { "{change}" } } }
-                        if state.completed { p { "Thank you" } }
+                        if let Some(received) = state.received.as_ref().filter(|_|state.design.show_received) { div { span { "Received" } strong { "{received}" } } }
+                        if let Some(change) = state.change.as_ref().filter(|_|state.design.show_change) { div { span { "Change" } strong { "{change}" } } }
+                        if state.completed { p { "{state.design.thanks}" } }
                     }
                 }
             }
