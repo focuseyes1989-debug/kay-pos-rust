@@ -1179,8 +1179,8 @@ fn App() -> Element {
                         }
                         for (idx, line) in cart.read().iter().cloned().enumerate() {
                             div { class: "cart_line",
-                                div {
-                                    strong { "{line.product.name}" }
+                                div { class: "cart_line_info",
+                                    strong { title:"{line.product.name}", "{line.product.name}" }
                                     if let Some(label) = line.variant_label() {
                                         small { class: "cart_variant", "{label}" }
                                     }
@@ -1197,8 +1197,11 @@ fn App() -> Element {
                                         "+"
                                     }
                                     button {
+                                        class: "cart_remove",
+                                        title: "Remove item",
+                                        aria_label: "Remove item",
                                         onclick: move |_| remove_from_cart(&mut cart, idx),
-                                        "Remove"
+                                        icons::Icon {name:"delete"}
                                     }
                                 }
                             }
