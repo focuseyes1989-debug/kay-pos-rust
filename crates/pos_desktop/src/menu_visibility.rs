@@ -3,7 +3,7 @@ use std::collections::{HashMap, BTreeSet};
 
 pub const KEY: &str = "sidebar_hidden_pages";
 const GROUPS: &[(&str, &[&str])] = &[
-    ("Sales", &["Sales", "Receipts", "Expenses", "Service Order"]),
+    ("Sales", &["Sales", "Receipts", "Expenses", "Service Order", "Serial & Warranty"]),
     ("People", &["Employees", "Customers", "Suppliers", "Purchases"]),
     ("Products & stock", &["Products", "Discounts", "Categories", "Locations", "Inventory"]),
     ("Reports", &["Kay Assistant", "Activity Log", "Reports", "Dashboard", "Sale Summary"]),

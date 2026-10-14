@@ -845,6 +845,7 @@ async fn postgres_export_import_preserves_all_tables_blobs_credit_sequences_and_
     let metadata: std::collections::BTreeMap<String, Vec<String>> =
         serde_json::from_str(include_str!("../../../migrations/sqlite/columns.json"))?;
     for (table, names) in metadata {
+        if pos_core::warranty::is_addon_table(&table) { continue; }
         let fields = ::sqlx::query("SELECT name,type FROM pragma_table_info(?)")
             .bind(&table)
             .fetch_all(native)
@@ -916,8 +917,14 @@ async fn postgres_export_import_preserves_all_tables_blobs_credit_sequences_and_
         }
     }
     ::sqlx::raw_sql("CREATE SEQUENCE rust_invoice_number_seq START 57; SELECT nextval('rust_invoice_number_seq');CREATE SEQUENCE rust_batch_number_seq START 73;SELECT nextval('rust_batch_number_seq');").execute(&pg).await?;
+    ::sqlx::raw_sql("ALTER TABLE sale_items ADD PRIMARY KEY(id);ALTER TABLE sales ADD PRIMARY KEY(id);ALTER TABLE customers ADD PRIMARY KEY(id);").execute(&pg).await?;
     let source = s::Pool::Postgres(pg.clone());
     let admin = auth::login(&source, "owner", "test-password").await?;
+    let item:i32=s::query_scalar("SELECT id FROM sale_items ORDER BY id LIMIT 1").fetch_one(&source).await?;
+    let warranty_unit=pos_core::warranty::register(&source,&admin,item,"PG-SOLAR-001",24).await?;
+    let warranty_claim=pos_core::warranty::open_claim(&source,&admin,&warranty_unit,"Battery fault").await?;
+    pos_core::warranty::update_claim(&source,&admin,&warranty_claim,"in_progress","Supplier inspection").await?;
+    assert_eq!(pos_core::warranty::events(&source,&admin,&warranty_claim).await?.len(),2);
     let exported = dir.path().join("server-export.db");
     let report = data_transfer::export(&source, &admin, &exported).await?;
     assert!(report.tables > 100);
@@ -937,6 +944,8 @@ async fn postgres_export_import_preserves_all_tables_blobs_credit_sequences_and_
             .await?,
         20000.0
     );
+    assert_eq!(pos_core::warranty::search(&result,&imported_admin,"PG-SOLAR-001").await?.len(),1);
+    assert_eq!(pos_core::warranty::events(&result,&imported_admin,&warranty_claim).await?.len(),2);
     let new = complete_sale(&result, &draft("Cash", 20000.0), &imported_admin).await?;
     assert_eq!(new.invoice_no, "INV000058");
     assert_eq!(
@@ -1014,4 +1023,90 @@ async fn standalone_dashboard_hourly_sales_filter_dates_status_and_fill_quiet_ho
     assert_eq!(range.hourly[0].count,1);
     assert_eq!(range.hourly.iter().map(|r|r.count).sum::<i64>(),5);
     Ok(())
+}
+
+#[tokio::test]
+async fn standalone_warranty_serial_claim_history_refund_permissions_and_export() -> Result<()> {
+    use pos_core::warranty as w;
+    let (dir,pool,actor)=fixture().await?;
+    let receipt=complete_sale(&pool,&draft("Cash",20000.0),&actor).await?;
+    let lines=w::receipt_lines(&pool,&actor,&receipt.invoice_no).await?;
+    assert_eq!(lines.len(),1);
+    let id=w::register(&pool,&actor,lines[0].id," inv-abc-123 ",12).await?;
+    let rows=w::search(&pool,&actor,"inv-abc").await?;
+    assert_eq!(rows.len(),1);assert_eq!(rows[0].id,id);assert_eq!(rows[0].serial,"INV-ABC-123");
+    assert_eq!(rows[0].invoice,receipt.invoice_no);assert_eq!(rows[0].customer,"ဦးအောင်သန်း");
+    assert!(w::coverage(&rows[0],chrono::Local::now().date_naive()));
+    assert!(w::register(&pool,&actor,lines[0].id,"SECOND",12).await.is_err());
+    let other=complete_sale(&pool,&draft("Cash",20000.0),&actor).await?;
+    let other_line=w::receipt_lines(&pool,&actor,&other.invoice_no).await?[0].id;
+    assert!(w::register(&pool,&actor,other_line,"inv-abc-123",12).await.is_err());
+    assert!(w::register(&pool,&actor,other_line,"NEW",0).await.is_err());
+    let (one,two)=tokio::join!(w::register(&pool,&actor,other_line,"CONCURRENT-A",12),w::register(&pool,&actor,other_line,"CONCURRENT-B",12));
+    assert_ne!(one.is_ok(),two.is_ok());
+
+    let claim=w::open_claim(&pool,&actor,&id,"Inverter will not start").await?;
+    assert!(w::open_claim(&pool,&actor,&id,"Duplicate claim").await.is_err());
+    w::update_claim(&pool,&actor,&claim,"in_progress","Sent to supplier").await?;
+    w::update_claim(&pool,&actor,&claim,"resolved","Repaired and returned to customer").await?;
+    assert_eq!(w::events(&pool,&actor,&claim).await?.len(),3);
+    assert!(w::update_claim(&pool,&actor,&claim,"in_progress","Reopen").await.is_err());
+    assert_eq!(w::claims(&pool,&actor,&id).await?[0].status,"resolved");
+    assert_eq!(s::query_scalar::<_,f64>("SELECT stock FROM products WHERE id=1").fetch_one(&pool).await?,8.0);
+    let file=dir.path().join("warranty-export.db");pos_core::data_transfer::export(&pool,&actor,&file).await?;
+    let dest=dir.path().join("warranty-import.db");pos_core::data_transfer::import(&file,&dest).await?;
+    let imported=sqlite::connect(&format!("sqlite://{}",dest.display())).await?;
+    let imported_actor=auth::login(&imported,"owner","test-password").await?;
+    assert_eq!(w::search(&imported,&imported_actor,"INV-ABC-123").await?.len(),1);
+    assert_eq!(w::events(&imported,&imported_actor,&claim).await?.len(),3);
+    let pending_claim=w::open_claim(&pool,&actor,&id,"Second repair").await?;
+    refund_sale(&pool,receipt.id,&actor).await?;
+    assert!(w::update_claim(&pool,&actor,&pending_claim,"resolved","After refund").await.is_err());
+    w::update_claim(&pool,&actor,&pending_claim,"rejected","Receipt refunded").await?;
+
+    assert!(!w::coverage(&w::search(&pool,&actor,"INV-ABC").await?[0],chrono::Local::now().date_naive()));
+    let rejected=w::open_claim(&pool,&actor,&id,"After refund").await?;
+    assert_eq!(w::claims(&pool,&actor,&id).await?.iter().find(|c|c.id==rejected).unwrap().status,"rejected");
+    assert!(w::register(&pool,&actor,lines[0].id,"AFTER-REFUND",12).await.is_err());
+    s::query("UPDATE users SET role='Cashier' WHERE username='owner'").execute(&pool).await?;
+    assert!(w::search(&pool,&actor,"").await.is_err());
+    let cashier=auth::login(&pool,"owner","test-password").await?;
+    assert!(w::search(&pool,&cashier,"INV-ABC").await?.len()==1);
+    assert!(w::update_claim(&pool,&cashier,&claim,"resolved","Unauthorized").await.is_err());
+    s::query("UPDATE users SET is_active=0 WHERE username='owner'").execute(&pool).await?;
+    assert!(w::search(&pool,&actor,"").await.is_err());
+    imported.close().await;pool.close().await;Ok(())
+}
+
+#[tokio::test]
+async fn standalone_warranty_expiry_anonymous_fractional_and_legacy_upgrade() -> Result<()> {
+    use pos_core::warranty as w;
+    let (dir,pool,actor)=fixture().await?;
+    let sale=complete_sale(&pool,&draft("Cash",20000.0),&actor).await?;
+    s::query("UPDATE sales SET created_at='2020-01-31 12:00:00' WHERE id=$1").bind(sale.id).execute(&pool).await?;
+    let line=w::receipt_lines(&pool,&actor,&sale.invoice_no).await?[0].id;
+    let unit=w::register(&pool,&actor,line,"OLD",1).await?;
+    let row=w::search(&pool,&actor,"OLD").await?.remove(0);
+    assert_eq!(row.ends,"2020-02-29");
+    assert!(w::coverage(&row,chrono::NaiveDate::from_ymd_opt(2020,2,29).unwrap()));
+    assert!(!w::coverage(&row,chrono::NaiveDate::from_ymd_opt(2020,3,1).unwrap()));
+    let claim=w::open_claim(&pool,&actor,&unit,"Expired battery").await?;
+    assert_eq!(w::claims(&pool,&actor,&unit).await?[0].covered,0);
+    assert!(w::update_claim(&pool,&actor,&claim,"resolved","Not valid").await.is_err());
+    let mut anonymous=draft("Cash",20000.0);anonymous.customer_id=None;
+    let anon=complete_sale(&pool,&anonymous,&actor).await?;
+    let anonitem:i32=s::query_scalar("SELECT id FROM sale_items WHERE sale_id=$1").bind(anon.id).fetch_one(&pool).await?;
+    assert!(w::register(&pool,&actor,anonitem,"ANON",12).await.is_err());
+    let fraction=complete_sale(&pool,&draft("Cash",20000.0),&actor).await?;
+    let fid=w::receipt_lines(&pool,&actor,&fraction.invoice_no).await?[0].id;
+    s::query("UPDATE sale_items SET qty=0.5 WHERE id=$1").bind(fid).execute(&pool).await?;
+    assert!(w::register(&pool,&actor,fid,"FRACTION",12).await.is_err());
+    // Old standalone backups without the optional addon remain importable.
+    let old=dir.path().join("old.db");pos_core::data_transfer::export(&pool,&actor,&old).await?;
+    {let c=rusqlite::Connection::open(&old)?;c.execute_batch("PRAGMA foreign_keys=OFF;DROP TABLE rust_warranty_events;DROP TABLE rust_warranty_claims;DROP TABLE rust_serial_units;")?;}
+    let new=dir.path().join("upgraded.db");pos_core::data_transfer::import(&old,&new).await?;
+    let upgraded=sqlite::connect(&format!("sqlite://{}",new.display())).await?;
+    let a=auth::login(&upgraded,"owner","test-password").await?;
+    assert!(w::search(&upgraded,&a,"").await?.is_empty());
+    upgraded.close().await;pool.close().await;Ok(())
 }

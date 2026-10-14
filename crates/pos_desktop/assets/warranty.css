@@ -1,0 +1,11 @@
+.warranty_heading h2{margin:0;font-size:20px}.warranty_heading p,.warranty_card p{font-size:13px;color:var(--muted);line-height:1.6}
+.warranty_layout{display:grid;grid-template-columns:minmax(260px,.8fr) minmax(0,1.2fr);gap:16px;margin-bottom:16px;align-items:start}
+.warranty_card{padding:16px;border:1px solid var(--line);border-radius:10px;background:var(--panel);display:grid;gap:10px;min-width:0}
+.warranty_card h3{margin:0;font-size:15px}.warranty_card label{display:grid;gap:6px;font-size:13px}
+.shell .warranty_card :is(input,select,textarea){width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:var(--panel);color:var(--ink);box-sizing:border-box}
+.warranty_receipt_search{display:flex;gap:8px}.warranty_receipt_search input{min-width:0}.warranty_receipt_search button{white-space:nowrap}
+.warranty_units{display:grid;gap:8px;max-height:450px;overflow:auto}
+.shell .warranty_card :is(.warranty_unit,.warranty_line,.warranty_claim){display:grid;gap:4px;text-align:left;border:1px solid var(--line);border-radius:8px;padding:10px;background:var(--panel);color:var(--ink);overflow-wrap:anywhere;white-space:normal}
+.shell .warranty_card .selected{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 7%,var(--panel))}
+.warranty_card small{font-size:12px;color:var(--muted)}.warranty_event{padding:10px;border-left:3px solid var(--accent);background:color-mix(in srgb,var(--accent) 5%,var(--panel))}.warranty_event small{display:block}.warranty_event p{margin:5px 0 0}
+@media(max-width:900px){.warranty_layout{grid-template-columns:1fr}.warranty_receipt_search{flex-wrap:wrap}}

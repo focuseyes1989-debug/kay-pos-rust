@@ -45,6 +45,7 @@ fn for_label(label: &str) -> Option<&'static str> {
         "Print Receipt"|"Print"=>"print", "Export Excel"=>"file_export",
         "View Movements"|"View ledger"|"Ledger"=>"history",
         "Payment Collection"=>"payments", "Credit Sale"=>"credit_card",
+        "Serial & Warranty"=>"inventory",
         "Reports"|"Outstanding Report"=>"analytics", "Choose File"=>"folder_open",
         "Check compatibility"=>"check_circle",
         "Purchases"=>"orders", "Add purchase order"|"Add item"=>"add",

@@ -70,3 +70,5 @@ mod sqlite_dialect;
 pub mod sqlite;
 
 pub mod data_transfer;
+
+pub mod warranty;

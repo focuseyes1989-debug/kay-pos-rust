@@ -5,6 +5,7 @@ mod barcode_print;
 use dioxus::prelude::*;
 mod auth;
 mod service_orders;
+mod warranty;
 mod app_icon;
 mod icons;
 mod appearance_colors;
@@ -106,6 +107,7 @@ enum WorkspaceView {
     Employees,
     ErpOperations,
     ServiceOrders,
+    Warranty,
     SaleSummary,
     Inventory,
     Locations,
@@ -244,7 +246,7 @@ fn App() -> Element {
                 WorkspaceView::Discounts=>"Discounts", WorkspaceView::Dashboard=>"Dashboard",
                 WorkspaceView::Reports=>"Reports", WorkspaceView::Purchases=>"Purchases",
                 WorkspaceView::Employees=>"Employees", WorkspaceView::ErpOperations=>"ERP Operations",
-                WorkspaceView::ServiceOrders=>"Service Order", WorkspaceView::SaleSummary=>"Sale Summary",
+                WorkspaceView::Warranty=>"Serial & Warranty", WorkspaceView::ServiceOrders=>"Service Order", WorkspaceView::SaleSummary=>"Sale Summary",
                 WorkspaceView::Inventory=>"Inventory", WorkspaceView::Locations=>"Locations",
                 WorkspaceView::Categories=>"Categories", WorkspaceView::Products=>"Products",
                 WorkspaceView::Suppliers=>"Suppliers", WorkspaceView::Expenses=>"Expenses",
@@ -638,7 +640,7 @@ fn App() -> Element {
                         button { class: "side_close", aria_label: "Close menu", title: "Close menu", onclick: move |_| show_side_menu.set(false), icons::Icon {name:"close"} }
                     }
                     div {class:"side_navigation",aria_label:"Main navigation",
-                    div { class: "side_group", hidden:menu_visibility::group_hidden(&app_settings.read(),if can_manage {&["Sales","Receipts","Expenses","Service Order"]}else{&["Sales","Receipts","Service Order"]}),
+                    div { class: "side_group", hidden:menu_visibility::group_hidden(&app_settings.read(),if can_manage {&["Sales","Receipts","Expenses","Service Order","Serial & Warranty"]}else{&["Sales","Receipts","Service Order","Serial & Warranty"]}),
                         span { "SALES" }
                         button { hidden:menu_visibility::hidden(&app_settings.read(),"Sales"),
                             class: if *active_view.read() == WorkspaceView::Sales { "side_active" } else { "" },
@@ -687,6 +689,7 @@ fn App() -> Element {
                             crate::icons::ActionLabel { label:"Receipts" }
                         }
                         if can_manage { button { hidden:menu_visibility::hidden(&app_settings.read(),"Expenses"), class: if *active_view.read()==WorkspaceView::Expenses {"side_active"}else{""}, onclick: move |_| { new_expense.set(false); active_view.set(WorkspaceView::Expenses); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Expenses" } } }
+                        button {hidden:menu_visibility::hidden(&app_settings.read(),"Serial & Warranty"),class:if *active_view.read()==WorkspaceView::Warranty {"side_active"}else{""},onclick:move |_|{active_view.set(WorkspaceView::Warranty);show_side_menu.set(false);},icons::ActionLabel {label:"Serial & Warranty"}}
                         button { hidden:menu_visibility::hidden(&app_settings.read(),"Service Order"), class: if *active_view.read()==WorkspaceView::ServiceOrders {"side_active"}else{""}, onclick:move |_|{active_view.set(WorkspaceView::ServiceOrders);show_side_menu.set(false);},crate::icons::ActionLabel { label:"Service Order" } }
                     }
                     if can_manage {
@@ -767,6 +770,8 @@ fn App() -> Element {
                 p { role: "alert", "Your account does not have permission to open this page." }
             } else if *active_view.read() == WorkspaceView::Employees {
                 employees::EmployeesPage {db_form:db_form.read().clone()}
+            } else if *active_view.read() == WorkspaceView::Warranty {
+                warranty::WarrantyPage {db_form:db_form.read().clone(),actor:actor.clone()}
             } else if *active_view.read() == WorkspaceView::ServiceOrders {
                 service_orders::ServiceOrdersPage {db_form:db_form.read().clone()}
             } else if *active_view.read() == WorkspaceView::Dashboard {

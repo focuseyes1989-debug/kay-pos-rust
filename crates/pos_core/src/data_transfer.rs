@@ -71,12 +71,15 @@ async fn verify(conn: &mut sqlx::SqliteConnection) -> Result<Summary> {
             .is_none(),
         "Database contains broken record references; source data must be repaired first"
     );
+    let addons:i64=sqlx::query_scalar("SELECT COUNT(*) FROM sqlite_schema WHERE type='table' AND name IN ('rust_serial_units','rust_warranty_claims','rust_warranty_events')").fetch_one(&mut *conn).await?;
+    ensure!(addons==0 || addons==3,"Incomplete warranty schema; restore the missing tables before transfer");
     let mut summary = Summary::default();
     for (table, expected) in columns() {
         let actual: Vec<String> = sqlx::query_scalar("SELECT name FROM pragma_table_info(?)")
             .bind(&table)
             .fetch_all(&mut *conn)
             .await?;
+        if actual.is_empty() && crate::warranty::is_addon_table(&table) { continue; }
         ensure!(
             expected.iter().all(|c| actual.contains(c)),
             "Missing standalone columns in {table}"

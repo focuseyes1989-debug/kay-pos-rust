@@ -1259,5 +1259,32 @@
     "attachment_id",
     "content",
     "sha256"
+  ],
+  "rust_serial_units": [
+    "id",
+    "serial",
+    "sale_item_id",
+    "sale_id",
+    "customer_id",
+    "starts",
+    "ends",
+    "created_by",
+    "created_at"
+  ],
+  "rust_warranty_claims": [
+    "id",
+    "unit_id",
+    "issue",
+    "status",
+    "covered",
+    "created_at"
+  ],
+  "rust_warranty_events": [
+    "id",
+    "claim_id",
+    "status",
+    "note",
+    "actor",
+    "created_at"
   ]
 }
