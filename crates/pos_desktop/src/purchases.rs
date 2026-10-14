@@ -176,7 +176,7 @@ pub fn PurchasesPage(db_form: DbForm, actor: Session) -> Element {
             crate::date_range::DateRangePicker { from:from(), to:to(), onchange:move |(a,b):(String,String)|{from.set(a);to.set(b);} }
         }
         div {class:"purchase_results_toolbar",
-        div {class:"receipt_tabs reports_tabs",role:"tablist",for (i,label) in ["Purchase Orders","Purchase History","Supplier Ledger"].iter().enumerate(){button{role:"tab",aria_selected:tab()==i,class:if tab()==i{"active"}else{""},onclick:move |_|{tab.set(i);status.set(String::new());page.set(0);},"{label}"}}}
+        div {class:"receipt_tabs reports_tabs",role:"tablist",for (i,label) in ["Purchase Orders","Purchase History","Supplier Ledger"].iter().enumerate(){button{role:"tab",aria_selected:tab()==i,class:if tab()==i{"active"}else{""},onclick:move |_|{tab.set(i);status.set(String::new());page.set(0);},crate::icons::TabLabel {label:*label}}}}
             div {class:"customers_actions",
                 button {disabled:loading||locked||exporting()||tab()!=1,onclick:{let orders=order_rows.clone();let source=db_form.clone();let actor=actor.clone();let currency=currency.clone();let snapshot_at=snapshot_at.clone();move |_|{
                     let orders=orders.clone();let source=source.clone();let actor=actor.clone();let currency=currency.clone();let snapshot_at=snapshot_at.clone();let (from,to)=dates();exporting.set(true);

@@ -40,3 +40,10 @@ body .shell input[type="search"]:not(.touch-combo-input) {
  padding-left:30px!important;
 }
 body .shell :is(.settings_search,.catalog_search,.category_search) { padding-inline:0!important; }
+
+/* Shared tab labels keep icons compact and long tab strips reachable. */
+.shell :is(.receipt_tabs,.inventory_action_tabs) {max-width:100%;overflow-x:auto;flex-shrink:0;}
+.shell :is(.receipt_tabs,.inventory_action_tabs) > button {flex-shrink:0;}
+.shell .ui_tab_label {display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;vertical-align:middle;}
+.shell .ui_tab_label .ui_svg_icon {width:15px;min-width:15px;height:15px;flex:0 0 15px;color:var(--accent);}
+.shell.shell[data-theme] :is(.receipt_tabs,.inventory_action_tabs) button:is(.active,[aria-selected="true"],:hover) .ui_tab_label .ui_svg_icon {color:currentColor;}

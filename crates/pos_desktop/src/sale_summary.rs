@@ -8,8 +8,8 @@ pub fn SaleSummaryPage(db_form:DbForm,on_sales:EventHandler<()>)->Element {
  let session=use_context::<Signal<Option<pos_core::auth::Session>>>();
  rsx!{section{class:"customers_page sales_summary_views",
   nav{class:"receipt_tabs",role:"tablist",aria_label:"Sale Summary views",
-   button{role:"tab",aria_selected:!comparison(),class:if !comparison(){"active"}else{""},onclick:move |_|comparison.set(false),"Summary"}
-   button{role:"tab",aria_selected:comparison(),class:if comparison(){"active"}else{""},onclick:move |_|comparison.set(true),"Comparison"}
+   button{role:"tab",aria_selected:!comparison(),class:if !comparison(){"active"}else{""},onclick:move |_|comparison.set(false),crate::icons::TabLabel {label:"Summary"}}
+   button{role:"tab",aria_selected:comparison(),class:if comparison(){"active"}else{""},onclick:move |_|comparison.set(true),crate::icons::TabLabel {label:"Comparison"}}
   }
   if comparison(){if let Some(actor)=session(){crate::sales_comparison::SalesComparison{db_form,actor}}}
   else{SummaryDetails{db_form,on_sales}}
@@ -91,11 +91,11 @@ fn SummaryDetails(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
         else if let Some(Err(e))=state.as_ref(){p {role:"alert","{e}"}}
         else {
             div {class:"summary_metrics",
-                div {small {crate::icons::ActionLabel { label:"Receipts" }} strong {"{receipts}"}}
-                for (label,value) in [("Sales",sales),("Discount",discount),("Refunds",refunds),("Cost of goods",cost),("Gross profit",sales-cost)] {div {small {"{label}"} strong {{crate::format_ks(value)}}}}
+                div {small {crate::icons::CardLabel { label:"Receipts" }} strong {"{receipts}"}}
+                for (label,value) in [("Sales",sales),("Discount",discount),("Refunds",refunds),("Cost of goods",cost),("Gross profit",sales-cost)] {div {small {crate::icons::CardLabel {label}} strong {{crate::format_ks(value)}}}}
             }
             if estimated>0 {p {class:"summary_warning","Estimated cost: {estimated} item lines use current product/variant cost."}}
-            div {class:"receipt_tabs summary_tabs",role:"tablist",for (index,label) in ["Daily","Payments","Categories (Sales)","Parent","Items","Categories (Expense)","Wholesale","Discount"].iter().enumerate() {button {role:"tab",aria_selected:tab()==index,class:if tab()==index{"active"}else{""},onclick:move |_|tab.set(index),"{label}"}}}
+            div {class:"receipt_tabs summary_tabs",role:"tablist",for (index,label) in ["Daily","Payments","Categories (Sales)","Parent","Items","Categories (Expense)","Wholesale","Discount"].iter().enumerate() {button {role:"tab",aria_selected:tab()==index,class:if tab()==index{"active"}else{""},onclick:move |_|tab.set(index),crate::icons::TabLabel {label:*label}}}}
             if tab()<2 {
             div {class:"summary_table",table {thead {tr {th {if tab()==1{"Payment method"}else{"Date"}} for title in ["Receipts","Sales","Item gross","Discount","Net sales","Cost of goods","Gross profit","Refunds"] {th {"{title}"}}}}
                 tbody {if rows.is_empty(){tr {td {colspan:"9","No sales in this date range."}}} for row in rows {tr {td {"{row.label}"} td {"{row.receipts}"} for value in [row.sales,row.gross,row.discount,row.gross-row.discount,row.cost,row.sales-row.cost,row.refunds] {td {{crate::format_ks(value)}}}}}}

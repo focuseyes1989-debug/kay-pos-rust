@@ -55,7 +55,7 @@ pub fn ReportsPage(db_form: DbForm, actor: Session) -> Element {
         div {class:"reports_results_toolbar",
         div {class:"receipt_tabs reports_tabs",role:"tablist",aria_label:"Reports",
             for (i,label) in ["Sales","Expenses","Profit & Loss","Financial Summary","Receivables","Payables"].iter().enumerate() {
-                button {role:"tab",aria_selected:tab()==i,class:if tab()==i{"active"}else{""},onclick:move |_|{tab.set(i);page.set(0);},"{label}"}
+                button {role:"tab",aria_selected:tab()==i,class:if tab()==i{"active"}else{""},onclick:move |_|{tab.set(i);page.set(0);},crate::icons::TabLabel {label:*label}}
             }
         }
             button {disabled:loading||exporting()||report.is_none(),onclick:{

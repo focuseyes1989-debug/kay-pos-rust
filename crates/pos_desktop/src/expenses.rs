@@ -81,7 +81,7 @@ pub fn ExpensesPage(
     use_effect(move||{if new_expense(){tab.set(0)}});
     rsx!{section{class:"customers_page phase4_page phase4_expenses",
         nav{class:"receipt_tabs",aria_label:"Expense views",
-            for (i,label) in ["Expenses","Budgets","Alerts","Comparison"].iter().enumerate(){button{role:"tab",aria_selected:(tab()==i).to_string(),class:if tab()==i{"active"}else{""},onclick:move |_|tab.set(i),"{label}"}}
+            for (i,label) in ["Expenses","Budgets","Alerts","Comparison"].iter().enumerate(){button{role:"tab",aria_selected:(tab()==i).to_string(),class:if tab()==i{"active"}else{""},onclick:move |_|tab.set(i),crate::icons::TabLabel {label:*label}}}
         }
         if tab()==0 {ExpenseHistory{db_form,new_expense,on_sales}}
         else if tab()==3 {crate::expense_comparison::ExpenseComparison{db_form,actor}}
@@ -182,9 +182,9 @@ fn ExpenseHistory(
         section { class: "customers_page expense_touch",
             button { hidden:true, "data-page-refresh":"true", disabled:!data.finished(), onclick:move |_|data.restart() }
             div { class: "expense_touch_summary",
-                div { span { "Total spending" } strong { "{money(total)} {crate::regional::current().symbol()}" } }
-                div { span { crate::icons::ActionLabel { label:"Expenses" } } strong { "{rows.len()}" } }
-                div { span { "Average expense" } strong { "{money(average)} {crate::regional::current().symbol()}" } }
+                div { span { crate::icons::CardLabel {label:"Total spending"} } strong { "{money(total)} {crate::regional::current().symbol()}" } }
+                div { span { crate::icons::CardLabel { label:"Expenses" } } strong { "{rows.len()}" } }
+                div { span { crate::icons::CardLabel {label:"Average expense"} } strong { "{money(average)} {crate::regional::current().symbol()}" } }
             }
             div { class: "expense_filters expense_touch_filters",
                 crate::date_range::DateRangePicker { allow_empty:true, from:from(), to:to(), onchange:move |(a,b):(String,String)|{from.set(a);to.set(b);page.set(0);selected.set(None);} }
@@ -204,8 +204,8 @@ fn ExpenseHistory(
             if !notice().is_empty() { div { role: "status", class: "customers_notice", "{notice}" } }
             div { class: "expense_results_toolbar",
             nav { class: "receipt_tabs expense_view_tabs", role: "tablist", aria_label: "Expense results",
-                button { role: "tab", id: "expense-category-tab", aria_controls: "expense-category-panel", aria_selected: category_view().to_string(), class: if category_view() { "active" } else { "" }, onclick: move |_| category_view.set(true), "Spending by Category" }
-                button { role: "tab", id: "expense-history-tab", aria_controls: "expense-history-panel", aria_selected: (!category_view()).to_string(), class: if !category_view() { "active" } else { "" }, onclick: move |_| category_view.set(false), "Expense History" }
+                button { role: "tab", id: "expense-category-tab", aria_controls: "expense-category-panel", aria_selected: category_view().to_string(), class: if category_view() { "active" } else { "" }, onclick: move |_| category_view.set(true), crate::icons::TabLabel {label:"Spending by Category"} }
+                button { role: "tab", id: "expense-history-tab", aria_controls: "expense-history-panel", aria_selected: (!category_view()).to_string(), class: if !category_view() { "active" } else { "" }, onclick: move |_| category_view.set(false), crate::icons::TabLabel {label:"Expense History"} }
             }
                 div { class: "customers_actions",
                     button { disabled: exporting() || !matches!(state.as_ref(),Some(Ok(_))), onclick: {

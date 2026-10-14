@@ -99,8 +99,8 @@ pub fn ServiceOrdersPage(db_form: DbForm) -> Element {
         section {class:if tab(){"service_page service_prompts_page"}else{"service_page service_jobs_page"},
             header {class:"service_heading",
                 div {class:"receipt_tabs",
-                    button {class:if !tab(){"active"}else{""},onclick:move |_|tab.set(false),"Jobs"}
-                    button {class:if tab(){"active"}else{""},onclick:move |_|tab.set(true),"Design Prompts"}
+                    button {class:if !tab(){"active"}else{""},onclick:move |_|tab.set(false),crate::icons::TabLabel {label:"Jobs"}}
+                    button {class:if tab(){"active"}else{""},onclick:move |_|tab.set(true),crate::icons::TabLabel {label:"Design Prompts"}}
                 }
             }
             if tab() {PromptLibrary {db_form:db_form.clone(),job:current.clone()}}

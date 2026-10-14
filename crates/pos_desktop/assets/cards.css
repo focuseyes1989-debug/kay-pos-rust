@@ -1,0 +1,99 @@
+/* Shared card surfaces follow Kay Assistant insight cards. Keep layout and
+   state colours owned by each feature; only card chrome is shared here. */
+.shell {
+  --card-radius:8px;
+  --card-border:color-mix(in srgb,var(--ink) 7%,var(--panel));
+  --card-shadow:0 3px 12px #00000004;
+  --card-hover-border:color-mix(in srgb,var(--accent) 50%,var(--panel));
+}
+
+/* Explicit surfaces avoid changing dialogs, table rows, controls or printouts. */
+.shell.shell[data-theme] :is(
+  .panel,.settings_card,.settings_action_card,.products_items,.customer_list,.customer_detail,
+  .customers_touch_list,.inventory_list,.inventory_detail,.phase4_panel,.phase6_panel,
+  .expense_touch_list,.expense_history_header,.dashboard_chart_card,.dashboard_more_metrics,
+  .dashboard_tables > section,.warranty_card,.ai_insight_card,
+  .receipt_stat,.dashboard_metric,.dashboard_peak_stat,.erp_ops_metric,
+  .summary_metrics > div,.employee_summary > div,.expense_touch_summary > div,
+  .budget_overview > div,.stock_transfer_product_stats > div,
+  .cart_line,.service_prompt_item,.comparison_totals article,.expense_comparison_highlights section,
+  .product_card,.transaction_item,.customer_list_item,.inventory_product,
+  .product_manage_row,.category_row,.category_group_card,.location_stock_row,
+  .users_settings_row,.expense_touch_item,.inventory_movement,
+  .warranty_unit,.warranty_line,.warranty_claim
+) {
+  border-radius:var(--card-radius);
+  box-shadow:var(--card-shadow);
+}
+
+/* Neutral cards use the same quiet edge as the assistant. Selected and warning
+   cards retain their existing borders and backgrounds. */
+.shell.shell[data-theme] :is(
+  .receipt_stat,.dashboard_metric,.erp_ops_metric,
+  .summary_metrics > div,.employee_summary > div,.expense_touch_summary > div,
+  .budget_overview > div,.stock_transfer_product_stats > div,.category_group_card,
+  .comparison_totals article,.expense_comparison_highlights section,
+  .settings_card,.settings_action_card,.dashboard_chart_card,.dashboard_more_metrics,
+  .dashboard_tables > section,.warranty_card,.ai_insight_card
+) {
+  border:1px solid var(--card-border);
+  background:var(--ae-panel,var(--panel));
+  color:var(--ink);
+}
+
+.shell.shell[data-theme] :is(.receipt_stat,.dashboard_metric,.erp_ops_metric,
+  .summary_metrics > div,.employee_summary > div,.expense_touch_summary > div,
+  .stock_transfer_product_stats > div) {padding:14px 16px;min-width:0;overflow-wrap:anywhere;}
+.shell.shell[data-theme] .dashboard_page .dashboard_primary_metrics .dashboard_metric {padding:14px 16px;}
+.shell.shell[data-theme] .dashboard_primary_metrics .dashboard_metric::before {display:none;}
+.shell.shell[data-theme] :is(.receipt_stat,.summary_metrics > div,.employee_summary > div,
+  .expense_touch_summary > div) small {display:block;margin-bottom:6px;color:var(--muted);font-size:11px;}
+.shell.shell[data-theme] :is(.receipt_stat,.dashboard_metric,.erp_ops_metric,
+  .summary_metrics > div,.employee_summary > div,.expense_touch_summary > div) strong {
+  font-variant-numeric:tabular-nums;
+}
+
+/* Only actionable cards react on hover; data cards stay calm. */
+.shell.shell[data-theme] :is(button.ai_insight_card,button.product_card,button.customer_list_item,
+  button.inventory_product,button.transaction_item,button.expense_touch_item,
+  button.warranty_unit,button.warranty_line,button.warranty_claim):not(:disabled):not(.active):not(.selected):not(.out_of_stock):hover {
+  border-color:var(--card-hover-border);
+  box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 5%,transparent),var(--card-shadow);
+}
+.shell.shell[data-theme] :is(button.ai_insight_card,button.product_card,button.customer_list_item,
+  button.inventory_product,button.transaction_item,button.expense_touch_item,
+  button.warranty_unit,button.warranty_line,button.warranty_claim):focus-visible {
+  outline:2px solid var(--accent);outline-offset:2px;
+}
+
+@media(max-width:600px) {
+  .shell {--card-radius:8px;}
+  .shell.shell[data-theme] :is(.receipt_stat,.dashboard_metric,.erp_ops_metric,.summary_metrics > div,
+    .employee_summary > div,.expense_touch_summary > div) {padding:12px;}
+  .shell.shell[data-theme] .dashboard_page .dashboard_primary_metrics .dashboard_metric {padding:12px;}
+}
+
+/* Compact coloured heading icons, matching Kay Assistant. */
+.shell .card_label {display:inline-flex;align-items:center;gap:7px;min-width:0;vertical-align:middle;}
+.shell .card_label .ui_svg_icon {width:16px;height:16px;flex:0 0 16px;color:light-dark(#527bff,#91adff);}
+.shell .card_label[data-tone="teal"] .ui_svg_icon {color:light-dark(#009b83,#67d5c2);}
+.shell .card_label[data-tone="purple"] .ui_svg_icon {color:light-dark(#9747ff,#c5a0ff);}
+.shell .card_label[data-tone="pink"] .ui_svg_icon {color:light-dark(#d52b78,#ff8cc6);}
+.shell .card_label[data-tone="amber"] .ui_svg_icon {color:light-dark(#b77512,#f5c374);}
+
+/* Current inventory capital and its cost-completeness report. */
+.shell .stock_value_details {display:grid;gap:14px;min-width:0;}
+.shell .stock_value_summary {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;}
+.shell .stock_value_section {padding:16px;border:1px solid var(--card-border);border-radius:var(--card-radius);background:var(--panel);min-width:0;}
+.shell .stock_value_section h3 {margin:0 0 12px;font-size:14px;}
+.shell .stock_value_section p,.shell .stock_value_note {font-size:12px;color:var(--muted);margin:0;line-height:1.8;}
+.shell .stock_value_table {overflow:auto;max-height:420px;margin:12px 0;}
+.shell .stock_value_table table {width:100%;}
+.shell .stock_value_table th {position:sticky;top:0;background:var(--panel);}
+.shell .stock_value_table td small {display:block;color:var(--muted);}
+.shell .stock_value_table :is(td,th):nth-child(n+3) {text-align:right;white-space:nowrap;}
+.shell .stock_value_warning {padding:10px 14px;border:1px solid light-dark(#e4ad42,#b98b35);border-radius:8px;color:light-dark(#885900,#f5c374);}
+.shell .stock_value_card button {align-self:flex-start;font-size:12px;min-height:30px;padding:4px 8px;}
+@media(max-width:800px) {.shell .stock_value_summary {grid-template-columns:minmax(0,1fr);}}
+.shell .inventory_touch > :is(.receipt_tabs,.inventory_filters,.stock_value_details) {flex:0 0 auto;}
+.shell .inventory_touch > .receipt_tabs {align-self:flex-start;margin:0 0 14px;}

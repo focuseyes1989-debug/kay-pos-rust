@@ -11,6 +11,7 @@ pub struct Row {
 }
 #[derive(Clone, Default)]
 pub struct Dashboard {
+    pub stock_value: crate::stock_valuation::StockValuation,
     pub period: Vec<Row>,
     pub daily: Vec<Row>,
     pub hourly: Vec<Row>,
@@ -58,7 +59,9 @@ pub async fn load(pool: &PgPool, actor: &Session, from: &str, to: &str) -> Resul
         if exists { operations.push(sqlx::query_as(query).fetch_one(&mut *tx).await?); }
     }
     tx.commit().await?;
-    Ok(Dashboard { period,daily,hourly,customers,suppliers,operations,loaded_at:chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string() })
+    let products=crate::db::search_product_metadata(pool,"",0).await?;
+    let stock_value=crate::stock_valuation::calculate(&products);
+    Ok(Dashboard { stock_value,period,daily,hourly,customers,suppliers,operations,loaded_at:chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string() })
 }
 
 #[cfg(test)]

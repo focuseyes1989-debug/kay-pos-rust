@@ -933,6 +933,9 @@ async fn postgres_export_import_preserves_all_tables_blobs_credit_sequences_and_
     let warranty_claim=pos_core::warranty::open_claim(&source,&admin,&warranty_unit,"Battery fault").await?;
     pos_core::warranty::update_claim(&source,&admin,&warranty_claim,"in_progress","Supplier inspection").await?;
     assert_eq!(pos_core::warranty::events(&source,&admin,&warranty_claim).await?.len(),2);
+    let pg_value=pos_core::stock_valuation::calculate(&db::search_product_metadata(&source,"",0).await?);
+    assert_eq!(pg_value.total,rust_decimal::Decimal::from(45000));
+    assert_eq!(pg_value.excluded_services,1);
     let exported = dir.path().join("server-export.db");
     let report = data_transfer::export(&source, &admin, &exported).await?;
     assert!(report.tables > 100);
@@ -940,6 +943,9 @@ async fn postgres_export_import_preserves_all_tables_blobs_credit_sequences_and_
     data_transfer::import(&exported, &imported).await?;
     let result = sqlite::connect(&format!("sqlite://{}", imported.display())).await?;
     let imported_admin = auth::login(&result, "owner", "test-password").await?;
+    let copied_value=pos_core::stock_valuation::calculate(&db::search_product_metadata(&result,"",0).await?);
+    assert_eq!(pg_value,copied_value);
+
     assert_eq!(
         s::query_scalar::<_, Vec<u8>>("SELECT image_data FROM products WHERE id=1")
             .fetch_one(&result)
@@ -1208,4 +1214,24 @@ async fn standalone_assistant_service_product_receipts_dates_payment_amount_and_
     s::query("UPDATE products SET name='Renamed service' WHERE id=2").execute(&pool).await?;
     assert_eq!(ai::ask(&pool,&actor,&cash).await?.receipt_ids,vec![first.id]);
     pool.close().await;Ok(())
+}
+
+
+#[tokio::test]
+async fn standalone_stock_value_variants_services_missing_cost_and_dashboard()->Result<()> {
+    let (_dir,pool,actor)=fixture().await?;
+    s::query("INSERT INTO products(id,name,sold_by,price,cost,stock) VALUES(2,'Missing cost','Each',100,NULL,5),(3,'Service fee','Service',100,999,100),(4,'Variant parent','Variants',100,999,999)").execute(&pool).await?;
+    s::query("INSERT INTO product_variants(id,product_id,size,price,cost,stock,active) VALUES(1,4,'A',100,100,2,1),(2,4,'B',100,200,3,1),(3,4,'Inactive',100,999,5,0),(4,4,'No cost',100,0,7,1)").execute(&pool).await?;
+    let products=db::search_product_metadata(&pool,"",0).await?;
+    let value=pos_core::stock_valuation::calculate(&products);
+    assert_eq!(value.total,rust_decimal::Decimal::from(50800));
+    assert_eq!(value.missing_cost_products,2);
+    assert_eq!(value.missing_cost_in_stock,2);
+    assert_eq!(value.excluded_services,1);
+    assert_eq!(value.rows.len(),5);
+    let day=chrono::Local::now().date_naive().to_string();
+    assert_eq!(pos_core::dashboard::load(&pool,&actor,&day,&day).await?.stock_value,value);
+    complete_sale(&pool,&draft("Cash",20000.0),&actor).await?;
+    assert_eq!(pos_core::dashboard::load(&pool,&actor,&day,&day).await?.stock_value.total,rust_decimal::Decimal::from(45800));
+    Ok(())
 }

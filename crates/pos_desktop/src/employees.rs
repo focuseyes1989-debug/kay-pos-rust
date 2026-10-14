@@ -284,15 +284,15 @@ pub fn EmployeesPage(db_form: DbForm) -> Element {
             }
             if let Some(loaded)=loaded.as_ref(){div {class:"employee_summary",
                 for (key,label) in [("active","Active Employees"),("pending_leave","Pending Leave"),("expiring","Documents Expiring"),("advances","Outstanding Advances")]{
-                    if !loaded.summary[key].is_null(){div {span {"{label}"} strong {if key=="advances"{{crate::format_ks(loaded.summary[key].as_f64().unwrap_or_default())}}else{{employees::text(&loaded.summary,key)}}}}}
+                    if !loaded.summary[key].is_null(){div {span {crate::icons::CardLabel {label}} strong {if key=="advances"{{crate::format_ks(loaded.summary[key].as_f64().unwrap_or_default())}}else{{employees::text(&loaded.summary,key)}}}}}
                 }
             }}
             nav {class:"receipt_tabs employee_tabs",aria_label:"Employee sections",
-                for tab in employees::SECTIONS {button {class:if section()==*tab || (section()==Section::Assignments&&*tab==Section::Shifts)||(section()==Section::Commission&&*tab==Section::Advances){"active"}else{""},onclick:{let tab=*tab;move |_|{section.set(tab);selected.set(None);page.set(0);status.set(String::new());query.set(String::new());branch.set(String::new());department.set(String::new());position.set(String::new());}},"{tab.title()}"}}
+                for tab in employees::SECTIONS {button {class:if section()==*tab || (section()==Section::Assignments&&*tab==Section::Shifts)||(section()==Section::Commission&&*tab==Section::Advances){"active"}else{""},onclick:{let tab=*tab;move |_|{section.set(tab);selected.set(None);page.set(0);status.set(String::new());query.set(String::new());branch.set(String::new());department.set(String::new());position.set(String::new());}},crate::icons::TabLabel {label:tab.title()}}}
             }
             if matches!(section(),Section::Shifts|Section::Assignments|Section::Advances|Section::Commission){
                 div {class:"receipt_tabs employee_subtabs",for tab in if matches!(section(),Section::Shifts|Section::Assignments){vec![Section::Shifts,Section::Assignments]}else{vec![Section::Advances,Section::Commission]}{
-                    button {class:if section()==tab{"active"}else{""},onclick:move |_|{section.set(tab);selected.set(None);status.set(String::new());attendance_employee.set(String::new());attendance_record.set(String::new());page.set(0);},"{tab.title()}"}
+                    button {class:if section()==tab{"active"}else{""},onclick:move |_|{section.set(tab);selected.set(None);status.set(String::new());attendance_employee.set(String::new());attendance_record.set(String::new());page.set(0);},crate::icons::TabLabel {label:tab.title()}}
                 }}
             }
             div {class:"employee_filters",

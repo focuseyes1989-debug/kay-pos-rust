@@ -54,7 +54,7 @@ pub fn SalesComparison(db_form:DbForm,actor:pos_core::auth::Session)->Element{
      article{span{"Receipts"}p{class:"comparison_amount","{first.receipts} / {second.receipts}"}small{"Current / previous"}}
     }
    }
-   div{class:"receipt_tabs",role:"tablist",for (index,label) in ["Categories","Products"].iter().enumerate(){button{role:"tab",aria_selected:dimension()==index,class:if dimension()==index{"active"}else{""},onclick:move |_|dimension.set(index),"{label}"}}}
+   div{class:"receipt_tabs",role:"tablist",for (index,label) in ["Categories","Products"].iter().enumerate(){button{role:"tab",aria_selected:dimension()==index,class:if dimension()==index{"active"}else{""},onclick:move |_|dimension.set(index),crate::icons::TabLabel {label:*label}}}}
    div{class:"expense_comparison_highlights",
     for (title,increase) in [("Largest sales decreases",false),("Largest sales increases",true)]{
      section{class:if increase{"increased"}else{"decreased"},h3{"{title}"}p{class:"comparison_section_hint","Top 5 categories by change in amount"}

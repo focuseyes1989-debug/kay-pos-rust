@@ -82,7 +82,7 @@ pub fn BudgetPanel(db_form:DbForm,actor:Session,alerts:bool)->Element {
                     div{class:"phase4_toolbar expense_alert_settings",span{class:if config.enable_notifications==1 {"budget_badge good"}else{"budget_badge neutral"},if config.enable_notifications==1 {"Alerts enabled"}else{"Alerts disabled"}} span{"Warn at {config.warning_threshold}%"} span{"{config.check_frequency}"}
                         button{onclick:{let c=config.clone();move |_|settings.set(Some((c.clone(),c.clone())))},ActionLabel{label:"Settings"}}
                     }
-                    div{class:"budget_overview",div{small{"Alerts"}span{"{history.len()}"}} div{small{"Unread"}span{"{history.iter().filter(|a|a.is_read==0).count()}"}}}
+                    div{class:"budget_overview",div{small{crate::icons::CardLabel {label:"Alerts"}}span{"{history.len()}"}} div{small{crate::icons::CardLabel {label:"Unread"}}span{"{history.iter().filter(|a|a.is_read==0).count()}"}}}
                     div{class:"phase4_table expense_alert_table",table{thead{tr{th{"Date"}th{"Category"}th{"Message"}th{"Status"}th{"Actions"}}}tbody{
                         for a in history {
                             tr { key:"{a.id}",
@@ -97,9 +97,9 @@ pub fn BudgetPanel(db_form:DbForm,actor:Session,alerts:bool)->Element {
                     }}}
                 } else {
                     div{class:"budget_overview",
-                        div{small{"Total budget"}span{"{budget_money(rows.iter().map(|r|r.budget_amount).sum())}"}}
-                        div{small{"Spent"}span{"{budget_money(rows.iter().map(|r|r.actual).sum())}"}}
-                        div{small{"Categories without budget"}span{"{rows.iter().filter(|r|r.budget_amount.is_zero()).count()}"}}
+                        div{small{crate::icons::CardLabel {label:"Total budget"}}span{"{budget_money(rows.iter().map(|r|r.budget_amount).sum())}"}}
+                        div{small{crate::icons::CardLabel {label:"Spent"}}span{"{budget_money(rows.iter().map(|r|r.actual).sum())}"}}
+                        div{small{crate::icons::CardLabel {label:"Categories without budget"}}span{"{rows.iter().filter(|r|r.budget_amount.is_zero()).count()}"}}
                     }
                     div{class:"phase4_table expense_budget_table",table{thead{tr{th{"Category"}th{"Budget"}th{"Spent"}th{"Remaining"}th{"Usage"}th{"Status"}th{"Actions"}}}tbody{
                         for r in rows {tr{key:"{r.category}",td{"{r.category}"}td{class:"budget_amount","{budget_money(r.budget_amount)}"}td{class:"budget_amount","{budget_money(r.actual)}"}td{class:"budget_amount",if r.budget_amount.is_zero(){"—"}else{"{budget_money(r.budget_amount-r.actual)}"}}

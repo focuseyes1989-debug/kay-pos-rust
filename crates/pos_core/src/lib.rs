@@ -21,6 +21,7 @@ pub mod erp_procurement;
 pub mod erp_reconciliation;
 pub mod erp_sync;
 pub mod inventory;
+pub mod stock_valuation;
 pub mod inventory_reversal;
 pub mod locations;
 pub mod models;

@@ -70,7 +70,7 @@ use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fs, path::PathBuf};
 use tokio::time::{sleep, Duration};
 
-const APP_CSS: &str = concat!(include_str!("../assets/app.css"), "\n", include_str!("../assets/myanmar-text.css"), "\n", include_str!("../assets/compact-controls.css"), "\n", include_str!("../assets/theme-editor.css"), "\n", include_str!("../assets/database-dialog.css"));
+const APP_CSS: &str = concat!(include_str!("../assets/app.css"), "\n", include_str!("../assets/myanmar-text.css"), "\n", include_str!("../assets/compact-controls.css"), "\n", include_str!("../assets/theme-editor.css"), "\n", include_str!("../assets/database-dialog.css"), "\n", include_str!("../assets/cards.css"));
 const PRODUCT_BATCH_SIZE: usize = 60;
 
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
@@ -2475,7 +2475,7 @@ fn SettingsSection(
 fn SettingsCard(title: &'static str, value: String, action: String) -> Element {
     rsx! {
         div { class: "settings_card",
-            span { "{title}" }
+            span { crate::icons::CardLabel {label:title} }
             strong { "{value}" }
             small { "{action}" }
         }
@@ -2708,22 +2708,22 @@ fn ReceiptsPage(
                     button {
                         class: if active_tab == "receipts" { "active" } else { "" },
                         onclick: move |_| on_tab.call("receipts".to_string()),
-                        crate::icons::ActionLabel { label:"Receipts" }
+                        crate::icons::TabLabel { label:"Receipts" }
                     }
                     button {
                         class: if active_tab == "refunded" { "active" } else { "" },
                         onclick: move |_| on_tab.call("refunded".to_string()),
-                        "Refunded"
+                        crate::icons::TabLabel {label:"Refunded"}
                     }
                     button {
                         class: if active_tab == "discounted" { "active" } else { "" },
                         onclick: move |_| on_tab.call("discounted".to_string()),
-                        "Discounted"
+                        crate::icons::TabLabel {label:"Discounted"}
                     }
                     button {
                         class: if active_tab == "credit" { "active" } else { "" },
                         onclick: move |_| on_tab.call("credit".to_string()),
-                        "Credit"
+                        crate::icons::TabLabel {label:"Credit"}
                     }
                 }
                 div { class: "receipt_quick_filters",
@@ -2773,7 +2773,7 @@ fn ReceiptsPage(
 fn ReceiptStat(class_name: &'static str, label: &'static str, value: String) -> Element {
     rsx! {
         div { class: "receipt_stat {class_name}",
-            span { "{label}" }
+            span { crate::icons::CardLabel {label} }
             strong { "{value}" }
         }
     }

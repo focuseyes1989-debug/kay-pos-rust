@@ -108,3 +108,56 @@ mod tests {
         assert!(super::source("../../unknown").is_none());
     }
 }
+
+/// Shared semantic icons for card headings; text remains accessible.
+#[component]
+pub fn CardLabel(label: String) -> Element {
+    let lower=label.to_lowercase();
+    let (name,tone)=if lower.contains("refund") {("undo","pink")}
+    else if lower.contains("credit") || lower.contains("outstanding") || lower.contains("advance") {("credit_card","purple")}
+    else if lower.contains("expense") || lower.contains("spen") {("payments","amber")}
+    else if lower.contains("profit") || lower.contains("received") || lower.contains("paid") || lower.contains("delivered") {("payments","teal")}
+    else if lower.contains("discount") {("payments","amber")}
+    else if lower.contains("receipt") {("receipt","blue")}
+    else if lower.contains("employee") || lower.contains("customer") {("groups","teal")}
+    else if lower.contains("stock") || lower.contains("cost") {("inventory","amber")}
+    else if lower.contains("categor") {("category","purple")}
+    else if lower.contains("budget") {("payments","blue")}
+    else if lower.contains("alert") || lower.contains("unread") || lower.contains("expir") || lower.contains("dead") {("check_circle","pink")}
+    else if lower.contains("leave") {("calendar","purple")}
+    else if lower.contains("sale") {("analytics","blue")}
+    else {("dashboard","blue")};
+    rsx! {span {class:"card_label","data-tone":tone,Icon {name} span {"{label}"}}}
+}
+
+
+fn tab_icon(label: &str) -> &'static str {
+    match label {
+        "Receipts" => "receipt",
+        "Refunded" => "undo",
+        "Discounted" | "Discount" | "Wholesale" => "payments",
+        "Credit" | "Receivables" | "Advances & Commission" => "credit_card",
+        "Expenses" | "Budgets" | "Payments" | "Payables" | "Payroll" | "Cash Sessions" => "payments",
+        "Alerts" => "check_circle",
+        "Comparison" | "Summary" | "Sales" | "Profit & Loss" | "Financial Summary" | "Performance" => "analytics",
+        "Categories" | "Categories (Sales)" | "Categories (Expense)" | "Spending by Category" | "Parent" => "category",
+        "Expense History" | "Purchase History" | "Supplier Ledger" => "history",
+        "Products & stock" | "Stock value" | "Stock In" | "Stock Out" => "inventory",
+        "Adjustment" => "edit",
+        "Stock by location" | "Manage locations" => "location_on",
+        "Products" | "Items" => "products",
+        "Daily" | "Attendance" | "Shifts" | "Shift Assignments" | "Leave" => "calendar",
+        "Employees" => "groups",
+        "Documents" => "folder_open",
+        "Commission Rules" => "settings",
+        "Purchase Orders" | "Jobs" => "orders",
+        "Design Prompts" => "products",
+        _ => "dashboard",
+    }
+}
+
+/// Decorative icons keep the existing visible tab text and accessible name.
+#[component]
+pub fn TabLabel(label: String) -> Element {
+    rsx! {span {class:"ui_tab_label",Icon {name:tab_icon(&label)} span {"{label}"}}}
+}

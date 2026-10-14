@@ -64,8 +64,8 @@ pub fn LocationsPage(db_form: DbForm, actor:pos_core::auth::Session, on_sales: E
         section {class:"customers_page products_touch locations_touch",
             div {class:"location_toolbar",
                 div {class:"receipt_tabs location_tabs",role:"tablist",
-                    button {role:"tab",aria_selected:!manage(),class:if !manage(){"active"}else{""},onclick:move |_|manage.set(false),"Stock by location"}
-                    button {role:"tab",aria_selected:manage(),class:if manage(){"active"}else{""},onclick:move |_|manage.set(true),"Manage locations"}
+                    button {role:"tab",aria_selected:!manage(),class:if !manage(){"active"}else{""},onclick:move |_|manage.set(false),crate::icons::TabLabel {label:"Stock by location"}}
+                    button {role:"tab",aria_selected:manage(),class:if manage(){"active"}else{""},onclick:move |_|manage.set(true),crate::icons::TabLabel {label:"Manage locations"}}
                 }
                 div {class:"customers_actions",
                     if actor.allows(pos_core::auth::Permission::Manage) {button {onclick:move |_|{transfer_stock.set(None);transferring.set(true);}, crate::icons::ActionLabel { label:"Stock Transfer" } }}

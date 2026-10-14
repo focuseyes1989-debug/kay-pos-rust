@@ -126,7 +126,7 @@ fn render_state(
 
 #[component]
 fn Metric(label: String, value: String, tone: String) -> Element {
-    rsx! { div { class: "erp_ops_metric", "data-tone": tone, span { "{label}" } strong { "{value}" } } }
+    rsx! { div { class: "erp_ops_metric", "data-tone": tone, span { crate::icons::CardLabel {label} } strong { "{value}" } } }
 }
 
 #[component]

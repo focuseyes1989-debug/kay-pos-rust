@@ -123,7 +123,7 @@ pub fn DashboardPage(db_form: DbForm, actor: pos_core::auth::Session, on_navigat
                         if let Some(row)=summary.period.iter().find(|r|r.label==label) {
                             article {class:"dashboard_metric", "data-metric":label,
                                 div {class:"dashboard_metric_heading",
-                                    small {"{row.label}"}
+                                    small {crate::icons::CardLabel {label:row.label.clone()}}
                                     small {class:"dashboard_metric_count","{row.count} records"}
                                 }
                                 strong {"{format_ks(row.amount)}"}
@@ -156,7 +156,7 @@ pub fn DashboardPage(db_form: DbForm, actor: pos_core::auth::Session, on_navigat
                     div {class:"dashboard_metrics",
                         for row in summary.period.iter().filter(|r|!matches!(r.label.as_str(),"Completed sales"|"Received at checkout"|"Recorded expenses"|"Credit sales")) {
                             article {class:"dashboard_metric",
-                                div {class:"dashboard_metric_heading",small {"{row.label}"} small {class:"dashboard_metric_count","{row.count} records"}}
+                                div {class:"dashboard_metric_heading",small {crate::icons::CardLabel {label:row.label.clone()}} small {class:"dashboard_metric_count","{row.count} records"}}
                                 strong {"{format_ks(row.amount)}"}
                             }
                         }
@@ -169,12 +169,20 @@ pub fn DashboardPage(db_form: DbForm, actor: pos_core::auth::Session, on_navigat
                 }
                 div {class:"dashboard_section_heading",h3 {"Current balances & operations"} small {"Current totals across all dates"}}
                 div {class:"dashboard_metrics dashboard_operations_metrics",
-                    article {class:"dashboard_metric",small {"Customer receivables"} strong {"{format_ks(summary.customers.iter().map(|r|r.amount).sum())}"} small {"{summary.customers.len()} customers"}}
-                    article {class:"dashboard_metric",small {"Supplier payable (ledger)"} strong {"{format_ks(summary.suppliers.iter().map(|r|r.amount.max(0.0)).sum())}"}}
-                    article {class:"dashboard_metric",small {"Supplier advances (ledger)"} strong {"{format_ks(summary.suppliers.iter().map(|r|(-r.amount).max(0.0)).sum())}"}}
-                    article {class:"dashboard_metric",small {"Low stock / Out of stock"} strong {"{alerts.iter().filter(|r|r.stock>0.0).count()} / {alerts.iter().filter(|r|r.stock<=0.0).count()}"}}
+                    article {class:"dashboard_metric stock_value_card",
+                        small {crate::icons::CardLabel {label:"Stock value"}}
+                        strong {{crate::inventory::stock_money(summary.stock_value.total)}}
+                        small {"Current stock × cost · Services excluded"}
+                        small {"Missing cost: {summary.stock_value.missing_cost_products} products ({summary.stock_value.missing_cost_in_stock} in stock)"}
+                        button {onclick:move |_|on_navigate.call(WorkspaceView::Inventory),"View inventory details"}
+                    }
+
+                    article {class:"dashboard_metric",small {crate::icons::CardLabel {label:"Customer receivables"}} strong {"{format_ks(summary.customers.iter().map(|r|r.amount).sum())}"} small {"{summary.customers.len()} customers"}}
+                    article {class:"dashboard_metric",small {crate::icons::CardLabel {label:"Supplier payable (ledger)"}} strong {"{format_ks(summary.suppliers.iter().map(|r|r.amount.max(0.0)).sum())}"}}
+                    article {class:"dashboard_metric",small {crate::icons::CardLabel {label:"Supplier advances (ledger)"}} strong {"{format_ks(summary.suppliers.iter().map(|r|(-r.amount).max(0.0)).sum())}"}}
+                    article {class:"dashboard_metric",small {crate::icons::CardLabel {label:"Low stock / Out of stock"}} strong {"{alerts.iter().filter(|r|r.stock>0.0).count()} / {alerts.iter().filter(|r|r.stock<=0.0).count()}"}}
                     for row in &summary.operations {
-                        article {class:"dashboard_metric",small {"{row.label}"} strong {"{row.count}"} if row.amount!=0.0 {small {"{format_ks(row.amount)}"}}}
+                        article {class:"dashboard_metric",small {crate::icons::CardLabel {label:row.label.clone()}} strong {"{row.count}"} if row.amount!=0.0 {small {"{format_ks(row.amount)}"}}}
                     }
                 }
                 div {class:"dashboard_tables",

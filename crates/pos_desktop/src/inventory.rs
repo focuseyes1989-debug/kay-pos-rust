@@ -26,6 +26,7 @@ pub fn InventoryPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
     let mut applied = use_signal(|| (String::new(), String::new()));
     let mut count = use_signal(|| 50usize);
     let mut selected = use_signal(|| None::<i32>);
+    let mut show_value = use_signal(|| false);
     let mut receiving = use_signal(|| false);
     let mut error = use_signal(String::new);
     let mut revision = use_signal(|| 0u64);
@@ -56,6 +57,9 @@ pub fn InventoryPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
                 .contains(&query)
         })
         .collect::<Vec<_>>();
+    let valuation=pos_core::stock_valuation::calculate(&products);
+    let filtered_products=rows.iter().map(|p|(*p).clone()).collect::<Vec<_>>();
+    let filtered_value=pos_core::stock_valuation::calculate(&filtered_products);
     let current = products.iter().find(|p| Some(p.id) == selected()).cloned();
     rsx! {
         section {class:"customers_page products_touch inventory_touch",
@@ -65,6 +69,15 @@ pub fn InventoryPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
                 label {"Category" select {value:"{category}",onchange:move |e|category.set(e.value()),option {value:"","All categories"} for c in categories {option {value:"{c.id}","{c.name}"}}}}
                 button {onclick:move |_|{search.set(String::new());category.set(String::new());applied.set((String::new(),String::new()));count.set(50);},"Reset"}
             }
+            div {class:"receipt_tabs",role:"tablist",aria_label:"Inventory view",
+                button {role:"tab",aria_selected:!show_value(),class:if !show_value(){"active"}else{""},onclick:move |_|show_value.set(false),crate::icons::TabLabel {label:"Products & stock"}}
+                button {role:"tab",aria_selected:show_value(),class:if show_value(){"active"}else{""},onclick:move |_|show_value.set(true),crate::icons::TabLabel {label:"Stock value"}}
+            }
+            if show_value() {
+                if !data.finished() {p {role:"status","Loading stock value..."}}
+                else if let Some(Err(e))=state.as_ref() {p {role:"alert","{e}"}}
+                else {StockValueDetails {total:valuation.clone(),filtered:filtered_value}}
+            } else {
             div {class:"inventory_columns",
                 section {class:"inventory_list",h3 {"Products & stock"}
                     if !data.finished() {div {class:"product_loading",role:"status",span {class:"loading_spinner"} strong {"Loading..."}}}
@@ -94,6 +107,7 @@ pub fn InventoryPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
                         }
                     } else {div {class:"inventory_select_empty",strong {"Select a product"}}}
                 }
+            }
             }
         }
         if receiving() {if let Some(product)=current {div {class:"modal_backdrop",section {class:"customer_dialog movement_dialog",role:"dialog",aria_modal:"true",aria_label:"Stock movements",
@@ -252,7 +266,7 @@ fn ReceiveDialog(
     let current_stock = if crate::is_variant_product(&product) { selected_variant.map(|v|v.stock) } else { Some(product.stock) };
     let variant_costs = product.variants.clone();
     rsx! {div {class:"inventory_inline_editor",
-        div {class:"inventory_action_tabs",role:"tablist",for label in ["Stock In","Stock Out","Adjustment"] {button {role:"tab",aria_selected:mode()==label,class:if mode()==label{"active"}else{""},disabled:busy(),onclick:move |_|{mode.set(label.into());qty.set(String::new());reason.set(String::new());},"{label}"}}}
+        div {class:"inventory_action_tabs",role:"tablist",for label in ["Stock In","Stock Out","Adjustment"] {button {role:"tab",aria_selected:mode()==label,class:if mode()==label{"active"}else{""},disabled:busy(),onclick:move |_|{mode.set(label.into());qty.set(String::new());reason.set(String::new());},crate::icons::TabLabel {label}}}}
         section {class:"inventory_action_form",h3 {"{mode}"}
         div {class:if mode()=="Stock In" {"customer_form inventory_stock_in_fields"}else{"customer_form"},
             if crate::is_variant_product(&product){label {class:"inventory_variant_field","Variant" select {disabled:busy(),value:"{variant}",onchange:move |e|{let value=e.value();if let Some(v)=variant_costs.iter().find(|v|Some(v.variant_id)==value.parse().ok()){cost.set(v.cost.to_string());}variant.set(value);},option {value:"","Select variant"} for v in &product.variants {option {value:"{v.variant_id}","{v.size.as_deref().unwrap_or_default()} {v.color.as_deref().unwrap_or_default()} · {v.sku.as_deref().unwrap_or_default()} · Stock: " {crate::format_qty(v.stock)}}}}}
@@ -300,4 +314,58 @@ fn ReceiveDialog(
             },if busy(){"Saving..."}else{"Save {mode}"}}
         }
     }}}
+}
+
+
+pub(crate) fn stock_money(value:pos_core::Money)->String {
+    let text=value.round_dp(2).normalize().to_string();
+    let (whole,fraction)=text.split_once('.').unwrap_or((&text,""));
+    let (sign,digits)=if let Some(v)=whole.strip_prefix('-'){("-",v)}else{("",whole)};
+    let mut grouped=String::new();
+    for (i,c) in digits.chars().enumerate(){if i>0&&(digits.len()-i)%3==0{grouped.push(',');}grouped.push(c);}
+    format!("{sign}{grouped}{} {}",if fraction.is_empty(){String::new()}else{format!(".{fraction}")},crate::regional::current().symbol())
+}
+
+#[component]
+fn StockValueDetails(total:pos_core::stock_valuation::StockValuation,filtered:pos_core::stock_valuation::StockValuation)->Element {
+    let mut limit=use_signal(||50usize);
+    let mut missing_limit=use_signal(||50usize);
+    let valued=filtered.rows.iter().filter(|r|r.unit_cost.is_some()).collect::<Vec<_>>();
+    let missing=filtered.rows.iter().filter(|r|r.unit_cost.is_none()).collect::<Vec<_>>();
+    rsx! {section {class:"stock_value_details",
+        div {class:"stock_value_summary",
+            article {class:"dashboard_metric",small {crate::icons::CardLabel {label:"Total stock value"}} strong {"{stock_money(total.total)}"} small {"All products · Current stock"}}
+            article {class:"dashboard_metric",small {crate::icons::CardLabel {label:"Filtered stock value"}} strong {"{stock_money(filtered.total)}"} small {"Current search and category"}}
+            article {class:"dashboard_metric",small {crate::icons::CardLabel {label:"Missing cost"}} strong {"{total.missing_cost_products} products"} small {"{total.missing_cost_in_stock} products have stock"}}
+        }
+        p {class:"stock_value_note","Stock value = positive on-hand quantity × current cost. Services excluded: {total.excluded_services}. Zero / missing costs are excluded from the total. Variants use their own stock and cost."}
+        if total.negative_stock_rows>0 {p {role:"status",class:"stock_value_warning","{total.negative_stock_rows} rows have negative stock. They contribute zero value; review their stock balances."}}
+        section {class:"stock_value_section",h3 {"Stock value details"}
+            div {class:"stock_value_table",table {class:"customers_table",
+                thead {tr {th {"Product / Variant"} th {"Category"} th {"Stock"} th {"Unit cost"} th {"Stock value"}}}
+                tbody {if valued.is_empty(){tr {td {colspan:"5","No products with a recorded cost match this filter."}}}
+                    for row in valued.iter().take(limit()) {tr {
+                        td {strong {"{row.name}"} if !row.variant.is_empty(){small {"{row.variant}"}}}
+                        td {"{row.category}"} td {"{crate::format_qty(row.stock)}"}
+                        td {{row.unit_cost.map(stock_money).unwrap_or_else(||"Not set".into())}}
+                        td {{row.value.map(stock_money).unwrap_or_else(||"Unavailable".into())}}
+                    }}
+                }
+            }}
+            if valued.len()>limit(){button {onclick:move |_|limit+=50,"Load more"}}
+        }
+        section {class:"stock_value_section",h3 {crate::icons::CardLabel {label:"Products without cost"}}
+            p {"{missing.len()} product / variant rows match this filter. Enter a cost in Products to include them in stock value. A cost of zero is treated as missing."}
+            div {class:"stock_value_table",table {class:"customers_table",
+                thead {tr {th {"Product / Variant"} th {"Category"} th {"Stock"} th {"Status"}}}
+                tbody {if missing.is_empty(){tr {td {colspan:"4","No products without cost match this filter."}}}
+                    for row in missing.iter().take(missing_limit()) {tr {
+                        td {strong {"{row.name}"} if !row.variant.is_empty(){small {"{row.variant}"}}}
+                        td {"{row.category}"} td {"{crate::format_qty(row.stock)}"} td {"Cost not set"}
+                    }}
+                }
+            }}
+            if missing.len()>missing_limit(){button {onclick:move |_|missing_limit+=50,"Load more"}}
+        }
+    }}
 }
