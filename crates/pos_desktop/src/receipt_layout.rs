@@ -183,6 +183,7 @@ pub fn sale(receipt: &ReceiptData, settings: &HashMap<String, String>) -> Vec<Ro
             settings,
         );
     }
+    serial_rows(&mut rows,&receipt.serials);
     totals(
         &mut rows,
         Some(receipt.subtotal),
@@ -218,6 +219,7 @@ pub fn detail(receipt: &ReceiptDetail, settings: &HashMap<String, String>) -> Ve
             settings,
         );
     }
+    serial_rows(&mut rows,&receipt.serials);
     // Historic totals may include tax not separately stored in the receipt summary.
     let subtotal = receipt.items.iter().map(|item| item.total).sum();
     totals(
@@ -384,8 +386,10 @@ mod tests {
 
     #[test]
     fn saved_receipt_and_historic_reprint_share_custom_layout() {
-        let sale = crate::receipt_preview::sample_receipt();
+        let mut sale = crate::receipt_preview::sample_receipt();
+        sale.serials=vec![pos_core::models::ReceiptSerial {product_name:"Sample item".into(),serial:"SN-<001>".into(),starts:"2026-01-31".into(),ends:"2028-01-31".into()}];
         let receipt = crate::ReceiptDetail {
+            serials:sale.serials.clone(),
             summary: crate::SaleSummary {
                 id: 1,
                 invoice_no: Some(sale.invoice_no.clone()),
@@ -414,7 +418,14 @@ mod tests {
             "receipt_field_order".into(),
             crate::receipt_fields::move_key(&s, "receipt_field_order", "items", true),
         );
-        assert_eq!(super::sale(&sale, &s), detail(&receipt, &s));
+        for paper in ["58","80"] {
+            s.insert("receipt_paper_size".into(),paper.into());
+            let rows=super::sale(&sale,&s);
+            assert!(rows.iter().any(|r|r.text.contains("S/N: SN-<001>")));
+            assert!(rows.iter().any(|r|r.text.contains("Warranty: 24 months | 2026-01-31 to 2028-01-31")));
+            assert_eq!(rows,detail(&receipt,&s));
+        }
+
     }
     #[test]
     fn field_visibility_order_and_table_keep_sale_amounts() {
@@ -501,5 +512,14 @@ mod tests {
         assert_eq!(paper_mm(&settings), 58);
         settings.insert("receipt_paper_size".into(), "invalid".into());
         assert_eq!(paper_mm(&settings), 80);
+    }
+}
+
+fn serial_rows(rows:&mut Vec<Row>,serials:&[pos_core::models::ReceiptSerial]) {
+    use chrono::Datelike;
+    for unit in serials {
+        let months=chrono::NaiveDate::parse_from_str(&unit.starts,"%Y-%m-%d").ok().zip(chrono::NaiveDate::parse_from_str(&unit.ends,"%Y-%m-%d").ok()).map(|(a,b)|(b.year()-a.year())*12+b.month() as i32-a.month() as i32);
+        rows.push(field_row("items","item",&format!("{} · S/N: {}",unit.product_name,unit.serial),""));
+        rows.push(field_row("items","item",&format!("Warranty: {} months | {} to {}",months.map(|n|n.to_string()).unwrap_or_else(||"—".into()),unit.starts,unit.ends),""));
     }
 }

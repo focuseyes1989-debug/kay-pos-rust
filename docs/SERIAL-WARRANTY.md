@@ -1,10 +1,19 @@
 # Serial numbers and warranty
 
-Open **Sales > Serial & Warranty**. For new sales, select the customer during checkout.
+For new sales, click the inventory icon beside the cart quantity controls to open
+**Serial & Warranty**. Enter one serial per sold unit and a warranty term in months,
+then Apply. Choose a customer at checkout. The sale, stock deduction, credit entry
+and serial registrations commit together; any serial conflict rolls everything back.
+The receipt shows the serials, warranty months and start/end dates in previews and
+58/80 mm print layouts, including later reprints. Held carts and durable checkout
+recovery retain serials. After changing quantity, update the serial list to match.
+
+Ordinary items may still be sold without serials. Use **Sales > Serial & Warranty**
+for historical receipt registration and claims.
 Find the completed receipt by its exact invoice number, select its product line,
 enter the physical serial number and warranty length (1–120 months), then register.
 Repeat once per sold unit. Existing ordinary sales continue without serial registration.
-Registration is available after checkout, including historical completed receipts.
+Registration is also available after checkout, including historical completed receipts.
 This module tracks sold units; it does not reserve serial numbers when receiving inventory.
 
 Serials are trimmed and normalized to uppercase, unique across this database.
@@ -49,3 +58,18 @@ Integration tests cover serial uniqueness/case normalization, concurrent registr
 quantity limits, anonymous/fractional/refunded receipts, month boundaries, expiry,
 duplicate active claims, status history, account/role changes, exports/imports and
 legacy backups. PostgreSQL validation runs on the isolated port 55487 test cluster.
+
+## A4 warranty forms
+
+After registering a serial, its unit is selected automatically. Use **Export PDF**
+or **Print A4** in the A4 Warranty Form section. Existing serials can also be selected
+from lookup. Each form covers one physical serialized unit and shows the original
+invoice, customer contact details, product, serial, warranty term/dates, and signature
+and shop-stamp spaces. Shop name, contact details and logo come from Receipt settings.
+Refunded/non-completed receipts carry a visible warning. The form records the
+warranty; it does not introduce new coverage terms or change any shop records.
+
+PDF export uses Windows **Microsoft Print to PDF** and a save dialog. A private
+temporary file is checked before replacing the destination. A4 printing opens the
+Windows printer chooser and enforces portrait A4. Long content flows to additional
+A4 pages rather than dropping text. Myanmar text uses the Windows Myanmar Text font.

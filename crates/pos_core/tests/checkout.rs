@@ -70,6 +70,7 @@ async fn fixture() -> Result<(PgPool, Session, Session)> {
 
 fn item(id: i32, qty: f64) -> SaleItemDraft {
     SaleItemDraft {
+        serials: Vec::new(),
         promotion: None,
         product_id: id,
         variant_id: (id == 3).then_some(30),
@@ -809,5 +810,29 @@ async fn inconsistent_batches_and_changed_settings_fail_closed() -> Result<()> {
         1
     );
     pool.close().await;
+    Ok(())
+}
+
+#[tokio::test]
+#[ignore="requires isolated P1_TEST_DATABASE_URL"]
+async fn checkout_serial_warranty_is_atomic_across_batches_and_concurrent_sales()->Result<()> {
+    use pos_core::models::SerialWarranty;
+    anyhow::ensure!(std::env::var("P1_TEST_DATABASE_URL")?.contains("127.0.0.1:55487/"),"Use isolated PostgreSQL");
+    let(pool,cashier,_)=fixture().await?;
+    let mut request=draft(vec![item(1,5.0)]);request.customer_id=Some(1);
+    request.items[0].serials=(0..5).map(|i|SerialWarranty {serial:format!("PG-SOLAR-{i}"),months:24}).collect();
+    let sale=complete_sale(&pool,&request,&cashier).await?;
+    assert_eq!(complete_sale(&pool,&request,&cashier).await?.id,sale.id);
+    assert_eq!(pos_core::warranty::receipt_serials(&pool,sale.id).await?.len(),5);
+    assert_eq!(sqlx::query_scalar::<_,i64>("SELECT COUNT(DISTINCT sale_item_id) FROM rust_serial_units WHERE sale_id=$1").bind(sale.id).fetch_one(&pool).await?,2);
+    let mut a=draft(vec![item(1,1.0)]);a.customer_id=Some(1);a.payment_type="Credit".into();a.payment=0.0;
+    a.items[0].serials=vec![SerialWarranty {serial:"PG-RACE".into(),months:12}];
+    let mut b=a.clone();b.invoice_no=auth::new_request_id();
+    let(one,two)=tokio::join!(complete_sale(&pool,&a,&cashier),complete_sale(&pool,&b,&cashier));
+    assert_ne!(one.is_ok(),two.is_ok());
+    assert_eq!(sqlx::query_scalar::<_,i64>("SELECT COUNT(*) FROM sales").fetch_one(&pool).await?,2);
+    assert_eq!(sqlx::query_scalar::<_,i64>("SELECT COUNT(*) FROM rust_serial_units").fetch_one(&pool).await?,6);
+    assert_eq!(sqlx::query_scalar::<_,f64>("SELECT stock FROM products WHERE id=1").fetch_one(&pool).await?,4.0);
+    assert_eq!(sqlx::query_scalar::<_,f64>("SELECT current_balance FROM customers WHERE id=1").fetch_one(&pool).await?,100.0);
     Ok(())
 }

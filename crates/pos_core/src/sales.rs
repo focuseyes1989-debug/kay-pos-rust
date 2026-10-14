@@ -32,6 +32,8 @@ pub async fn complete_sale(
             "Invalid sale quantity, price or cost"
         );
     }
+    crate::warranty::validate_sale_serials(draft)?;
+    if draft.items.iter().any(|i|!i.serials.is_empty()) {crate::warranty::ensure_schema(pool).await?;}
     let fingerprint = crate::auth::fingerprint(&serde_json::to_vec(draft)?);
     let mut tx = pool
         .begin()
@@ -224,15 +226,17 @@ pub async fn complete_sale(
     for item in &draft.items {
         let allocations =
             crate::sale_stock::deduct(&mut tx, item, &invoice_no, actor.username()).await?;
+        let mut serial_offset=0usize;
         for allocation in allocations {
-            sqlx::query(
+            if !item.serials.is_empty() {anyhow::ensure!(allocation.quantity.fract()==0.0,"Serialized stock must be allocated in whole units");}
+            let sale_item_id:i32=sqlx::query_scalar(
             r#"
             INSERT INTO sale_items (
                 sale_id, product_id, variant_id, product_name, qty, price, total, cost,
                 wholesale_regular_price, wholesale_savings, wholesale_tier_min_qty, wholesale_unit_label,
                 location_id, location, batch_no, expire_date
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) RETURNING id
             "#,
         )
         .bind(sale.id)
@@ -251,10 +255,17 @@ pub async fn complete_sale(
         .bind(allocation.location)
         .bind(allocation.batch)
         .bind(allocation.expiry)
-        .execute(&mut *tx)
+        .fetch_one(&mut *tx)
         .await
         .with_context(|| format!("failed to insert sale item {}", item.product_id))?;
+        if !item.serials.is_empty() {
+            let end=serial_offset+allocation.quantity as usize;
+            let units=item.serials.get(serial_offset..end).context("Serial allocation does not match sold quantity")?;
+            crate::warranty::register_checkout(&mut tx,actor,sale_item_id,sale.id,draft.customer_id.context("Customer required")?,sale.created_at.context("Sale date required for warranty")?.date(),units).await?;
+            serial_offset=end;
         }
+        }
+        anyhow::ensure!(item.serials.is_empty() || serial_offset==item.serials.len(),"Serial allocation is incomplete");
     }
 
     sqlx::query(
@@ -425,7 +436,8 @@ pub async fn get_receipt_detail(pool: &PgPool, sale_id: i32) -> Result<ReceiptDe
     .await
     .context("failed to load receipt items")?;
 
-    Ok(ReceiptDetail { summary, items })
+    let serials=crate::warranty::receipt_serials(pool,sale_id).await?;
+    Ok(ReceiptDetail { summary, items, serials })
 }
 
 pub async fn refund_sale(pool: &PgPool, sale_id: i32, actor: &crate::auth::Session) -> Result<()> {

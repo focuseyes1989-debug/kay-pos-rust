@@ -80,6 +80,15 @@ mod tests {
         assert!(restore(&h, &[product()]).is_err());
     }
     #[test]
+    fn hold_restore_preserves_serials_and_warranty() {
+        let h=hold(serde_json::json!([{"id":1,"qty":1,"price":100,"serials":[{"serial":"SOLAR-001","months":24}]}]));
+        let rows=restore(&h,&[product()]).unwrap();
+        assert_eq!(rows[0].serials[0].serial,"SOLAR-001");
+        let held=make_hold(&rows,Some(1),"Cash".into(),String::new()).unwrap();
+        assert_eq!(restore(&held,&[product()]).unwrap()[0].serials[0].months,24);
+        assert!(restore(&hold(serde_json::json!([{"id":1,"qty":1,"price":100}])),&[product()]).unwrap()[0].serials.is_empty());
+    }
+    #[test]
     fn restore_preserves_service_quote_without_stock() {
         let mut p = product();
         p.sold_by = Some("Service".into());
@@ -120,7 +129,7 @@ fn make_hold(
     payment: String,
     note: String,
 ) -> Result<Hold> {
-    let rows=lines.iter().map(|l|serde_json::json!({"id":l.product.id,"name":l.product.name,"qty":l.qty,"price":l.unit_price(),"cost":l.variant.as_ref().map(|v|v.cost).unwrap_or(l.product.cost),"is_service":crate::is_service_product(&l.product),"variant_id":l.variant.as_ref().map(|v|v.variant_id),"sold_by":l.product.sold_by})).collect::<Vec<_>>();
+    let rows=lines.iter().map(|l|serde_json::json!({"id":l.product.id,"name":l.product.name,"qty":l.qty,"price":l.unit_price(),"cost":l.variant.as_ref().map(|v|v.cost).unwrap_or(l.product.cost),"is_service":crate::is_service_product(&l.product),"variant_id":l.variant.as_ref().map(|v|v.variant_id),"sold_by":l.product.sold_by,"serials":l.serials})).collect::<Vec<_>>();
     let hold = Hold {
         id: 0,
         hold_no: String::new(),
@@ -185,6 +194,7 @@ fn restore(hold: &Hold, products: &[pos_core::Product]) -> Result<Vec<CartLine>>
             variant,
             qty,
             unit_price_override,
+            serials: r.get("serials").map(|v|serde_json::from_value(v.clone())).transpose()?.unwrap_or_default(),
         });
     }
     let mut totals = std::collections::HashMap::new();

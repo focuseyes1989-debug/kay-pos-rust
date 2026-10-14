@@ -1552,147 +1552,147 @@
     "sql": "SET LOCAL statement_timeout='10s'"
   },
   {
-    "source": "sales.rs:40",
+    "source": "sales.rs:42",
     "sql": "SET LOCAL lock_timeout='10s'"
   },
   {
-    "source": "sales.rs:46",
+    "source": "sales.rs:48",
     "sql": "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))"
   },
   {
-    "source": "sales.rs:50",
+    "source": "sales.rs:52",
     "sql": "SELECT fingerprint,sale_id FROM rust_checkout_requests WHERE request_id=$1"
   },
   {
-    "source": "sales.rs:60",
+    "source": "sales.rs:62",
     "sql": "SELECT id,invoice_no,total,payment,change_amount,created_at FROM sales WHERE id=$1"
   },
   {
-    "source": "sales.rs:89",
+    "source": "sales.rs:91",
     "sql": "SELECT key,value FROM settings"
   },
   {
-    "source": "sales.rs:160",
+    "source": "sales.rs:162",
     "sql": "SELECT COALESCE(credit_limit,0)::float8,COALESCE(current_balance,0)::float8 FROM customers WHERE id=$1 FOR UPDATE"
   },
   {
-    "source": "sales.rs:163",
+    "source": "sales.rs:165",
     "sql": "SELECT COALESCE(value,'1') FROM settings WHERE key='credit_limit_enabled'"
   },
   {
-    "source": "sales.rs:181",
+    "source": "sales.rs:183",
     "sql": "\n        INSERT INTO sales (\n            invoice_no, total, payment, change_amount, customer_id,\n            status, payment_type, discount_amount, cogs, gross_profit, net_profit, created_by, created_at\n        )\n        VALUES ($1, $2, $3, $4, $5, 'completed', $6, $7, $8, $9, $10, $11, $12)\n        RETURNING id, invoice_no, total, payment, change_amount, created_at\n        "
   },
   {
-    "source": "sales.rs:210",
+    "source": "sales.rs:212",
     "sql": "INSERT INTO credit_sales(invoice_no,customer_id,total_amount,paid_amount,balance_amount,sale_date,due_date,status,notes,sale_id) VALUES($1,$2,$3::float8,$4::float8,$5::float8,$6,'',$7,'Rust POS checkout',$8)"
   },
   {
-    "source": "sales.rs:212",
+    "source": "sales.rs:214",
     "sql": "UPDATE customers SET current_balance=COALESCE(current_balance,0)+$1 WHERE id=$2"
   },
   {
-    "source": "sales.rs:219",
+    "source": "sales.rs:221",
     "sql": "UPDATE customers SET total_visit=COALESCE(total_visit,0)+1,total_spent=COALESCE(total_spent,0)+$1 WHERE id=$2"
   },
   {
-    "source": "sales.rs:229",
-    "sql": "\n            INSERT INTO sale_items (\n                sale_id, product_id, variant_id, product_name, qty, price, total, cost,\n                wholesale_regular_price, wholesale_savings, wholesale_tier_min_qty, wholesale_unit_label,\n                location_id, location, batch_no, expire_date\n            )\n            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)\n            "
+    "source": "sales.rs:233",
+    "sql": "\n            INSERT INTO sale_items (\n                sale_id, product_id, variant_id, product_name, qty, price, total, cost,\n                wholesale_regular_price, wholesale_savings, wholesale_tier_min_qty, wholesale_unit_label,\n                location_id, location, batch_no, expire_date\n            )\n            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) RETURNING id\n            "
   },
   {
-    "source": "sales.rs:261",
+    "source": "sales.rs:272",
     "sql": "INSERT INTO rust_checkout_requests(request_id,fingerprint,sale_id) VALUES($1,$2,$3)"
   },
   {
-    "source": "sales.rs:294",
+    "source": "sales.rs:305",
     "sql": "SET LOCAL lock_timeout='10s'"
   },
   {
-    "source": "sales.rs:305",
+    "source": "sales.rs:316",
     "sql": "SELECT pg_advisory_xact_lock(hashtextextended($1,0))"
   },
   {
-    "source": "sales.rs:310",
+    "source": "sales.rs:321",
     "sql": "SELECT fingerprint,sale_id FROM rust_checkout_requests WHERE request_id=$1"
   },
   {
-    "source": "sales.rs:321",
+    "source": "sales.rs:332",
     "sql": "INSERT INTO rust_checkout_requests(request_id,fingerprint,sale_id) VALUES($1,$2,NULL)"
   },
   {
-    "source": "sales.rs:433",
+    "source": "sales.rs:445",
     "sql": "SET LOCAL lock_timeout='10s'"
   },
   {
-    "source": "sales.rs:440",
+    "source": "sales.rs:452",
     "sql": "SELECT COALESCE(status,'completed'),COALESCE(payment_type,''),COALESCE(invoice_no,''),customer_id FROM sales WHERE id=$1 FOR UPDATE"
   },
   {
-    "source": "sales.rs:451",
+    "source": "sales.rs:463",
     "sql": "SELECT id FROM customers WHERE id=$1 FOR UPDATE"
   },
   {
-    "source": "sales.rs:456",
+    "source": "sales.rs:468",
     "sql": "SELECT id,total_amount::float8,COALESCE(paid_amount,0)::float8,COALESCE(balance_amount,0)::float8,COALESCE(status,'pending') FROM credit_sales WHERE customer_id=$1 AND (sale_id=$2 OR (sale_id IS NULL AND invoice_no=$3)) FOR UPDATE"
   },
   {
-    "source": "sales.rs:473",
+    "source": "sales.rs:485",
     "sql": "UPDATE customers SET current_balance=GREATEST(0,COALESCE(current_balance,0)-$1::float8) WHERE id=$2"
   },
   {
-    "source": "sales.rs:475",
+    "source": "sales.rs:487",
     "sql": "UPDATE credit_sales SET status='refunded',balance_amount=0,notes=COALESCE(notes,'') || ' [REFUNDED: Rust POS receipt refund]' WHERE id=$1"
   },
   {
-    "source": "sales.rs:478",
+    "source": "sales.rs:490",
     "sql": "INSERT INTO credit_payments(credit_sale_id,customer_id,amount,payment_date,payment_method,note) VALUES($1,$2,$3::float8,$4,'refund','Rust POS receipt refund') RETURNING id"
   },
   {
-    "source": "sales.rs:482",
+    "source": "sales.rs:494",
     "sql": "INSERT INTO credit_adjustments(customer_id,credit_sale_id,amount,adjustment_type,reason,created_by) VALUES($1,$2,$3::float8,'refund','Receipt refund',$4)"
   },
   {
-    "source": "sales.rs:485",
+    "source": "sales.rs:497",
     "sql": "SELECT product_id,variant_id,COALESCE(qty,0)::float8 AS qty,COALESCE(refunded_qty,0)::float8 AS refunded,location_id,location,COALESCE(batch_no,'') AS batch,COALESCE(expire_date,'') AS expiry FROM sale_items WHERE sale_id=$1 ORDER BY product_id,variant_id,id FOR UPDATE"
   },
   {
-    "source": "sales.rs:493",
+    "source": "sales.rs:505",
     "sql": "SELECT COALESCE(stock,0)::float8,COALESCE(sold_by,'Each') FROM products WHERE id=$1 FOR UPDATE"
   },
   {
-    "source": "sales.rs:500",
+    "source": "sales.rs:512",
     "sql": "SELECT COALESCE(stock,0)::float8 FROM product_variants WHERE id=$1 AND product_id=$2 FOR UPDATE"
   },
   {
-    "source": "sales.rs:507",
+    "source": "sales.rs:519",
     "sql": "UPDATE product_variants SET stock=COALESCE(stock,0)+$1,updated_at=$2 WHERE id=$3"
   },
   {
-    "source": "sales.rs:515",
+    "source": "sales.rs:527",
     "sql": "UPDATE products SET stock=COALESCE(stock,0)+$1,last_updated=$2 WHERE id=$3"
   },
   {
-    "source": "sales.rs:532",
+    "source": "sales.rs:544",
     "sql": "INSERT INTO variant_stock_batches(product_id,variant_id,location,batch_no,expire_date,quantity,expiry_unknown) VALUES($1,$2,$3,$4,$5,$6,0) ON CONFLICT(product_id,variant_id,location,batch_no,expire_date) DO UPDATE SET quantity=variant_stock_batches.quantity+EXCLUDED.quantity"
   },
   {
-    "source": "sales.rs:535",
+    "source": "sales.rs:547",
     "sql": "UPDATE product_locations SET quantity=COALESCE(quantity,0)+$1,last_updated=$2 WHERE id=$3 AND product_id=$4"
   },
   {
-    "source": "sales.rs:538",
+    "source": "sales.rs:550",
     "sql": "INSERT INTO product_locations(product_id,location,batch_no,expire_date,quantity) VALUES($1,$2,$3,$4,$5) ON CONFLICT(product_id,location,batch_no,expire_date) DO UPDATE SET quantity=product_locations.quantity+EXCLUDED.quantity,last_updated=EXCLUDED.last_updated"
   },
   {
-    "source": "sales.rs:543",
+    "source": "sales.rs:555",
     "sql": "INSERT INTO stock_movements(product_id,variant_id,type,quantity,old_stock,new_stock,reason,reference,created_by,location,created_at) VALUES($1,$2,'refund',$3,$4,$5,'Receipt refund',$6,$9,$7,$8)"
   },
   {
-    "source": "sales.rs:547",
+    "source": "sales.rs:559",
     "sql": "UPDATE sale_items SET refunded_qty=qty,refund_reason='Receipt refund' WHERE sale_id=$1"
   },
   {
-    "source": "sales.rs:552",
+    "source": "sales.rs:564",
     "sql": "UPDATE sales SET status='refunded' WHERE id=$1"
   },
   {
@@ -1904,80 +1904,96 @@
     "sql": "LOCK TABLE sales IN SHARE ROW EXCLUSIVE MODE"
   },
   {
-    "source": "warranty.rs:80",
+    "source": "warranty.rs:56",
+    "sql": "SELECT u.id,u.serial,COALESCE(s.invoice_no,'') AS invoice,COALESCE(c.name,'Customer') AS customer,COALESCE(c.phone,'') AS phone,COALESCE(c.address,'') AS address,COALESCE(si.product_name,'Product') AS product,u.starts,u.ends,COALESCE(s.status,'') AS sale_status FROM rust_serial_units u JOIN sales s ON s.id=u.sale_id JOIN sale_items si ON si.id=u.sale_item_id JOIN customers c ON c.id=u.customer_id WHERE u.id=$1"
+  },
+  {
+    "source": "warranty.rs:95",
     "sql": "SELECT si.id,COALESCE(si.product_name,'Product') AS product,(si.qty-COALESCE(si.refunded_qty,0))::float8 AS quantity,(SELECT COUNT(*) FROM rust_serial_units u WHERE u.sale_item_id=si.id) AS registered,COALESCE(s.invoice_no,'') AS invoice,COALESCE(c.name,'Customer') AS customer FROM sale_items si JOIN sales s ON s.id=si.sale_id JOIN customers c ON c.id=s.customer_id WHERE s.invoice_no=$1 AND s.status='completed' ORDER BY si.id"
   },
   {
-    "source": "warranty.rs:105",
+    "source": "warranty.rs:113",
     "sql": "SELECT sale_id FROM sale_items WHERE id=$1"
   },
   {
-    "source": "warranty.rs:110",
+    "source": "warranty.rs:118",
     "sql": "SELECT COALESCE(status,''),customer_id,created_at::text FROM sales WHERE id=$1 FOR UPDATE"
   },
   {
-    "source": "warranty.rs:122",
+    "source": "warranty.rs:130",
     "sql": "SELECT (qty-COALESCE(refunded_qty,0))::float8 FROM sale_items WHERE id=$1 FOR UPDATE"
   },
   {
-    "source": "warranty.rs:132",
+    "source": "warranty.rs:140",
     "sql": "SELECT COUNT(*) FROM rust_serial_units WHERE sale_item_id=$1"
   },
   {
-    "source": "warranty.rs:148",
+    "source": "warranty.rs:156",
     "sql": "INSERT INTO rust_serial_units(id,serial,sale_item_id,sale_id,customer_id,starts,ends,created_by,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)"
   },
   {
-    "source": "warranty.rs:174",
+    "source": "warranty.rs:182",
     "sql": "SELECT u.id,u.serial,COALESCE(s.invoice_no,'') AS invoice,COALESCE(c.name,'Customer') AS customer,COALESCE(si.product_name,'Product') AS product,u.starts,u.ends,COALESCE(s.status,'') AS sale_status FROM rust_serial_units u JOIN sales s ON s.id=u.sale_id JOIN sale_items si ON si.id=u.sale_item_id JOIN customers c ON c.id=u.customer_id WHERE $1='' OR u.serial ILIKE $2 OR s.invoice_no ILIKE $2 OR c.name ILIKE $2 OR si.product_name ILIKE $2 ORDER BY u.created_at DESC,u.id LIMIT 200"
   },
   {
-    "source": "warranty.rs:183",
+    "source": "warranty.rs:191",
     "sql": "SELECT id,unit_id,issue,status,covered,created_at FROM rust_warranty_claims WHERE unit_id=$1 ORDER BY created_at DESC,id"
   },
   {
-    "source": "warranty.rs:191",
+    "source": "warranty.rs:199",
     "sql": "SELECT status,note,actor,created_at FROM rust_warranty_events WHERE claim_id=$1 ORDER BY created_at,id"
   },
   {
-    "source": "warranty.rs:203",
+    "source": "warranty.rs:211",
     "sql": "SELECT sale_id FROM rust_serial_units WHERE id=$1"
   },
   {
-    "source": "warranty.rs:208",
+    "source": "warranty.rs:216",
     "sql": "SELECT COALESCE(status,'') FROM sales WHERE id=$1 FOR UPDATE"
   },
   {
-    "source": "warranty.rs:213",
+    "source": "warranty.rs:221",
     "sql": "SELECT starts,ends FROM rust_serial_units WHERE id=$1 FOR UPDATE"
   },
   {
-    "source": "warranty.rs:217",
+    "source": "warranty.rs:225",
     "sql": "SELECT COUNT(*) FROM rust_warranty_claims WHERE unit_id=$1 AND status IN ('open','in_progress')"
   },
   {
-    "source": "warranty.rs:223",
+    "source": "warranty.rs:231",
     "sql": "INSERT INTO rust_warranty_claims(id,unit_id,issue,status,covered,created_at) VALUES($1,$2,$3,$4,$5,$6)"
   },
   {
-    "source": "warranty.rs:247",
+    "source": "warranty.rs:255",
     "sql": "INSERT INTO rust_warranty_events(id,claim_id,status,note,actor,created_at) VALUES($1,$2,$3,$4,$5,$6)"
   },
   {
-    "source": "warranty.rs:268",
+    "source": "warranty.rs:276",
     "sql": "SELECT u.sale_id FROM rust_warranty_claims c JOIN rust_serial_units u ON u.id=c.unit_id WHERE c.id=$1"
   },
   {
-    "source": "warranty.rs:270",
+    "source": "warranty.rs:278",
     "sql": "SELECT COALESCE(status,'') FROM sales WHERE id=$1 FOR UPDATE"
   },
   {
-    "source": "warranty.rs:279",
+    "source": "warranty.rs:287",
     "sql": "SELECT status FROM rust_warranty_claims WHERE id=$1 FOR UPDATE"
   },
   {
-    "source": "warranty.rs:287",
+    "source": "warranty.rs:295",
     "sql": "UPDATE rust_warranty_claims SET status=$1 WHERE id=$2"
+  },
+  {
+    "source": "warranty.rs:339",
+    "sql": "INSERT INTO rust_serial_units(id,serial,sale_item_id,sale_id,customer_id,starts,ends,created_by,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)"
+  },
+  {
+    "source": "warranty.rs:356",
+    "sql": "SELECT to_regclass('rust_serial_units') IS NOT NULL"
+  },
+  {
+    "source": "warranty.rs:362",
+    "sql": "SELECT COALESCE(si.product_name,'Product') AS product_name,u.serial,u.starts,u.ends FROM rust_serial_units u JOIN sale_items si ON si.id=u.sale_item_id WHERE u.sale_id=$1 ORDER BY si.id,u.serial"
   },
   {
     "source": "zkteco.rs:85",

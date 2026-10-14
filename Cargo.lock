@@ -4339,7 +4339,7 @@ dependencies = [
 
 [[package]]
 name = "pos_desktop"
-version = "0.2.31"
+version = "0.2.32"
 dependencies = [
  "anyhow",
  "arboard",

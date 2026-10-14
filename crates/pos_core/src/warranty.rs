@@ -43,6 +43,21 @@ pub struct Unit {
     pub ends: String,
     pub sale_status: String,
 }
+#[derive(Clone, Debug, serde::Serialize, sqlx::FromRow)]
+pub struct Certificate {
+    pub id:String, pub serial:String, pub invoice:String, pub customer:String,
+    pub phone:String, pub address:String, pub product:String,
+    pub starts:String, pub ends:String, pub sale_status:String,
+}
+pub async fn certificate(pool:&PgPool,actor:&Session,id:&str)->Result<Certificate> {
+    ensure_schema(pool).await?;
+    let mut tx=pool.begin().await?;
+    actor.authorize(&mut tx,Permission::Sell).await?;
+    let row=sqlx::query_as("SELECT u.id,u.serial,COALESCE(s.invoice_no,'') AS invoice,COALESCE(c.name,'Customer') AS customer,COALESCE(c.phone,'') AS phone,COALESCE(c.address,'') AS address,COALESCE(si.product_name,'Product') AS product,u.starts,u.ends,COALESCE(s.status,'') AS sale_status FROM rust_serial_units u JOIN sales s ON s.id=u.sale_id JOIN sale_items si ON si.id=u.sale_item_id JOIN customers c ON c.id=u.customer_id WHERE u.id=$1")
+        .bind(id).fetch_one(&mut *tx).await?;
+    tx.commit().await?;
+    Ok(row)
+}
 #[derive(Clone, Debug, PartialEq, sqlx::FromRow)]
 pub struct ReceiptLine {
     pub id: i32,
@@ -90,14 +105,7 @@ pub async fn register(
     serial: &str,
     months: u32,
 ) -> Result<String> {
-    let serial = serial.trim().to_uppercase();
-    ensure!(
-        !serial.is_empty()
-            && serial.chars().count() <= 120
-            && !serial.chars().any(char::is_control),
-        "Enter a serial number (up to 120 characters)"
-    );
-    ensure!((1..=120).contains(&months), "Warranty must be 1–120 months");
+    let serial = validate_serial(serial, months)?;
     ensure_schema(pool).await?;
     let mut tx = pool.begin().await?;
     actor.authorize(&mut tx, Permission::Sell).await?;
@@ -298,5 +306,86 @@ pub async fn update_claim(
     )
     .await?;
     tx.commit().await?;
+    Ok(())
+}
+
+pub fn validate_serial(serial: &str, months: u32) -> Result<String> {
+    let serial = serial.trim().to_uppercase();
+    ensure!(
+        !serial.is_empty()
+            && serial.chars().count() <= 120
+            && !serial.chars().any(char::is_control),
+        "Enter a serial number (up to 120 characters)"
+    );
+    ensure!((1..=120).contains(&months), "Warranty must be 1–120 months");
+    Ok(serial)
+}
+
+pub(crate) async fn register_checkout(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    actor: &Session,
+    item_id: i32,
+    sale_id: i32,
+    customer: i32,
+    starts: NaiveDate,
+    units: &[crate::models::SerialWarranty],
+) -> Result<()> {
+    for unit in units {
+        let serial = validate_serial(&unit.serial, unit.months)?;
+        let ends = starts
+            .checked_add_months(Months::new(unit.months))
+            .context("Invalid warranty end date")?;
+        let id = crate::auth::new_request_id();
+        sqlx::query("INSERT INTO rust_serial_units(id,serial,sale_item_id,sale_id,customer_id,starts,ends,created_by,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)")
+            .bind(&id).bind(serial).bind(item_id).bind(sale_id).bind(customer).bind(starts.to_string()).bind(ends.to_string()).bind(actor.username()).bind(now()).execute(&mut **tx).await.context("Serial number already registered. Sale was not saved")?;
+        crate::activity::record(
+            tx,
+            actor,
+            "rust.warranty.register",
+            &format!("unit_id={id}; sale_id={sale_id}"),
+        )
+        .await?;
+    }
+    Ok(())
+}
+
+pub async fn receipt_serials(
+    pool: &PgPool,
+    sale_id: i32,
+) -> Result<Vec<crate::models::ReceiptSerial>> {
+    let available: bool = sqlx::query_scalar("SELECT to_regclass('rust_serial_units') IS NOT NULL")
+        .fetch_one(pool)
+        .await?;
+    if !available {
+        return Ok(Vec::new());
+    }
+    Ok(sqlx::query_as("SELECT COALESCE(si.product_name,'Product') AS product_name,u.serial,u.starts,u.ends FROM rust_serial_units u JOIN sale_items si ON si.id=u.sale_item_id WHERE u.sale_id=$1 ORDER BY si.id,u.serial").bind(sale_id).fetch_all(pool).await?)
+}
+
+pub fn validate_sale_serials(draft: &crate::models::SaleDraft) -> Result<()> {
+    if !draft.items.iter().any(|i| !i.serials.is_empty()) {
+        return Ok(());
+    }
+    ensure!(
+        draft.customer_id.is_some(),
+        "Select a customer for serial/warranty sales"
+    );
+    let mut seen = std::collections::HashSet::new();
+    for item in &draft.items {
+        if item.serials.is_empty() {
+            continue;
+        }
+        ensure!(
+            !item.is_service && item.qty.fract() == 0.0 && item.qty == item.serials.len() as f64,
+            "Enter one serial number per whole unit for {}",
+            item.product_name
+        );
+        for unit in &item.serials {
+            ensure!(
+                seen.insert(validate_serial(&unit.serial, unit.months)?),
+                "Duplicate serial number in this sale"
+            );
+        }
+    }
     Ok(())
 }

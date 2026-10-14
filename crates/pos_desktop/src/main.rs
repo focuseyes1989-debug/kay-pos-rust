@@ -6,6 +6,9 @@ use dioxus::prelude::*;
 mod auth;
 mod service_orders;
 mod warranty;
+mod warranty_form;
+mod cart_serials;
+use cart_serials::CartSerialDialog;
 mod app_icon;
 mod icons;
 mod appearance_colors;
@@ -76,10 +79,13 @@ struct CartLine {
     variant: Option<ProductVariant>,
     qty: f64,
     unit_price_override: Option<f64>,
+    #[serde(default, skip_serializing_if="Vec::is_empty")]
+    serials: Vec<pos_core::models::SerialWarranty>,
 }
 
 #[derive(Clone, PartialEq)]
 struct ReceiptData {
+    serials: Vec<pos_core::models::ReceiptSerial>,
     invoice_no: String,
     lines: Vec<CartLine>,
     subtotal: f64,
@@ -228,6 +234,7 @@ fn App() -> Element {
     let mut query = use_signal(String::new);
     let mut category_query = use_signal(String::new);
     let mut cart = use_signal(Vec::<CartLine>::new);
+    let mut cart_serial_index=use_signal(||None::<usize>);
     let mut held_token=use_signal(||None::<String>);
     let mut clear_held=use_signal(||false);
     use_effect(move || {
@@ -564,7 +571,7 @@ fn App() -> Element {
             style: appearance_colors::style(&app_settings.read()),
             if !matches!(&*pending.read(), Ok(None)) {
                 pending_checkout::Recovery { pending, form: db_form.read().clone(), saving: checkout_saving,
-                    on_resolved: move |saved: Option<ReceiptData>| { if saved.is_some()||held_token().is_none(){cart.set(Vec::new());} if saved.is_some(){held_token.set(None);} show_checkout.set(false); receipt.set(saved); }
+                    on_resolved: move |saved: Option<ReceiptData>| { if saved.is_some()||(held_token().is_none()&&!cart.read().iter().any(|l|!l.serials.is_empty())){cart.set(Vec::new());} if saved.is_some(){held_token.set(None);} show_checkout.set(false); receipt.set(saved); }
                 }
             }
             header { class: "topbar",
@@ -1202,6 +1209,14 @@ fn App() -> Element {
                                         "+"
                                     }
                                     button {
+                                        class:if line.serials.is_empty(){"cart_serial"}else{"cart_serial has_serials"},
+                                        title:format!("Serial & Warranty ({} / {})",line.serials.len(),format_qty(line.qty)),
+                                        aria_label:"Edit serial numbers and warranty",
+                                        disabled:is_service_product(&line.product) || line.qty.fract()!=0.0,
+                                        onclick:move |_|cart_serial_index.set(Some(idx)),
+                                        icons::Icon {name:"inventory"}
+                                    }
+                                    button {
                                         class: "cart_remove",
                                         title: "Remove item",
                                         aria_label: "Remove item",
@@ -1256,12 +1271,16 @@ fn App() -> Element {
             }
             }
 
+            if let Some(index)=cart_serial_index() {
+                CartSerialDialog {cart,index,key:"{index}",on_close:move |_|cart_serial_index.set(None)}
+            }
             if *show_checkout.read() {
                 CheckoutDialog {
                     db_form: db_form.read().clone(),
                     customer_id: checkout_customer(),
                     on_customer: move |id| checkout_customer.set(id),
                     item_count: cart_item_count,
+                    serialized_units:cart.read().iter().map(|l|l.serials.len()).sum::<usize>(),
                     total,
                     received: received.read().clone(),
                     discount: checkout_discount.read().clone(),
@@ -1293,6 +1312,7 @@ fn App() -> Element {
                             Err(e) => { message_box.set(Some(e.clone())); return; }
                         };
                         if matches!(&*pending.read(), Ok(None)) {
+                            if let Err(e)=pos_core::warranty::validate_sale_serials(&request.draft) {message_box.set(Some(format!("{e:#}")));return;}
                             request.draft.held_token=held_token();
                             if let Err(e) = pending_checkout::save(&checkout_db, &request) { message_box.set(Some(format!("{e:#}"))); return; }
                         }
@@ -1531,6 +1551,7 @@ fn CheckoutDialog(
     customer_id: Option<i32>,
     on_customer: EventHandler<Option<i32>>,
     item_count: f64,
+    serialized_units:usize,
     total: f64,
     received: String,
     discount: String,
@@ -1588,7 +1609,8 @@ fn CheckoutDialog(
     let change = (received_value - payable_total).max(0.0);
     let credit = sale_type.eq_ignore_ascii_case("Credit");
     let displayed_balance = if credit { (payable_total - received_value).max(0.0) } else { change };
-    let ready_to_save = received_value.is_finite()
+    let ready_to_save = (serialized_units==0 || customer_id.is_some())
+        && received_value.is_finite()
         && received_value >= 0.0
         && (if credit {
             customer_id.is_some() && received_value <= payable_total
@@ -1635,6 +1657,7 @@ fn CheckoutDialog(
                     div { class: "checkout_body",
                         div { class: "checkout_summary",
                             div { span { "Items" } strong { "{format_qty(item_count)}" } }
+                            if serialized_units>0 {div {span {"Serialized units"} strong {"{serialized_units}"}}}
                             div { span { "Subtotal" } strong { "{format_ks(total)}" } }
                             div { span { "Discount" } strong { "{format_ks(discount_value)}" } }
                             div { span { "Tax" } strong { "{format_ks(tax)}" } }
@@ -1650,6 +1673,7 @@ fn CheckoutDialog(
                                     if let Some(Ok((customers,_)))=loaded.as_ref() {for customer in customers {option {value:"{customer.id}",selected:customer_id==Some(customer.id),"{customer.name} · {customer.phone}"}}}
                                 }
                             }
+                            if serialized_units>0 && customer_id.is_none(){small {role:"status","Select a customer to link serial numbers and warranty."}}
                             if !checkout_data.finished(){small {role:"status","Loading customers and settings..."}}
                             if let Some(Err(e))=loaded.as_ref(){small {role:"alert","{e}"}}
                             label {
@@ -2867,6 +2891,12 @@ fn ReceiptDetailPanel(
                         }
                     }
                 }
+                if !detail.serials.is_empty() {
+                    div {class:"receipt_serial_list",
+                        strong {"Serial & Warranty"}
+                        for unit in &detail.serials {div {strong {"{unit.product_name}"} span {"S/N: {unit.serial}"} small {"Warranty: {unit.starts} → {unit.ends}"}}}
+                    }
+                }
                 div { class: "receipt_payment_box",
                     div { span { "Payment method" } strong { "{payment_type}" } }
                     div { span { "Discount" } strong { "{format_ks(summary.discount_amount)}" } }
@@ -3705,7 +3735,7 @@ fn add_to_cart(cart: &mut Signal<Vec<CartLine>>, product: Product) {
             product,
             variant,
             qty: 1.0,
-            unit_price_override: None,
+            unit_price_override: None, serials:Vec::new(),
         };
         if !has_stock_for_line(&candidate) {
             return;
@@ -3720,6 +3750,7 @@ fn add_service_to_cart(cart: &mut Signal<Vec<CartLine>>, product: Product, price
         variant: None,
         qty: 1.0,
         unit_price_override: Some(price),
+        serials:Vec::new(),
     });
 }
 
@@ -3741,7 +3772,7 @@ fn add_variant_to_cart(
             product,
             variant: Some(variant),
             qty: 1.0,
-            unit_price_override: None,
+            unit_price_override: None, serials:Vec::new(),
         };
         if has_stock_for_line(&candidate) {
             lines.push(candidate);
@@ -3766,7 +3797,7 @@ fn refreshed_variant_availability_preserves_cart_and_prices() {
         "id":1,"name":"Variant product","price":4000.0,"cost":3000.0,"stock":40.0,"low_stock":0.0,
         "sold_by":"Variants","variants":[{"variant_id":2,"product_id":1,"price":4000.0,"cost":3000.0,"stock":0.0,"low_stock":0.0,"wholesale_min_qty":0,"wholesale_price":0.0}],"price_tiers":[]
     })).unwrap();
-    let mut lines=vec![CartLine { product:product.clone(),variant:Some(product.variants[0].clone()),qty:1.0,unit_price_override:Some(3900.0) }];
+    let mut lines=vec![CartLine { product:product.clone(),variant:Some(product.variants[0].clone()),qty:1.0,unit_price_override:Some(3900.0), serials:Vec::new() }];
     let mut fresh=product;
     fresh.stock=86.0;fresh.variants[0].stock=46.0;fresh.variants[0].price=4500.0;
     refresh_cart_stock(&mut lines,&[fresh]);
@@ -4068,14 +4099,14 @@ fn category_tone(id: Option<i32>, name: &str) -> usize {
 #[test]
 fn manual_cart_quantity_preserves_line_and_rejects_invalid_stock() {
     let product:Product=serde_json::from_value(serde_json::json!({"id":1,"name":"Item","price":2500.0,"cost":2000.0,"stock":150.0,"low_stock":0.0,"sold_by":"Each","variants":[],"price_tiers":[]})).unwrap();
-    let mut lines=vec![CartLine {product,variant:None,qty:1.0,unit_price_override:Some(2400.0)}];
+    let mut lines=vec![CartLine {product,variant:None,qty:1.0,unit_price_override:Some(2400.0), serials:Vec::new()}];
     set_cart_quantity(&mut lines,0,"100").unwrap();assert_eq!(lines[0].qty,100.0);assert_eq!(lines[0].unit_price_override,Some(2400.0));
     for value in ["", "abc", "0", "-1", "NaN", "inf", "151"] {assert!(set_cart_quantity(&mut lines,0,value).is_err(),"{value}");assert_eq!(lines[0].qty,100.0);}
     set_cart_quantity(&mut lines,0,"2.5").unwrap();assert_eq!(lines[0].qty,2.5);
     assert!(set_cart_quantity(&mut lines,9,"1").is_err());
     lines[0].product.sold_by=Some("Service".into());set_cart_quantity(&mut lines,0,"1000").unwrap();
     let variant:Product=serde_json::from_value(serde_json::json!({"id":2,"name":"Variant","price":4000.0,"cost":3000.0,"stock":50.0,"low_stock":0.0,"sold_by":"Variants","variants":[{"variant_id":3,"product_id":2,"price":4000.0,"cost":3000.0,"stock":10.0,"low_stock":0.0,"wholesale_min_qty":0,"wholesale_price":0.0}],"price_tiers":[]})).unwrap();
-    lines[0]=CartLine {variant:Some(variant.variants[0].clone()),product:variant,qty:1.0,unit_price_override:None};
+    lines[0]=CartLine {variant:Some(variant.variants[0].clone()),product:variant,qty:1.0,unit_price_override:None, serials:Vec::new()};
     for value in ["11","1.5"] {assert!(set_cart_quantity(&mut lines,0,value).is_err());assert_eq!(lines[0].qty,1.0);}
     set_cart_quantity(&mut lines,0,"10").unwrap();assert_eq!(lines[0].qty,10.0);
 }

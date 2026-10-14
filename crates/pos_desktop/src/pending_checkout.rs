@@ -93,6 +93,7 @@ pub fn prepare(
         items: lines
             .iter()
             .map(|line| SaleItemDraft {
+                serials:line.serials.clone(),
                 promotion: line.product.promotion.clone(),
                 product_id: line.product.id,
                 variant_id: line.variant.as_ref().map(|v| v.variant_id),
@@ -123,7 +124,9 @@ pub async fn submit(
     let pool = connect(&form.database_config()?).await?;
     let sale = complete_sale(&pool, &pending.draft, &actor).await?;
     let subtotal = pending.draft.items.iter().map(|i| i.qty * i.price).sum();
+    let serials=pos_core::warranty::receipt_serials(&pool,sale.id).await?;
     Ok(ReceiptData {
+        serials,
         invoice_no: sale.invoice_no,
         lines: pending.lines,
         subtotal,
@@ -255,5 +258,27 @@ fn only_one_instance_can_own_recovery() -> Result<()> {
     let second = acquire_instance(&form)?;
     drop(second);
     fs::remove_file(path(&form)?.with_extension("lock"))?;
+    Ok(())
+}
+
+#[test]
+fn serial_warranty_survives_journal_and_legacy_requests_load() -> Result<()> {
+    let dir=tempfile::tempdir()?;let path=dir.path().join("serial-checkout.json");
+    let mut line=crate::receipt_preview::sample_receipt().lines.remove(0);
+    line.serials=vec![pos_core::models::SerialWarranty {serial:"SN-1".into(),months:12},pos_core::models::SerialWarranty {serial:"SN-2".into(),months:24}];
+    let draft:SaleDraft=serde_json::from_value(serde_json::json!({
+        "invoice_no":"SERIAL-RECOVERY","customer_id":1,"payment_type":"Cash","payment":5000.0,"discount_amount":0.0,"expected_total":5000.0,"created_by":"test",
+        "items":[{"product_id":0,"variant_id":null,"product_name":"Sample item","qty":2.0,"price":2500.0,"cost":0.0,"is_service":false,"wholesale_regular_price":0.0,"wholesale_savings":0.0,"wholesale_tier_min_qty":null,"wholesale_unit_label":null,"serials":line.serials}]
+    }))?;
+    let value=PendingCheckout {draft,lines:vec![line]};save_path(&path,&value)?;
+    let restored=load_path(&path)?.unwrap();
+    assert_eq!(serde_json::to_vec(&restored.draft)?,serde_json::to_vec(&value.draft)?);
+    assert_eq!(restored.lines[0].serials[1].months,24);
+    let mut old=serde_json::to_value(&value)?;
+    old["draft"]["items"][0].as_object_mut().unwrap().remove("serials");
+    old["lines"][0].as_object_mut().unwrap().remove("serials");
+    let legacy:PendingCheckout=serde_json::from_value(old)?;
+    assert!(legacy.draft.items[0].serials.is_empty());assert!(legacy.lines[0].serials.is_empty());
+    assert!(!serde_json::to_string(&legacy.draft)?.contains("serials"));
     Ok(())
 }

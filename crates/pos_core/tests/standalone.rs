@@ -28,6 +28,7 @@ fn draft(method: &str, paid: f64) -> SaleDraft {
         expected_total: 20000.0,
         created_by: "owner".into(),
         items: vec![SaleItemDraft {
+        serials: Vec::new(),
             promotion: None,
             product_id: 1,
             variant_id: None,
@@ -922,6 +923,7 @@ async fn postgres_export_import_preserves_all_tables_blobs_credit_sequences_and_
     let admin = auth::login(&source, "owner", "test-password").await?;
     let item:i32=s::query_scalar("SELECT id FROM sale_items ORDER BY id LIMIT 1").fetch_one(&source).await?;
     let warranty_unit=pos_core::warranty::register(&source,&admin,item,"PG-SOLAR-001",24).await?;
+    assert_eq!(pos_core::warranty::certificate(&source,&admin,&warranty_unit).await?.serial,"PG-SOLAR-001");
     let warranty_claim=pos_core::warranty::open_claim(&source,&admin,&warranty_unit,"Battery fault").await?;
     pos_core::warranty::update_claim(&source,&admin,&warranty_claim,"in_progress","Supplier inspection").await?;
     assert_eq!(pos_core::warranty::events(&source,&admin,&warranty_claim).await?.len(),2);
@@ -1036,6 +1038,7 @@ async fn standalone_warranty_serial_claim_history_refund_permissions_and_export(
     let rows=w::search(&pool,&actor,"inv-abc").await?;
     assert_eq!(rows.len(),1);assert_eq!(rows[0].id,id);assert_eq!(rows[0].serial,"INV-ABC-123");
     assert_eq!(rows[0].invoice,receipt.invoice_no);assert_eq!(rows[0].customer,"ဦးအောင်သန်း");
+    let form=w::certificate(&pool,&actor,&id).await?;assert_eq!(form.serial,"INV-ABC-123");assert_eq!(form.customer,"ဦးအောင်သန်း");assert_eq!(form.invoice,receipt.invoice_no);
     assert!(w::coverage(&rows[0],chrono::Local::now().date_naive()));
     assert!(w::register(&pool,&actor,lines[0].id,"SECOND",12).await.is_err());
     let other=complete_sale(&pool,&draft("Cash",20000.0),&actor).await?;
@@ -1109,4 +1112,43 @@ async fn standalone_warranty_expiry_anonymous_fractional_and_legacy_upgrade() ->
     let a=auth::login(&upgraded,"owner","test-password").await?;
     assert!(w::search(&upgraded,&a,"").await?.is_empty());
     upgraded.close().await;pool.close().await;Ok(())
+}
+
+#[tokio::test]
+async fn standalone_checkout_serials_are_atomic_idempotent_and_split_across_batches() -> Result<()> {
+    use pos_core::models::SerialWarranty;
+    let (dir,pool,actor)=fixture().await?;
+    s::query("UPDATE product_locations SET quantity=1 WHERE product_id=1").execute(&pool).await?;
+    s::query("INSERT INTO product_locations(product_id,location,batch_no,expire_date,quantity) VALUES(1,'Shop','SECOND','',9)").execute(&pool).await?;
+    let mut sale=draft("Credit",0.0);sale.expected_total=40000.0;sale.items[0].qty=2.0;
+    sale.items[0].serials=vec![SerialWarranty {serial:" solar-001 ".into(),months:12},SerialWarranty {serial:"solar-002".into(),months:24}];
+    let saved=complete_sale(&pool,&sale,&actor).await?;
+    assert_eq!(complete_sale(&pool,&sale,&actor).await?.id,saved.id);
+    let receipt=pos_core::get_receipt_detail(&pool,saved.id).await?;
+    assert_eq!(receipt.serials.len(),2);assert_eq!(receipt.serials[0].serial,"SOLAR-001");
+    assert!(receipt.serials.iter().all(|u|u.starts==saved.created_at.unwrap().date().to_string()));
+    assert_eq!(s::query_scalar::<_,i64>("SELECT COUNT(DISTINCT sale_item_id) FROM rust_serial_units WHERE sale_id=$1").bind(saved.id).fetch_one(&pool).await?,2);
+    assert_eq!(s::query_scalar::<_,f64>("SELECT current_balance FROM customers WHERE id=1").fetch_one(&pool).await?,40000.0);
+    assert_eq!(s::query_scalar::<_,f64>("SELECT stock FROM products WHERE id=1").fetch_one(&pool).await?,8.0);
+    let mut conflict=draft("Credit",0.0);conflict.items[0].serials=vec![SerialWarranty {serial:"solar-002".into(),months:12}];
+    assert!(complete_sale(&pool,&conflict,&actor).await.is_err());
+    assert_eq!(s::query_scalar::<_,i64>("SELECT COUNT(*) FROM sales").fetch_one(&pool).await?,1);
+    assert_eq!(s::query_scalar::<_,i64>("SELECT COUNT(*) FROM rust_serial_units").fetch_one(&pool).await?,2);
+    assert_eq!(s::query_scalar::<_,f64>("SELECT current_balance FROM customers WHERE id=1").fetch_one(&pool).await?,40000.0);
+    assert_eq!(s::query_scalar::<_,f64>("SELECT stock FROM products WHERE id=1").fetch_one(&pool).await?,8.0);
+    let mut invalid=conflict.clone();invalid.invoice_no=auth::new_request_id();invalid.customer_id=None;
+    assert!(complete_sale(&pool,&invalid,&actor).await.is_err());
+    invalid.customer_id=Some(1);invalid.items[0].qty=2.0;
+    assert!(complete_sale(&pool,&invalid,&actor).await.is_err());
+    invalid.items[0].qty=1.0;invalid.items[0].serials[0].months=0;
+    assert!(complete_sale(&pool,&invalid,&actor).await.is_err());
+    let mut changed=sale.clone();changed.items[0].serials[0].months=36;
+    assert!(complete_sale(&pool,&changed,&actor).await.is_err());
+    let exported=dir.path().join("checkout-serials.db");pos_core::data_transfer::export(&pool,&actor,&exported).await?;
+    let copied=dir.path().join("copy.db");pos_core::data_transfer::import(&exported,&copied).await?;
+    let reopened=sqlite::connect(&format!("sqlite://{}",copied.display())).await?;
+    assert_eq!(pos_core::get_receipt_detail(&reopened,saved.id).await?.serials,receipt.serials);
+    let claim=pos_core::warranty::open_claim(&pool,&actor,&pos_core::warranty::search(&pool,&actor,"SOLAR-001").await?[0].id,"Failure").await?;
+    assert_eq!(pos_core::warranty::events(&pool,&actor,&claim).await?.len(),1);
+    reopened.close().await;pool.close().await;Ok(())
 }

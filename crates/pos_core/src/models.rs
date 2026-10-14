@@ -79,6 +79,8 @@ pub struct ProductPriceTier {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SaleItemDraft {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub serials: Vec<SerialWarranty>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub promotion: Option<crate::discounts::Discount>,
     pub product_id: i32,
@@ -145,4 +147,11 @@ pub struct ReceiptItemRow {
 pub struct ReceiptDetail {
     pub summary: SaleSummary,
     pub items: Vec<ReceiptItemRow>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub serials: Vec<ReceiptSerial>,
 }
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct SerialWarranty { pub serial: String, pub months: u32 }
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, sqlx::FromRow)]
+pub struct ReceiptSerial { pub product_name:String, pub serial:String, pub starts:String, pub ends:String }

@@ -58,6 +58,8 @@ pub fn WarrantyPage(db_form: DbForm, actor: Session) -> Element {
     let register_actor = actor.clone();
     let claim_form = db_form.clone();
     let claim_actor = actor.clone();
+    let document_form=db_form.clone();
+    let document_actor=actor.clone();
     let update_form = db_form.clone();
     let update_actor = actor.clone();
     rsx! {
@@ -81,7 +83,7 @@ pub fn WarrantyPage(db_form: DbForm, actor: Session) -> Element {
                     button {class:"settings_save",disabled:busy()||item()==0||serial().trim().is_empty(),onclick:move |_|{
                         let form=register_form.clone();let actor=register_actor.clone();let id=item();let number=serial();let term=months();busy.set(true);
                         spawn(async move {let result=async {let pool=pos_core::connect(&form.database_config()?).await?;api::register(&pool,&actor,id,&number,term.parse()?).await}.await;
-                            match result {Ok(_)=>{serial.set(String::new());notice.set("Serial registered. Warranty linked to the original receipt and customer.".into());revision+=1;},Err(e)=>notice.set(format!("{e:#}"))} busy.set(false);});
+                            match result {Ok(id)=>{selected.set(id);serial.set(String::new());notice.set("Serial registered. Warranty linked to the original receipt and customer.".into());revision+=1;},Err(e)=>notice.set(format!("{e:#}"))} busy.set(false);});
                     },"Register serial"}
                 }
                 section {class:"warranty_card",
@@ -105,6 +107,15 @@ pub fn WarrantyPage(db_form: DbForm, actor: Session) -> Element {
             }
             if !selected().is_empty(){
                 section {class:"warranty_card settings_organized",
+                    div {class:"warranty_document_actions",
+                        strong {"A4 Warranty Form"}
+                        for (pdf,label) in [(true,"Export PDF"),(false,"Print A4")] {
+                            button {disabled:busy(),onclick:{let form=document_form.clone();let actor=document_actor.clone();move |_|{
+                                let form=form.clone();let actor=actor.clone();let unit=selected();busy.set(true);
+                                spawn(async move {let result=crate::warranty_form::output(form,actor,unit,pdf).await;notice.set(match result {Ok(s)=>s,Err(e)=>format!("{e:#}")});busy.set(false);});
+                            }},"{label}"}
+                        }
+                    }
                     h3 {"Warranty claims"}
                     p {"Claims outside the warranty period or on refunded receipts are recorded as rejected. Open claims do not change stock, payments or sales."}
                     label {"Issue / fault description" textarea {value:"{issue}",maxlength:2000,oninput:move |e|issue.set(e.value())}}

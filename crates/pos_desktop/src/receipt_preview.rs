@@ -11,8 +11,9 @@ pub(crate) fn sample_receipt() -> ReceiptData {
         image_data_url: None, variants: vec![], price_tiers: vec![],
     };
     ReceiptData {
+        serials:Vec::new(),
         invoice_no: "PREVIEW-001".into(),
-        lines: vec![CartLine { product, variant: None, qty: 2.0, unit_price_override: None }],
+        lines: vec![CartLine { product, variant: None, qty: 2.0, unit_price_override: None, serials:Vec::new() }],
         subtotal: 5000.0, discount: 0.0, total: 5000.0,
         payment_type: "Cash".into(), payment: 10000.0, change: 5000.0,
     }
