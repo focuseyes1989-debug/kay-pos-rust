@@ -63,7 +63,7 @@ legacy backups. PostgreSQL validation runs on the isolated port 55487 test clust
 
 After registering a serial, its unit is selected automatically. Use **Export PDF**
 or **Print A4** in the A4 Warranty Form section. Existing serials can also be selected
-from lookup. Each form covers one physical serialized unit and shows the original
+from lookup. Each form groups every product and registered serial from the selected unit's original receipt, shows customer details once, and includes the original
 invoice, customer contact details, product, serial, warranty term/dates, and signature
 and shop-stamp spaces. Shop name, contact details and logo come from Receipt settings.
 Refunded/non-completed receipts carry a visible warning. The form records the

@@ -924,6 +924,7 @@ async fn postgres_export_import_preserves_all_tables_blobs_credit_sequences_and_
     let item:i32=s::query_scalar("SELECT id FROM sale_items ORDER BY id LIMIT 1").fetch_one(&source).await?;
     let warranty_unit=pos_core::warranty::register(&source,&admin,item,"PG-SOLAR-001",24).await?;
     assert_eq!(pos_core::warranty::certificate(&source,&admin,&warranty_unit).await?.serial,"PG-SOLAR-001");
+    assert_eq!(pos_core::warranty::invoice_certificate(&source,&admin,&warranty_unit).await?.units.len(),1);
     let warranty_claim=pos_core::warranty::open_claim(&source,&admin,&warranty_unit,"Battery fault").await?;
     pos_core::warranty::update_claim(&source,&admin,&warranty_claim,"in_progress","Supplier inspection").await?;
     assert_eq!(pos_core::warranty::events(&source,&admin,&warranty_claim).await?.len(),2);
@@ -1151,4 +1152,24 @@ async fn standalone_checkout_serials_are_atomic_idempotent_and_split_across_batc
     let claim=pos_core::warranty::open_claim(&pool,&actor,&pos_core::warranty::search(&pool,&actor,"SOLAR-001").await?[0].id,"Failure").await?;
     assert_eq!(pos_core::warranty::events(&pool,&actor,&claim).await?.len(),1);
     reopened.close().await;pool.close().await;Ok(())
+}
+
+#[tokio::test]
+async fn standalone_invoice_warranty_groups_all_products_and_keeps_receipts_separate()->Result<()> {
+    use pos_core::{warranty as w,models::SerialWarranty};
+    let(_dir,pool,actor)=fixture().await?;
+    let mut request=draft("Cash",40000.0);request.expected_total=40000.0;
+    request.items[0].serials=vec![SerialWarranty {serial:"GROUP-A".into(),months:12}];
+    let plain=draft("Cash",20000.0).items.remove(0);request.items.push(plain);
+    let sale=complete_sale(&pool,&request,&actor).await?;
+    let unit=w::search(&pool,&actor,"GROUP-A").await?.remove(0);
+    let form=w::invoice_certificate(&pool,&actor,&unit.id).await?;
+    assert_eq!(form.invoice,sale.invoice_no);assert_eq!(form.customer,"ဦးအောင်သန်း");
+    assert_eq!(form.units.len(),2);assert_eq!(form.units.iter().filter(|u|u.serial.is_empty()).count(),1);
+    let mut other=draft("Cash",20000.0);other.items[0].serials=vec![SerialWarranty {serial:"GROUP-B".into(),months:24}];
+    complete_sale(&pool,&other,&actor).await?;
+    assert!(w::invoice_certificate(&pool,&actor,&unit.id).await?.units.iter().all(|u|u.serial!="GROUP-B"));
+    s::query("UPDATE users SET is_active=0 WHERE username='owner'").execute(&pool).await?;
+    assert!(w::invoice_certificate(&pool,&actor,&unit.id).await.is_err());
+    pool.close().await;Ok(())
 }

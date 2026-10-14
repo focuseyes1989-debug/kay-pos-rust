@@ -9,7 +9,7 @@ pub async fn output(
     pdf: bool,
 ) -> anyhow::Result<String> {
     let pool = pos_core::connect(&form.database_config()?).await?;
-    let record = pos_core::warranty::certificate(&pool, &actor, &unit).await?;
+    let record = pos_core::warranty::invoice_certificate(&pool, &actor, &unit).await?;
     let settings: HashMap<String, String> = pos_core::db::list_settings(&pool)
         .await?
         .into_iter()
@@ -118,6 +118,10 @@ mod tests {
         let dir = tempfile::tempdir()?;
         let path = dir.path().join("Warranty-ဦးအောင်သန်း.pdf");
         let payload = serde_json::json!({"record":{"id":"TEST-UNIT","serial":"SN-001","invoice":"INV001","customer":"ဦးအောင်သန်း","phone":"09 123456789","address":"Yangon","product":"Lithium Battery 51.2V 100Ah","starts":"2026-10-14","ends":"2028-10-14","sale_status":"completed"},"shop":"KAY SOLAR","phone":"09 777123456","address":"Yangon","issued":"2026-10-14","mode":"pdf"});
+        let mut payload=payload;
+        let unit=payload["record"].clone();
+        payload["record"]["units"]=serde_json::json!([unit.clone(),unit]);
+        for key in ["id","serial","product","starts","ends"] {payload["record"].as_object_mut().unwrap().remove(key);}
         assert!(send(payload.clone(), Some(path.clone()))?);
         assert!(std::fs::metadata(&path)?.len() > 1000);
         assert!(send(payload, Some(path.clone()))?);

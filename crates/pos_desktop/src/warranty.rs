@@ -108,7 +108,7 @@ pub fn WarrantyPage(db_form: DbForm, actor: Session) -> Element {
             if !selected().is_empty(){
                 section {class:"warranty_card settings_organized",
                     div {class:"warranty_document_actions",
-                        strong {"A4 Warranty Form"}
+                        strong {"A4 Warranty Form · All products on this receipt"}
                         for (pdf,label) in [(true,"Export PDF"),(false,"Print A4")] {
                             button {disabled:busy(),onclick:{let form=document_form.clone();let actor=document_actor.clone();move |_|{
                                 let form=form.clone();let actor=actor.clone();let unit=selected();busy.set(true);

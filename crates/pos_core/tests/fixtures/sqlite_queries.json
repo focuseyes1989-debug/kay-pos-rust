@@ -1904,95 +1904,107 @@
     "sql": "LOCK TABLE sales IN SHARE ROW EXCLUSIVE MODE"
   },
   {
-    "source": "warranty.rs:56",
-    "sql": "SELECT u.id,u.serial,COALESCE(s.invoice_no,'') AS invoice,COALESCE(c.name,'Customer') AS customer,COALESCE(c.phone,'') AS phone,COALESCE(c.address,'') AS address,COALESCE(si.product_name,'Product') AS product,u.starts,u.ends,COALESCE(s.status,'') AS sale_status FROM rust_serial_units u JOIN sales s ON s.id=u.sale_id JOIN sale_items si ON si.id=u.sale_item_id JOIN customers c ON c.id=u.customer_id WHERE u.id=$1"
+    "source": "warranty.rs:60",
+    "sql": "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
   },
   {
-    "source": "warranty.rs:95",
-    "sql": "SELECT si.id,COALESCE(si.product_name,'Product') AS product,(si.qty-COALESCE(si.refunded_qty,0))::float8 AS quantity,(SELECT COUNT(*) FROM rust_serial_units u WHERE u.sale_item_id=si.id) AS registered,COALESCE(s.invoice_no,'') AS invoice,COALESCE(c.name,'Customer') AS customer FROM sale_items si JOIN sales s ON s.id=si.sale_id JOIN customers c ON c.id=s.customer_id WHERE s.invoice_no=$1 AND s.status='completed' ORDER BY si.id"
-  },
-  {
-    "source": "warranty.rs:113",
-    "sql": "SELECT sale_id FROM sale_items WHERE id=$1"
-  },
-  {
-    "source": "warranty.rs:118",
-    "sql": "SELECT COALESCE(status,''),customer_id,created_at::text FROM sales WHERE id=$1 FOR UPDATE"
-  },
-  {
-    "source": "warranty.rs:130",
-    "sql": "SELECT (qty-COALESCE(refunded_qty,0))::float8 FROM sale_items WHERE id=$1 FOR UPDATE"
-  },
-  {
-    "source": "warranty.rs:140",
-    "sql": "SELECT COUNT(*) FROM rust_serial_units WHERE sale_item_id=$1"
-  },
-  {
-    "source": "warranty.rs:156",
-    "sql": "INSERT INTO rust_serial_units(id,serial,sale_item_id,sale_id,customer_id,starts,ends,created_by,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)"
-  },
-  {
-    "source": "warranty.rs:182",
-    "sql": "SELECT u.id,u.serial,COALESCE(s.invoice_no,'') AS invoice,COALESCE(c.name,'Customer') AS customer,COALESCE(si.product_name,'Product') AS product,u.starts,u.ends,COALESCE(s.status,'') AS sale_status FROM rust_serial_units u JOIN sales s ON s.id=u.sale_id JOIN sale_items si ON si.id=u.sale_item_id JOIN customers c ON c.id=u.customer_id WHERE $1='' OR u.serial ILIKE $2 OR s.invoice_no ILIKE $2 OR c.name ILIKE $2 OR si.product_name ILIKE $2 ORDER BY u.created_at DESC,u.id LIMIT 200"
-  },
-  {
-    "source": "warranty.rs:191",
-    "sql": "SELECT id,unit_id,issue,status,covered,created_at FROM rust_warranty_claims WHERE unit_id=$1 ORDER BY created_at DESC,id"
-  },
-  {
-    "source": "warranty.rs:199",
-    "sql": "SELECT status,note,actor,created_at FROM rust_warranty_events WHERE claim_id=$1 ORDER BY created_at,id"
-  },
-  {
-    "source": "warranty.rs:211",
+    "source": "warranty.rs:62",
     "sql": "SELECT sale_id FROM rust_serial_units WHERE id=$1"
   },
   {
-    "source": "warranty.rs:216",
-    "sql": "SELECT COALESCE(status,'') FROM sales WHERE id=$1 FOR UPDATE"
+    "source": "warranty.rs:63",
+    "sql": "SELECT COALESCE(u.id,'ITEM-' || si.id::text) AS id,COALESCE(u.serial,'') AS serial,COALESCE(s.invoice_no,'') AS invoice,COALESCE(c.name,'Customer') AS customer,COALESCE(c.phone,'') AS phone,COALESCE(c.address,'') AS address,COALESCE(si.product_name,'Product') AS product,COALESCE(u.starts,'') AS starts,COALESCE(u.ends,'') AS ends,COALESCE(s.status,'') AS sale_status FROM sale_items si JOIN sales s ON s.id=si.sale_id LEFT JOIN customers c ON c.id=s.customer_id LEFT JOIN rust_serial_units u ON u.sale_item_id=si.id AND u.sale_id=s.id WHERE s.id=$1 ORDER BY si.id,u.serial"
   },
   {
-    "source": "warranty.rs:221",
-    "sql": "SELECT starts,ends FROM rust_serial_units WHERE id=$1 FOR UPDATE"
+    "source": "warranty.rs:73",
+    "sql": "SELECT u.id,u.serial,COALESCE(s.invoice_no,'') AS invoice,COALESCE(c.name,'Customer') AS customer,COALESCE(c.phone,'') AS phone,COALESCE(c.address,'') AS address,COALESCE(si.product_name,'Product') AS product,u.starts,u.ends,COALESCE(s.status,'') AS sale_status FROM rust_serial_units u JOIN sales s ON s.id=u.sale_id JOIN sale_items si ON si.id=u.sale_item_id JOIN customers c ON c.id=u.customer_id WHERE u.id=$1"
   },
   {
-    "source": "warranty.rs:225",
-    "sql": "SELECT COUNT(*) FROM rust_warranty_claims WHERE unit_id=$1 AND status IN ('open','in_progress')"
+    "source": "warranty.rs:112",
+    "sql": "SELECT si.id,COALESCE(si.product_name,'Product') AS product,(si.qty-COALESCE(si.refunded_qty,0))::float8 AS quantity,(SELECT COUNT(*) FROM rust_serial_units u WHERE u.sale_item_id=si.id) AS registered,COALESCE(s.invoice_no,'') AS invoice,COALESCE(c.name,'Customer') AS customer FROM sale_items si JOIN sales s ON s.id=si.sale_id JOIN customers c ON c.id=s.customer_id WHERE s.invoice_no=$1 AND s.status='completed' ORDER BY si.id"
   },
   {
-    "source": "warranty.rs:231",
-    "sql": "INSERT INTO rust_warranty_claims(id,unit_id,issue,status,covered,created_at) VALUES($1,$2,$3,$4,$5,$6)"
+    "source": "warranty.rs:130",
+    "sql": "SELECT sale_id FROM sale_items WHERE id=$1"
   },
   {
-    "source": "warranty.rs:255",
-    "sql": "INSERT INTO rust_warranty_events(id,claim_id,status,note,actor,created_at) VALUES($1,$2,$3,$4,$5,$6)"
+    "source": "warranty.rs:135",
+    "sql": "SELECT COALESCE(status,''),customer_id,created_at::text FROM sales WHERE id=$1 FOR UPDATE"
   },
   {
-    "source": "warranty.rs:276",
-    "sql": "SELECT u.sale_id FROM rust_warranty_claims c JOIN rust_serial_units u ON u.id=c.unit_id WHERE c.id=$1"
+    "source": "warranty.rs:147",
+    "sql": "SELECT (qty-COALESCE(refunded_qty,0))::float8 FROM sale_items WHERE id=$1 FOR UPDATE"
   },
   {
-    "source": "warranty.rs:278",
-    "sql": "SELECT COALESCE(status,'') FROM sales WHERE id=$1 FOR UPDATE"
+    "source": "warranty.rs:157",
+    "sql": "SELECT COUNT(*) FROM rust_serial_units WHERE sale_item_id=$1"
   },
   {
-    "source": "warranty.rs:287",
-    "sql": "SELECT status FROM rust_warranty_claims WHERE id=$1 FOR UPDATE"
-  },
-  {
-    "source": "warranty.rs:295",
-    "sql": "UPDATE rust_warranty_claims SET status=$1 WHERE id=$2"
-  },
-  {
-    "source": "warranty.rs:339",
+    "source": "warranty.rs:173",
     "sql": "INSERT INTO rust_serial_units(id,serial,sale_item_id,sale_id,customer_id,starts,ends,created_by,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)"
   },
   {
+    "source": "warranty.rs:199",
+    "sql": "SELECT u.id,u.serial,COALESCE(s.invoice_no,'') AS invoice,COALESCE(c.name,'Customer') AS customer,COALESCE(si.product_name,'Product') AS product,u.starts,u.ends,COALESCE(s.status,'') AS sale_status FROM rust_serial_units u JOIN sales s ON s.id=u.sale_id JOIN sale_items si ON si.id=u.sale_item_id JOIN customers c ON c.id=u.customer_id WHERE $1='' OR u.serial ILIKE $2 OR s.invoice_no ILIKE $2 OR c.name ILIKE $2 OR si.product_name ILIKE $2 ORDER BY u.created_at DESC,u.id LIMIT 200"
+  },
+  {
+    "source": "warranty.rs:208",
+    "sql": "SELECT id,unit_id,issue,status,covered,created_at FROM rust_warranty_claims WHERE unit_id=$1 ORDER BY created_at DESC,id"
+  },
+  {
+    "source": "warranty.rs:216",
+    "sql": "SELECT status,note,actor,created_at FROM rust_warranty_events WHERE claim_id=$1 ORDER BY created_at,id"
+  },
+  {
+    "source": "warranty.rs:228",
+    "sql": "SELECT sale_id FROM rust_serial_units WHERE id=$1"
+  },
+  {
+    "source": "warranty.rs:233",
+    "sql": "SELECT COALESCE(status,'') FROM sales WHERE id=$1 FOR UPDATE"
+  },
+  {
+    "source": "warranty.rs:238",
+    "sql": "SELECT starts,ends FROM rust_serial_units WHERE id=$1 FOR UPDATE"
+  },
+  {
+    "source": "warranty.rs:242",
+    "sql": "SELECT COUNT(*) FROM rust_warranty_claims WHERE unit_id=$1 AND status IN ('open','in_progress')"
+  },
+  {
+    "source": "warranty.rs:248",
+    "sql": "INSERT INTO rust_warranty_claims(id,unit_id,issue,status,covered,created_at) VALUES($1,$2,$3,$4,$5,$6)"
+  },
+  {
+    "source": "warranty.rs:272",
+    "sql": "INSERT INTO rust_warranty_events(id,claim_id,status,note,actor,created_at) VALUES($1,$2,$3,$4,$5,$6)"
+  },
+  {
+    "source": "warranty.rs:293",
+    "sql": "SELECT u.sale_id FROM rust_warranty_claims c JOIN rust_serial_units u ON u.id=c.unit_id WHERE c.id=$1"
+  },
+  {
+    "source": "warranty.rs:295",
+    "sql": "SELECT COALESCE(status,'') FROM sales WHERE id=$1 FOR UPDATE"
+  },
+  {
+    "source": "warranty.rs:304",
+    "sql": "SELECT status FROM rust_warranty_claims WHERE id=$1 FOR UPDATE"
+  },
+  {
+    "source": "warranty.rs:312",
+    "sql": "UPDATE rust_warranty_claims SET status=$1 WHERE id=$2"
+  },
+  {
     "source": "warranty.rs:356",
+    "sql": "INSERT INTO rust_serial_units(id,serial,sale_item_id,sale_id,customer_id,starts,ends,created_by,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)"
+  },
+  {
+    "source": "warranty.rs:373",
     "sql": "SELECT to_regclass('rust_serial_units') IS NOT NULL"
   },
   {
-    "source": "warranty.rs:362",
+    "source": "warranty.rs:379",
     "sql": "SELECT COALESCE(si.product_name,'Product') AS product_name,u.serial,u.starts,u.ends FROM rust_serial_units u JOIN sale_items si ON si.id=u.sale_item_id WHERE u.sale_id=$1 ORDER BY si.id,u.serial"
   },
   {

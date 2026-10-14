@@ -49,6 +49,23 @@ pub struct Certificate {
     pub phone:String, pub address:String, pub product:String,
     pub starts:String, pub ends:String, pub sale_status:String,
 }
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct InvoiceCertificate {
+    pub invoice:String,pub customer:String,pub phone:String,pub address:String,
+    pub sale_status:String,pub units:Vec<Certificate>,
+}
+pub async fn invoice_certificate(pool:&PgPool,actor:&Session,unit_id:&str)->Result<InvoiceCertificate> {
+    ensure_schema(pool).await?;
+    let mut tx=pool.begin().await?;
+    sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY").execute(&mut *tx).await?;
+    actor.authorize(&mut tx,Permission::Sell).await?;
+    let sale:i32=sqlx::query_scalar("SELECT sale_id FROM rust_serial_units WHERE id=$1").bind(unit_id).fetch_one(&mut *tx).await?;
+    let units:Vec<Certificate>=sqlx::query_as("SELECT COALESCE(u.id,'ITEM-' || si.id::text) AS id,COALESCE(u.serial,'') AS serial,COALESCE(s.invoice_no,'') AS invoice,COALESCE(c.name,'Customer') AS customer,COALESCE(c.phone,'') AS phone,COALESCE(c.address,'') AS address,COALESCE(si.product_name,'Product') AS product,COALESCE(u.starts,'') AS starts,COALESCE(u.ends,'') AS ends,COALESCE(s.status,'') AS sale_status FROM sale_items si JOIN sales s ON s.id=si.sale_id LEFT JOIN customers c ON c.id=s.customer_id LEFT JOIN rust_serial_units u ON u.sale_item_id=si.id AND u.sale_id=s.id WHERE s.id=$1 ORDER BY si.id,u.serial")
+        .bind(sale).fetch_all(&mut *tx).await?;
+    let first=units.first().context("Receipt has no products")?;
+    let form=InvoiceCertificate {invoice:first.invoice.clone(),customer:first.customer.clone(),phone:first.phone.clone(),address:first.address.clone(),sale_status:first.sale_status.clone(),units};
+    tx.commit().await?;Ok(form)
+}
 pub async fn certificate(pool:&PgPool,actor:&Session,id:&str)->Result<Certificate> {
     ensure_schema(pool).await?;
     let mut tx=pool.begin().await?;

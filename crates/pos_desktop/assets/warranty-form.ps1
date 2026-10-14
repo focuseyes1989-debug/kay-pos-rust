@@ -52,18 +52,28 @@ function Build-Blocks($g) {
  Section '01  CUSTOMER DETAILS'
  $nameLines=Lines $g ([string]$r.customer) $script:fonts.body 110
  $phoneLines=Lines $g ([string]$r.phone) $script:fonts.body 56
+ if([Math]::Max($nameLines.Count,$phoneLines.Count) -gt 6){Field 'CUSTOMER NAME' $r.customer;Field 'PHONE' $r.phone}else {
  $script:blocks.Add(@{kind='customer';names=$nameLines;phones=$phoneLines;height=(7+6*[Math]::Max($nameLines.Count,$phoneLines.Count))})
+ }
  Field 'ADDRESS' $r.address
- Section '02  PRODUCT & SERIAL NUMBER'
- Field 'PRODUCT / MODEL' $r.product
- $script:blocks.Add(@{kind='label';text='SERIAL NUMBER';height=5})
- foreach($line in (Lines $g ([string]$r.serial) $script:fonts.serial 170)) {$script:blocks.Add(@{kind='serial';text=$line;height=9})}
- $script:blocks.Add(@{kind='space';height=5})
- Section '03  WARRANTY PERIOD'
- $script:blocks.Add(@{kind='dates';height=25})
- $a=[DateTime]::ParseExact($r.starts,'yyyy-MM-dd',$null);$b=[DateTime]::ParseExact($r.ends,'yyyy-MM-dd',$null)
- $months=($b.Year-$a.Year)*12+$b.Month-$a.Month
- Field 'WARRANTY TERM' "$months months from the original sale date (end date inclusive)"
+ Section '02  PRODUCTS, SERIALS & WARRANTY'
+ $units=@($r.units)
+ if(!$r.units){$units=@($r)}
+ $number=0
+ foreach($unit in $units) {
+  $number++
+  foreach($line in (Lines $g ("$number. "+$unit.product) $script:fonts.bold 174)) {$script:blocks.Add(@{kind='product';text=$line;height=6})}
+  $serialText='Not registered'
+  if($unit.serial){$serialText=$unit.serial}
+  foreach($line in (Lines $g ('S/N: '+$serialText) $script:fonts.body 174)) {$script:blocks.Add(@{kind='text';text=$line;height=6})}
+  if($unit.starts -and $unit.ends) {
+   $a=[DateTime]::ParseExact($unit.starts,'yyyy-MM-dd',$null);$b=[DateTime]::ParseExact($unit.ends,'yyyy-MM-dd',$null)
+   $months=($b.Year-$a.Year)*12+$b.Month-$a.Month
+   $period="Warranty: $months months | $($unit.starts) to $($unit.ends)"
+  }else {$period='Warranty: No registered warranty on this receipt line'}
+  foreach($line in (Lines $g $period $script:fonts.small 174)) {$script:blocks.Add(@{kind='period';text=$line;height=5})}
+  $script:blocks.Add(@{kind='space';height=3})
+ }
  $script:blocks.Add(@{kind='note';text='For service, quote the serial number and invoice shown on this form. Keep this form with your original sales receipt.';height=18})
  if($r.sale_status -ne 'completed') {$script:blocks.Add(@{kind='warning';text='RECEIPT REFUNDED / NOT COMPLETED - WARRANTY NOT ACTIVE';height=12})}
  $script:blocks.Add(@{kind='signatures';height=29})
@@ -102,7 +112,7 @@ function Draw-Page($g) {
   if(!$script:blocks){Build-Blocks $g}
   while($script:index -lt $script:blocks.Count) {
    $block=$script:blocks[$script:index];$h=[single]$block.height
-   $needed=$h;if($block.kind -in @('section','label')) {$needed+=12}
+   $needed=$h;if($block.kind -in @('section','label','product')) {$needed+=12}
    if($block.kind -eq 'note') {$needed=0;for($n=$script:index;$n -lt $script:blocks.Count;$n++) {$needed+=$script:blocks[$n].height}}
    if($y+$needed -gt 268){break}
    switch($block.kind) {
@@ -114,6 +124,8 @@ function Draw-Page($g) {
      $dy=$y+5;foreach($line in $block.phones){Text $g $line $script:fonts.body $script:ink 136 $dy 56 8;$dy+=6}
     }
     'label' {Text $g $block.text $script:fonts.small $script:muted 17 $y 176 6}
+    'product' {Text $g $block.text $script:fonts.bold $script:ink 17 $y 176 8}
+    'period' {Text $g $block.text $script:fonts.small $script:teal 17 $y 176 7}
     'text' {Text $g $block.text $script:fonts.body $script:ink 17 $y 176 8}
     'serial' {$g.FillRectangle($pale,16,$y,178,$h);Text $g $block.text $script:fonts.serial $script:ink 19 ($y-0.5) 172 11}
     'dates' {
@@ -134,7 +146,7 @@ function Draw-Page($g) {
    $y+=$h;$script:index++
   }
   $g.DrawLine($pen,16,276,194,276)
-  Text $g ('Reference: '+$r.id) $script:fonts.small $script:muted 16 279 148 10
+  Text $g ('Receipt: '+$r.invoice) $script:fonts.small $script:muted 16 279 148 10
   Text $g ('Page '+$script:page) $script:fonts.small $script:muted 175 279 19 8
  } finally {$pen.Dispose();$accent.Dispose();$pale.Dispose()}
 }
