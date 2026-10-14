@@ -13,130 +13,134 @@
   },
   {
     "source": "ai.rs:116",
+    "sql": "SELECT name FROM (SELECT name FROM products UNION SELECT product_name AS name FROM sale_items WHERE product_name IS NOT NULL) names WHERE lower(trim(replace(name,chr(4151)||chr(4154),chr(4154)||chr(4151))))=lower(trim($1)) ORDER BY name LIMIT 1"
+  },
+  {
+    "source": "ai.rs:118",
     "sql": "SELECT name FROM categories WHERE lower(trim(replace(name,chr(4151)||chr(4154),chr(4154)||chr(4151))))=lower(trim($1)) OR (lower(trim($1))='service' AND lower(trim(name))='services') ORDER BY CASE WHEN lower(trim(replace(name,chr(4151)||chr(4154),chr(4154)||chr(4151))))=lower(trim($1)) THEN 0 ELSE 1 END,id LIMIT 1"
   },
   {
-    "source": "ai.rs:265",
+    "source": "ai.rs:267",
     "sql": "SELECT u.permissions,r.permissions FROM users u LEFT JOIN user_roles r ON r.name=u.role WHERE u.username=$1 AND u.is_active=1"
   },
   {
-    "source": "ai.rs:287",
+    "source": "ai.rs:289",
     "sql": "SET LOCAL statement_timeout='5s'"
   },
   {
-    "source": "ai.rs:309",
+    "source": "ai.rs:311",
     "sql": "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
   },
   {
-    "source": "ai.rs:312",
+    "source": "ai.rs:314",
     "sql": "SET LOCAL statement_timeout='15s'"
   },
   {
-    "source": "ai.rs:316",
+    "source": "ai.rs:318",
     "sql": "SELECT LOCALTIMESTAMP::text"
   },
   {
-    "source": "ai.rs:352",
+    "source": "ai.rs:354",
     "sql": "SELECT EXISTS(SELECT 1 FROM sales s WHERE s.created_at >= $1 AND s.created_at < $2 AND s.status='completed' AND ($3::text IS NULL OR lower(regexp_replace(s.payment_type,'\\s','','g')) ~ $3) AND (s.total IS NULL OR s.total<0 OR s.total::text IN ('NaN','Infinity','-Infinity') OR EXISTS(SELECT 1 FROM sale_items i WHERE i.sale_id=s.id AND COALESCE(i.refunded_qty,0)>0)))"
   },
   {
-    "source": "ai.rs:366",
+    "source": "ai.rs:368",
     "sql": "SELECT json_build_array(c.name,COALESCE(parent.name,'—'),COALESCE(c.status,'active'),(SELECT COUNT(*)::text FROM products p WHERE p.category_id=c.id OR (p.category_id IS NULL AND p.category=c.name)))::text FROM categories c LEFT JOIN categories parent ON parent.id=c.parent_id WHERE strpos(lower(c.name),lower($1))>0 ORDER BY c.sort_order,c.name,c.id LIMIT 201"
   },
   {
-    "source": "ai.rs:387",
+    "source": "ai.rs:389",
     "sql": "SELECT EXISTS(SELECT 1 FROM sales s JOIN sale_items i ON i.sale_id=s.id WHERE s.created_at >= $1 AND s.created_at < $2 AND s.status='completed' AND COALESCE(i.refunded_qty,0)>0 AND ($3::text IS NULL OR EXISTS(SELECT 1 FROM sale_items matched JOIN products p ON p.id=matched.product_id LEFT JOIN categories c ON c.id=p.category_id WHERE matched.sale_id=s.id AND lower(trim(c.name))=lower(trim($3)))))"
   },
   {
-    "source": "ai.rs:433",
+    "source": "ai.rs:437",
     "sql": "SELECT id,COALESCE(invoice_no,''),created_at::text,COALESCE(total,0)::numeric::text,COALESCE(payment_type,''),COALESCE(status,'') FROM sales WHERE created_at >= $1::text::timestamp AND created_at < $2::text::timestamp"
   },
   {
-    "source": "ai.rs:466",
+    "source": "ai.rs:472",
     "sql": "SELECT p.name,COALESCE(p.sku,''),COALESCE(p.barcode,''),COALESCE(p.price::numeric::text,'Unknown'),CASE WHEN lower(COALESCE(p.sold_by,'Each'))='variants' THEN COALESCE((SELECT SUM(v.stock)::numeric::text FROM product_variants v WHERE v.product_id=p.id),'0') ELSE COALESCE(p.stock::numeric::text,'Unknown') END FROM products p WHERE strpos(lower(p.name||' '||COALESCE(p.sku,'')||' '||COALESCE(p.barcode,'')),lower($1))>0 ORDER BY p.name,p.id LIMIT 51"
   },
   {
-    "source": "ai.rs:496",
+    "source": "ai.rs:502",
     "sql": "SELECT json_build_array(COALESCE(category,'Uncategorized'),COUNT(*)::text,COALESCE(SUM(amount::numeric),0)::text)::text FROM expenses WHERE left(expense_date,10)>=$1 AND left(expense_date,10)<$2 GROUP BY category ORDER BY SUM(amount) DESC LIMIT 50"
   },
   {
-    "source": "ai.rs:498",
+    "source": "ai.rs:504",
     "sql": "SELECT json_build_array(name,COALESCE(phone,''),COALESCE(company_name,''),COALESCE(contact_person,''),COALESCE(status,'Active'))::text FROM suppliers WHERE $1::text IS NOT NULL AND $2::text IS NOT NULL ORDER BY name,id LIMIT 50"
   },
   {
-    "source": "ai.rs:500",
+    "source": "ai.rs:506",
     "sql": "SELECT json_build_array(name,COALESCE(phone,''),COALESCE(total_visit,0)::text,COALESCE(total_spent,0)::numeric::text)::text FROM customers WHERE $1::text IS NOT NULL AND $2::text IS NOT NULL ORDER BY name,id LIMIT 50"
   },
   {
-    "source": "ai.rs:502",
+    "source": "ai.rs:508",
     "sql": "SELECT json_build_array(name,COALESCE(phone,''),current_balance::numeric::text)::text FROM customers WHERE current_balance>0 AND $1::text IS NOT NULL AND $2::text IS NOT NULL ORDER BY current_balance DESC,id LIMIT 50"
   },
   {
-    "source": "ai.rs:504",
+    "source": "ai.rs:510",
     "sql": "SELECT json_build_array(employee_no,full_name,COALESCE(department,''),COALESCE(employment_status,''))::text FROM employees WHERE $1::text IS NOT NULL AND $2::text IS NOT NULL ORDER BY full_name,id LIMIT 50"
   },
   {
-    "source": "ai.rs:506",
+    "source": "ai.rs:512",
     "sql": "SELECT json_build_array(a.attendance_date::text,e.full_name,COALESCE(a.check_in::text,''),COALESCE(a.check_out::text,''),COALESCE(a.status,''),COALESCE(a.late_minutes,0)::text)::text FROM attendance a JOIN employees e ON e.id=a.employee_id WHERE left(a.attendance_date::text,10)>=$1 AND left(a.attendance_date::text,10)<$2 ORDER BY a.attendance_date DESC,a.id DESC LIMIT 50"
   },
   {
-    "source": "ai.rs:508",
+    "source": "ai.rs:514",
     "sql": "WITH stock AS (SELECT p.id,p.name,p.sku,p.barcode,COALESCE((SELECT c.name FROM categories c WHERE c.id=p.category_id),p.category,'') AS category,COALESCE(p.low_stock,0) AS threshold,CASE WHEN lower(COALESCE(p.sold_by,'Each'))='variants' THEN COALESCE((SELECT SUM(v.stock) FROM product_variants v WHERE v.product_id=p.id),0) ELSE COALESCE(p.stock,0) END AS quantity FROM products p WHERE lower(COALESCE(p.sold_by,'Each')) NOT IN ('service','restaurant')) SELECT json_build_array(name,COALESCE(sku,''),quantity::numeric::text,threshold::numeric::text)::text FROM stock WHERE quantity<=threshold AND $1::text IS NOT NULL AND $2::text IS NOT NULL ORDER BY quantity,id LIMIT 50"
   },
   {
-    "source": "ai.rs:510",
+    "source": "ai.rs:516",
     "sql": "SELECT json_build_array(COALESCE(invoice_no,''),created_at::text,COALESCE(total,0)::numeric::text,COALESCE(payment_type,''),COALESCE(status,''))::text FROM sales WHERE created_at >= $1::text::timestamp AND created_at < $2::text::timestamp ORDER BY created_at DESC,id DESC LIMIT 50"
   },
   {
-    "source": "ai.rs:532",
+    "source": "ai.rs:538",
     "sql": "SELECT COUNT(*),COALESCE(SUM(amount::numeric),0)::text FROM expenses WHERE left(expense_date,10)>=$1 AND left(expense_date,10)<$2"
   },
   {
-    "source": "ai.rs:560",
+    "source": "ai.rs:566",
     "sql": "SELECT EXISTS(SELECT 1 FROM sales WHERE created_at >= $1 AND created_at < $2 AND status IN ('completed','refunded') AND (total IS NULL OR total<0 OR total::text IN ('NaN','Infinity','-Infinity')))"
   },
   {
-    "source": "ai.rs:565",
+    "source": "ai.rs:571",
     "sql": "SELECT EXISTS(SELECT 1 FROM sales s JOIN sale_items i ON i.sale_id=s.id WHERE s.created_at >= $1 AND s.created_at < $2 AND s.status='completed' AND COALESCE(i.refunded_qty,0)>0)"
   },
   {
-    "source": "ai.rs:567",
+    "source": "ai.rs:573",
     "sql": "SELECT to_char(created_at,'YYYY-MM-DD'),COUNT(*) FILTER(WHERE status='completed'),COALESCE(SUM(total::numeric) FILTER(WHERE status='completed'),0)::text,COALESCE(SUM(gross_profit::numeric) FILTER(WHERE status='completed'),0)::text,COALESCE(SUM(total::numeric) FILTER(WHERE status='completed' AND lower(payment_type)='credit'),0)::text,COALESCE(SUM(total::numeric) FILTER(WHERE status='refunded'),0)::text FROM sales WHERE created_at >= $1 AND created_at < $2 AND status IN ('completed','refunded') GROUP BY 1 ORDER BY 1"
   },
   {
-    "source": "ai.rs:599",
+    "source": "ai.rs:605",
     "sql": "SELECT COALESCE(SUM(amount::numeric),0)::text FROM expenses WHERE left(expense_date,10)>=$1 AND left(expense_date,10)<$2"
   },
   {
-    "source": "ai.rs:600",
+    "source": "ai.rs:606",
     "sql": "SELECT COALESCE(SUM(GREATEST(current_balance::numeric,0)),0)::text FROM customers"
   },
   {
-    "source": "ai.rs:601",
+    "source": "ai.rs:607",
     "sql": "SELECT COUNT(*) FILTER(WHERE stock>0 AND stock<=COALESCE(low_stock,0)),COUNT(*) FILTER(WHERE stock<=0) FROM products WHERE lower(COALESCE(sold_by,'Each')) NOT IN ('service','restaurant')"
   },
   {
-    "source": "ai.rs:639",
+    "source": "ai.rs:645",
     "sql": "SET LOCAL statement_timeout='5s'"
   },
   {
-    "source": "ai.rs:1164",
+    "source": "ai.rs:1178",
     "sql": "WITH payments AS (\n SELECT total, COALESCE(NULLIF(trim(payment_type),''),'Unknown') AS original,\n lower(regexp_replace(payment_type,'\\s','','g')) AS method\n FROM sales WHERE created_at >= $1 AND created_at < $2 AND status='completed'\n) SELECT CASE WHEN method ~ '^(kpay|kbzpay)([(][0-9]+[)])?$' THEN 'KPay' || COALESCE(substring(method from '[(][0-9]+[)]$'),'')\n WHEN method ~ '^wavepay([(][0-9]+[)])?$' THEN 'WavePay' || COALESCE(substring(method from '[(][0-9]+[)]$'),'')\n WHEN method='cash' THEN 'Cash' WHEN method='credit' THEN 'Credit' ELSE original END,\n COUNT(*), SUM(total::numeric)::text FROM payments\n WHERE ($3::text IS NULL OR method ~ $3) GROUP BY 1 ORDER BY SUM(total::numeric) DESC,1"
   },
   {
-    "source": "ai.rs:1243",
+    "source": "ai.rs:1257",
     "sql": "WITH stock AS (SELECT p.id,p.name,COALESCE(p.sku,'') AS sku,CASE WHEN lower(COALESCE(p.sold_by,'Each'))='variants' THEN COALESCE((SELECT SUM(v.stock) FROM product_variants v WHERE v.product_id=p.id),0) ELSE COALESCE(p.stock,0) END AS quantity FROM products p WHERE lower(COALESCE(p.sold_by,'Each')) NOT IN ('service','restaurant')) SELECT name,sku,quantity::numeric::text FROM stock WHERE quantity>0 AND NOT EXISTS(SELECT 1 FROM sale_items i JOIN sales s ON s.id=i.sale_id WHERE i.product_id=stock.id AND s.status='completed' AND s.created_at >= $1 AND s.created_at < $2 AND i.qty>0) ORDER BY quantity DESC,name,id LIMIT 51"
   },
   {
-    "source": "ai.rs:1261",
+    "source": "ai.rs:1275",
     "sql": "SELECT id,name FROM products WHERE lower(trim(name))=lower(trim($1)) OR lower(trim(sku))=lower(trim($1)) OR lower(trim(barcode))=lower(trim($1)) ORDER BY id LIMIT 2"
   },
   {
-    "source": "ai.rs:1262",
+    "source": "ai.rs:1276",
     "sql": "WITH lines AS (SELECT s.id AS sale_id,s.total::numeric AS receipt_total,p.id AS product_id,p.name AS item,i.qty::numeric AS quantity,i.total::numeric AS line_total,SUM(i.total::numeric) OVER (PARTITION BY s.id) AS subtotal FROM sales s JOIN sale_items i ON i.sale_id=s.id LEFT JOIN products p ON p.id=i.product_id WHERE s.created_at >= $1 AND s.created_at < $2 AND s.status='completed') SELECT item,COUNT(DISTINCT sale_id),ROUND(SUM(CASE WHEN subtotal>0 THEN line_total*receipt_total/subtotal ELSE 0 END),2)::text,SUM(quantity)::text,SUM(line_total)::text FROM lines WHERE product_id::text=$3 GROUP BY product_id,item ORDER BY item,product_id"
   },
   {
-    "source": "ai.rs:1263",
+    "source": "ai.rs:1277",
     "sql": "SELECT EXISTS(SELECT 1 FROM sales s JOIN sale_items i ON i.sale_id=s.id WHERE s.created_at >= $1 AND s.created_at < $2 AND s.status='completed' AND COALESCE(i.refunded_qty,0)>0 AND EXISTS(SELECT 1 FROM sale_items matched WHERE matched.sale_id=s.id AND matched.product_id::text=$3))"
   },
   {
@@ -145,78 +149,86 @@
   },
   {
     "source": "assistant.rs:93",
-    "sql": "SET LOCAL statement_timeout='5s'"
+    "sql": "SELECT name FROM products UNION SELECT product_name AS name FROM sale_items WHERE product_name IS NOT NULL"
   },
   {
-    "source": "assistant.rs:95",
-    "sql": "SELECT DISTINCT name FROM products ORDER BY name LIMIT 1000"
-  },
-  {
-    "source": "assistant.rs:95",
-    "sql": "SELECT DISTINCT name FROM customers ORDER BY name LIMIT 1000"
-  },
-  {
-    "source": "assistant.rs:95",
-    "sql": "SELECT DISTINCT name FROM suppliers ORDER BY name LIMIT 1000"
-  },
-  {
-    "source": "assistant.rs:95",
-    "sql": "SELECT DISTINCT full_name FROM employees ORDER BY full_name LIMIT 1000"
-  },
-  {
-    "source": "assistant.rs:95",
-    "sql": "SELECT DISTINCT name FROM categories ORDER BY name LIMIT 1000"
-  },
-  {
-    "source": "assistant.rs:107",
-    "sql": "SELECT EXISTS(SELECT 1 FROM products WHERE lower(trim(name))=lower(trim($1)) OR lower(trim(sku))=lower(trim($1)) OR lower(trim(barcode))=lower(trim($1)))"
-  },
-  {
-    "source": "assistant.rs:111",
-    "sql": "SELECT EXISTS(SELECT 1 FROM products WHERE strpos(lower(name||' '||COALESCE(sku,'')||' '||COALESCE(barcode,'')),lower($1))>0)"
-  },
-  {
-    "source": "assistant.rs:115",
-    "sql": "SELECT EXISTS(SELECT 1 FROM suppliers WHERE strpos(lower(name||' '||COALESCE(phone,'')||' '||COALESCE(company_name,'')||' '||COALESCE(contact_person,'')||' '||id::text),lower($1))>0)"
-  },
-  {
-    "source": "assistant.rs:115",
-    "sql": "SELECT EXISTS(SELECT 1 FROM employees WHERE strpos(lower(full_name||' '||employee_no||' '||COALESCE(phone,'')),lower($1))>0)"
-  },
-  {
-    "source": "assistant.rs:115",
-    "sql": "SELECT EXISTS(SELECT 1 FROM customers WHERE strpos(lower(name||' '||COALESCE(phone,'')||' '||id::text),lower($1))>0)"
-  },
-  {
-    "source": "assistant.rs:157",
+    "source": "assistant.rs:106",
     "sql": "SET TRANSACTION READ ONLY"
   },
   {
-    "source": "assistant.rs:158",
+    "source": "assistant.rs:107",
     "sql": "SET LOCAL statement_timeout='5s'"
   },
   {
-    "source": "assistant.rs:162",
+    "source": "assistant.rs:109",
+    "sql": "SELECT DISTINCT name FROM products ORDER BY name LIMIT 1000"
+  },
+  {
+    "source": "assistant.rs:109",
+    "sql": "SELECT DISTINCT name FROM customers ORDER BY name LIMIT 1000"
+  },
+  {
+    "source": "assistant.rs:109",
+    "sql": "SELECT DISTINCT name FROM suppliers ORDER BY name LIMIT 1000"
+  },
+  {
+    "source": "assistant.rs:109",
+    "sql": "SELECT DISTINCT full_name FROM employees ORDER BY full_name LIMIT 1000"
+  },
+  {
+    "source": "assistant.rs:109",
+    "sql": "SELECT DISTINCT name FROM categories ORDER BY name LIMIT 1000"
+  },
+  {
+    "source": "assistant.rs:121",
+    "sql": "SELECT EXISTS(SELECT 1 FROM products WHERE lower(trim(name))=lower(trim($1)) OR lower(trim(sku))=lower(trim($1)) OR lower(trim(barcode))=lower(trim($1)))"
+  },
+  {
+    "source": "assistant.rs:125",
+    "sql": "SELECT EXISTS(SELECT 1 FROM products WHERE strpos(lower(name||' '||COALESCE(sku,'')||' '||COALESCE(barcode,'')),lower($1))>0)"
+  },
+  {
+    "source": "assistant.rs:129",
+    "sql": "SELECT EXISTS(SELECT 1 FROM suppliers WHERE strpos(lower(name||' '||COALESCE(phone,'')||' '||COALESCE(company_name,'')||' '||COALESCE(contact_person,'')||' '||id::text),lower($1))>0)"
+  },
+  {
+    "source": "assistant.rs:129",
+    "sql": "SELECT EXISTS(SELECT 1 FROM employees WHERE strpos(lower(full_name||' '||employee_no||' '||COALESCE(phone,'')),lower($1))>0)"
+  },
+  {
+    "source": "assistant.rs:129",
+    "sql": "SELECT EXISTS(SELECT 1 FROM customers WHERE strpos(lower(name||' '||COALESCE(phone,'')||' '||id::text),lower($1))>0)"
+  },
+  {
+    "source": "assistant.rs:171",
+    "sql": "SET TRANSACTION READ ONLY"
+  },
+  {
+    "source": "assistant.rs:172",
+    "sql": "SET LOCAL statement_timeout='5s'"
+  },
+  {
+    "source": "assistant.rs:176",
     "sql": "SELECT json_build_array(p.id::text,p.name,COALESCE(p.sku,''),COALESCE(p.barcode,''),p.price::numeric::text,CASE WHEN lower(COALESCE(p.sold_by,'Each'))='variants' THEN COALESCE((SELECT SUM(stock)::numeric::text FROM product_variants WHERE product_id=p.id),'0') ELSE p.stock::numeric::text END,COALESCE(c.name,''))::text FROM products p LEFT JOIN categories c ON c.id=p.category_id WHERE p.name=$1 AND COALESCE(p.sku,'')=$2 ORDER BY p.id LIMIT 50"
   },
   {
-    "source": "assistant.rs:163",
+    "source": "assistant.rs:177",
     "sql": "SELECT json_build_array(id::text,name,COALESCE(phone,''),COALESCE(company_name,''),COALESCE(contact_person,''),COALESCE(email,''),COALESCE(address,''),COALESCE(website,''),COALESCE(payment_terms,''),COALESCE(status,'Active'))::text FROM suppliers WHERE name=$1 AND COALESCE(phone,'')=$2 ORDER BY id LIMIT 50"
   },
   {
-    "source": "assistant.rs:164",
+    "source": "assistant.rs:178",
     "sql": "SELECT json_build_array(id::text,name,COALESCE(phone,''),COALESCE(email,''),COALESCE(address,''),total_spent::numeric::text)::text FROM customers WHERE name=$1 AND COALESCE(phone,'')=$2 ORDER BY id LIMIT 50"
   },
   {
-    "source": "assistant.rs:165",
+    "source": "assistant.rs:179",
     "sql": "SELECT json_build_array(id::text,employee_no,full_name,COALESCE(phone,''),COALESCE(position,''),COALESCE(department,''),COALESCE(branch,''),COALESCE(hire_date::text,''),COALESCE(employment_status,''),COALESCE(address,''),COALESCE(notes,''))::text FROM employees WHERE employee_no=$1 AND full_name=$2 ORDER BY id LIMIT 50"
   },
   {
-    "source": "assistant.rs:166",
+    "source": "assistant.rs:180",
     "sql": "SELECT json_build_array(id::text,name,COALESCE(phone,''),COALESCE(email,''),COALESCE(address,''),current_balance::numeric::text,total_spent::numeric::text)::text FROM customers WHERE name=$1 AND COALESCE(phone,'')=$2 ORDER BY id LIMIT 50"
   },
   {
-    "source": "assistant.rs:167",
+    "source": "assistant.rs:181",
     "sql": "SELECT json_build_array(expense_no,expense_date,category,description,amount::numeric::text,payment_method,reference_no,notes)::text FROM expenses WHERE category=$1 AND left(expense_date,10)>=$2 AND left(expense_date,10)<=$3 AND strpos(lower(COALESCE(category,'')||' '||COALESCE(description,'')),lower($4))>0 ORDER BY expense_date DESC,id DESC LIMIT 51"
   },
   {

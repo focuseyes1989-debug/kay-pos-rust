@@ -74,7 +74,7 @@ pub fn SuppliersPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
                 button { onclick: move |_| { query.set(String::new()); filter.set(String::new()); applied.set(Default::default()); selected.set(None); page.set(0); loaded.restart(); }, "Reset" }
                     button { class: "customer_primary", onclick: move |_| editor.set(Some(Supplier { status: "Active".into(), ..Default::default() })), crate::icons::ActionLabel { label:"+ Add supplier" } }
             }
-            if !notice().is_empty() { p { role: "status", "{notice}" } }
+            if !notice().is_empty() { MessageBox {title:"Supplier".to_string(),message:notice(),on_close:move |_|notice.set(String::new())} }
             if let Some(Err(message))=state.as_ref() { p { role: "alert", "{message}" } }
             div { class: "customers_touch_columns",
                 section { class: "customers_touch_list",

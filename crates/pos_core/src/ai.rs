@@ -112,6 +112,8 @@ pub struct Answer {
 
 // Only explicit supported intents are routed. User text is never executed as SQL.
 const CATEGORY_SALES_SQL: &str = "WITH lines AS (SELECT s.id AS sale_id,s.total::numeric AS receipt_total,COALESCE(c.name,'Uncategorized') AS category,i.qty::numeric AS quantity,i.total::numeric AS line_total,SUM(i.total::numeric) OVER (PARTITION BY s.id) AS subtotal FROM sales s JOIN sale_items i ON i.sale_id=s.id LEFT JOIN products p ON p.id=i.product_id LEFT JOIN categories c ON c.id=p.category_id WHERE s.created_at >= $1 AND s.created_at < $2 AND s.status='completed') SELECT category,COUNT(DISTINCT sale_id),ROUND(SUM(CASE WHEN subtotal>0 THEN line_total*receipt_total/subtotal ELSE 0 END),2)::text,SUM(quantity)::text,SUM(line_total)::text FROM lines WHERE ($3::text IS NULL OR lower(trim(category))=lower(trim($3))) GROUP BY category ORDER BY SUM(CASE WHEN subtotal>0 THEN line_total*receipt_total/subtotal ELSE 0 END) DESC,category";
+const RECEIPT_PRODUCT_SQL: &str = " AND EXISTS(SELECT 1 FROM sale_items i LEFT JOIN products p ON p.id=i.product_id WHERE i.sale_id=sales.id AND (lower(trim(i.product_name))=lower(trim($4)) OR lower(trim(p.name))=lower(trim($4))) AND i.qty>COALESCE(i.refunded_qty,0))";
+const RECEIPT_PRODUCT_LOOKUP_SQL: &str = "SELECT name FROM (SELECT name FROM products UNION SELECT product_name AS name FROM sale_items WHERE product_name IS NOT NULL) names WHERE lower(trim(replace(name,chr(4151)||chr(4154),chr(4154)||chr(4151))))=lower(trim($1)) ORDER BY name LIMIT 1";
 const RECEIPT_CATEGORY_SQL: &str = " AND EXISTS(SELECT 1 FROM sale_items i JOIN products p ON p.id=i.product_id JOIN categories c ON c.id=p.category_id WHERE i.sale_id=sales.id AND lower(trim(c.name))=lower(trim($4)) AND i.qty>COALESCE(i.refunded_qty,0))";
 const CATEGORY_LOOKUP_SQL: &str = "SELECT name FROM categories WHERE lower(trim(replace(name,chr(4151)||chr(4154),chr(4154)||chr(4151))))=lower(trim($1)) OR (lower(trim($1))='service' AND lower(trim(name))='services') ORDER BY CASE WHEN lower(trim(replace(name,chr(4151)||chr(4154),chr(4154)||chr(4151))))=lower(trim($1)) THEN 0 ELSE 1 END,id LIMIT 1";
 
@@ -427,13 +429,15 @@ async fn read_answer(pool: &PgPool, actor: &Session, r: &Request) -> Result<Answ
             }
         }
         Scope::Receipts => {
+            let mut product_filter=false;
             let category=if r.receipt_category.is_empty(){None}else{
-                Some(resolve_category(&mut tx,&r.receipt_category).await?)
+                let (name,is_product)=resolve_receipt_subject(&mut tx,&r.receipt_category).await?;
+                product_filter=is_product;Some(name)
             };
             let mut sql="SELECT id,COALESCE(invoice_no,''),created_at::text,COALESCE(total,0)::numeric::text,COALESCE(payment_type,''),COALESCE(status,'') FROM sales WHERE created_at >= $1::text::timestamp AND created_at < $2::text::timestamp".to_owned();
             let amount=r.product.strip_prefix("amount:").map(str::parse::<rust_decimal::Decimal>).transpose()?;
             if amount.is_some() || category.is_some() {sql.push_str(" AND ($3::numeric IS NULL OR total::numeric=$3) AND status='completed'");}
-            if category.is_some() {sql.push_str(RECEIPT_CATEGORY_SQL);}
+            if category.is_some() {sql.push_str(if product_filter {RECEIPT_PRODUCT_SQL}else{RECEIPT_CATEGORY_SQL});}
             if !r.receipt_payment.is_empty() {
                 if amount.is_none() && category.is_none() {sql.push_str(" AND ($3::numeric IS NULL OR total::numeric=$3) AND status='completed'");}
                 if category.is_none() {sql.push_str(" AND ($4::text IS NULL)");}
@@ -458,7 +462,9 @@ async fn read_answer(pool: &PgPool, actor: &Session, r: &Request) -> Result<Answ
             if let Some(amount)=amount {answer.notes.push(format!("ပြီးစီးသည့် receipt များ၏ နောက်ဆုံး Total {amount} ကျပ်ကို အတိအကျ စစ်ထားပါသည်။"));}
             if let Some(category)=category {
                 answer.title=format!("{category} ပါသည့် Receipt များ");
+                if product_filter {answer.notes.push(format!("Product: {category}။ ထို product ပါသော completed receipt များသာ ပြထားသည်။ Total သည် ဘောင်ချာတစ်စောင်လုံး၏ တန်ဖိုးဖြစ်သည်။"));}else {
                 answer.notes.push(format!("{category} category ပစ္စည်း ရောင်းထားသော ပြီးစီးသည့် receipt များသာ ပါဝင်သည်။ Total သည် receipt တစ်စောင်လုံး၏ တန်ဖိုးဖြစ်ပြီး category သီးသန့် ရောင်းရငွေ မဟုတ်ပါ။ လက်ရှိ product category ကို အသုံးပြုထားသည်။"));
+                }
             }
             if more {answer.notes.push("ထပ်ရှိသေးပါသည်။ ရက်အပိုင်းအခြားကို ကျဉ်းပြီး ပြန်မေးပါ။".into());}
         }
@@ -668,10 +674,6 @@ fn numeric_parts(text: &str) -> impl Iterator<Item = &str> {
 fn normalize_category(name:&str)->String {
     name.replace("\u{1037}\u{103a}","\u{103a}\u{1037}")
 }
-async fn resolve_category(conn:&mut PgConnection,name:&str)->Result<String> {
-    sqlx::query_scalar::<_,String>(CATEGORY_LOOKUP_SQL).bind(normalize_category(name))
-        .fetch_optional(conn).await?.context("မေးထားသော category ကို မတွေ့ပါ။ Category အမည်အတိအကျဖြင့် ပြန်မေးပါ။")
-}
 fn is_best_seller_prompt(text: &str) -> bool {
     ["အကောင်းဆုံး", "အများဆုံး", "best selling", "best-selling", "best sellers", "top products"].iter().any(|word| text.contains(word))
         || (text.contains("top ") && text.contains("products"))
@@ -743,6 +745,18 @@ fn payment_pattern(payment:&str)->Result<String> {
     }.into())
 }
 fn receipt_category_prompt(text: &str) -> Result<(String,String)> {
+    for marker in ["(product)","(service)"] {
+        if let Some((before,after))=text.split_once(marker) {
+            let name=category_subject(before)?;
+            ensure!(!name.is_empty(),"Product အမည် ထည့်မေးပါ။");
+            return Ok((format!("product:{name}"),after.to_owned()));
+        }
+    }
+    if text.contains("product by service") {
+        let (name,amount)=receipt_category_prompt(&text.replace("product by service"," "))?;
+        return Ok((format!("product:{}",name.trim_start_matches("product:")),amount));
+    }
+
     let mut cleaned=text.to_owned();
     let selector=payment_selector(text);
     if let Some((_,suffix))=selector.split_once('(') {
@@ -1273,5 +1287,26 @@ mod product_sales_tests {
             assert_eq!(r.from,"2026-10-09");
             assert_eq!(r.to,"2026-10-09");
         }
+    }
+}
+
+async fn resolve_receipt_subject(conn:&mut PgConnection,name:&str)->Result<(String,bool)> {
+    let explicit=name.strip_prefix("product:");
+    if explicit.is_none() {
+        if let Some(category)=sqlx::query_scalar::<_,String>(CATEGORY_LOOKUP_SQL).bind(normalize_category(name)).fetch_optional(&mut *conn).await? {return Ok((category,false));}
+    }
+    let product=sqlx::query_scalar::<_,String>(RECEIPT_PRODUCT_LOOKUP_SQL).bind(normalize_category(explicit.unwrap_or(name))).fetch_optional(&mut *conn).await?.context("မေးထားသော Category/Product ကို မတွေ့ပါ။ အမည်အတိအကျဖြင့် ပြန်မေးပါ။")?;
+    Ok((product,true))
+}
+#[cfg(test)]
+mod service_receipt_tests {
+    use super::*;
+    #[test]
+    fn direct_and_explicit_service_product_receipts_parse() {
+        let day=NaiveDate::from_ymd_opt(2026,10,14).unwrap();
+        let r=chat_at("ဒီနေ့ ဖိတ်စာ receipts ပြပါ","","",day).unwrap();
+        assert_eq!(r.scope,Scope::Receipts);assert_eq!(r.receipt_category,"ဖိတ်စာ");assert_eq!(r.from,"2026-10-14");assert!(r.product.is_empty());
+        let r=chat_at("ဒီနေ့ ဖိတ်စာ (product) receipts ပြပါ","","",day).unwrap();assert_eq!(r.receipt_category,"product:ဖိတ်စာ");
+        let r=chat_at("ဒီနေ့ product by service ဖိတ်စာ receipts ပြပါ","","",day).unwrap();assert_eq!(r.receipt_category,"product:ဖိတ်စာ");
     }
 }

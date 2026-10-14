@@ -298,7 +298,7 @@ fn followup_prompt(entry:&ChatEntry,period:&str)->String {
     if entry.scope==Scope::CategorySales {format!("category sales {} {period}",entry.subject)}
     else if entry.scope==Scope::PaymentSales {format!("payments {} {period}",entry.receipt_payment)}
     else if entry.scope==Scope::Receipts {
-        let category=if entry.receipt_category.is_empty(){String::new()}else{format!("{} (category)",entry.receipt_category)};
+        let category=if entry.receipt_category.is_empty(){String::new()}else if let Some(product)=entry.receipt_category.strip_prefix("product:"){format!("{product} (product)")}else{format!("{} (category)",entry.receipt_category)};
         let amount=entry.subject.strip_prefix("amount:").map(|value|format!("{value} ကျပ်")).unwrap_or_default();
         format!("{category} receipts {amount} {} {period}",entry.receipt_payment)
     } else if entry.scope==Scope::Expenses {format!("expenses {} {period}",entry.subject)}
@@ -374,7 +374,7 @@ fn AnswerPanel(answer: ai::Answer, request:Request, db_form: DbForm, actor: Sess
             div {class:"ai_answer_scope",small {{crate::regional::text("အသုံးပြုထားသော သတ်မှတ်ချက်များ")}}
                 p {"{answer.from} – {answer.to}"}
                 if !request.product.is_empty(){p {{crate::regional::text(&format!("ရှာဖွေမှု: {}",request.product))}}}
-                if !request.receipt_category.is_empty(){p {"Category: {request.receipt_category}"}}
+                if !request.receipt_category.is_empty(){p {if let Some(product)=request.receipt_category.strip_prefix("product:"){"Product: {product}"}else{"Product / Category: {request.receipt_category}"}}}
                 if !request.receipt_payment.is_empty(){p {"Payment: {request.receipt_payment}"}}
                 if let Some(total)=&answer.total_amount {strong {{crate::regional::text(&format!("စုစုပေါင်း: {total}"))}}}
             }

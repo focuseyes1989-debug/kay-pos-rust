@@ -921,10 +921,15 @@ async fn postgres_export_import_preserves_all_tables_blobs_credit_sequences_and_
     ::sqlx::raw_sql("ALTER TABLE sale_items ADD PRIMARY KEY(id);ALTER TABLE sales ADD PRIMARY KEY(id);ALTER TABLE customers ADD PRIMARY KEY(id);").execute(&pg).await?;
     let source = s::Pool::Postgres(pg.clone());
     let admin = auth::login(&source, "owner", "test-password").await?;
+    s::query("INSERT INTO products(id,name,sold_by,price,cost,stock) VALUES(2,'ဖိတ်စာ','Service',0,0,0)").execute(&source).await?;
+    s::query("INSERT INTO sale_items(id,sale_id,product_id,product_name,qty,price,total,cost) VALUES(2,1,2,'ဖိတ်စာ',1,0,0,0)").execute(&source).await?;
+    let ai_request=pos_core::ai::chat("ဒီနေ့ ဖိတ်စာ (product) receipts ပြပါ","","")?;
+    assert!(pos_core::assistant::candidates(&source,&admin,&ai_request).await?.is_empty());
+    assert_eq!(pos_core::ai::ask(&source,&admin,&ai_request).await?.receipt_ids,vec![1]);
     let item:i32=s::query_scalar("SELECT id FROM sale_items ORDER BY id LIMIT 1").fetch_one(&source).await?;
     let warranty_unit=pos_core::warranty::register(&source,&admin,item,"PG-SOLAR-001",24).await?;
     assert_eq!(pos_core::warranty::certificate(&source,&admin,&warranty_unit).await?.serial,"PG-SOLAR-001");
-    assert_eq!(pos_core::warranty::invoice_certificate(&source,&admin,&warranty_unit).await?.units.len(),1);
+    assert_eq!(pos_core::warranty::invoice_certificate(&source,&admin,&warranty_unit).await?.units.len(),2);
     let warranty_claim=pos_core::warranty::open_claim(&source,&admin,&warranty_unit,"Battery fault").await?;
     pos_core::warranty::update_claim(&source,&admin,&warranty_claim,"in_progress","Supplier inspection").await?;
     assert_eq!(pos_core::warranty::events(&source,&admin,&warranty_claim).await?.len(),2);
@@ -1171,5 +1176,36 @@ async fn standalone_invoice_warranty_groups_all_products_and_keeps_receipts_sepa
     assert!(w::invoice_certificate(&pool,&actor,&unit.id).await?.units.iter().all(|u|u.serial!="GROUP-B"));
     s::query("UPDATE users SET is_active=0 WHERE username='owner'").execute(&pool).await?;
     assert!(w::invoice_certificate(&pool,&actor,&unit.id).await.is_err());
+    pool.close().await;Ok(())
+}
+
+#[tokio::test]
+async fn standalone_assistant_service_product_receipts_dates_payment_amount_and_history()->Result<()> {
+    use pos_core::{ai,assistant};
+    let(_dir,pool,actor)=fixture().await?;
+    s::query("INSERT INTO products(id,name,sold_by,price,cost,stock) VALUES(2,'ဖိတ်စာ','Service',5000,0,0)").execute(&pool).await?;
+    let mut service=draft("Cash",5000.0);service.expected_total=5000.0;
+    service.items[0].product_id=2;service.items[0].product_name="ဖိတ်စာ".into();service.items[0].price=5000.0;service.items[0].cost=0.0;service.items[0].is_service=true;
+    let mut mixed=service.clone();mixed.invoice_no=auth::new_request_id();mixed.items.push(service.items[0].clone());mixed.items.push(draft("Cash",20000.0).items.remove(0));mixed.expected_total=30000.0;mixed.payment=30000.0;
+    let first=complete_sale(&pool,&mixed,&actor).await?;
+    let plain=complete_sale(&pool,&draft("Cash",20000.0),&actor).await?;
+    let mut credit=service.clone();credit.invoice_no=auth::new_request_id();credit.payment_type="Credit".into();credit.payment=0.0;
+    let second=complete_sale(&pool,&credit,&actor).await?;
+    let mut refunded=service.clone();refunded.invoice_no=auth::new_request_id();let refunded=complete_sale(&pool,&refunded,&actor).await?;refund_sale(&pool,refunded.id,&actor).await?;
+    let mut old=service.clone();old.invoice_no=auth::new_request_id();let old=complete_sale(&pool,&old,&actor).await?;
+    let yesterday=(chrono::Local::now().date_naive()-chrono::Duration::days(1)).and_hms_opt(12,0,0).unwrap();
+    s::query("UPDATE sales SET created_at=$1 WHERE id=$2").bind(yesterday).bind(old.id).execute(&pool).await?;
+    let day=chrono::Local::now().date_naive();
+    let request=ai::chat("ဒီနေ့ ဖိတ်စာ receipts ပြပါ","","")?;
+    assert!(assistant::candidates(&pool,&actor,&request).await?.is_empty());
+    let answer=ai::ask(&pool,&actor,&request).await?;assert_eq!(answer.receipt_ids.len(),2);assert!(answer.receipt_ids.contains(&first.id));assert!(answer.receipt_ids.contains(&second.id));assert!(!answer.receipt_ids.contains(&plain.id));
+    let cash=ai::chat("ဒီနေ့ ဖိတ်စာ (product) cash receipts ပြပါ","","")?;
+    assert_eq!(ai::ask(&pool,&actor,&cash).await?.receipt_ids,vec![first.id]);
+    let amount=ai::chat("ဒီနေ့ ဖိတ်စာ receipts 30000 ကျပ် ပြပါ","","")?;
+    assert_eq!(ai::ask(&pool,&actor,&amount).await?.receipt_ids,vec![first.id]);
+    let follow=assistant::plan("မနေ့ကရော?",Some(&cash),day)?.request;
+    assert_eq!(ai::ask(&pool,&actor,&follow).await?.receipt_ids,vec![old.id]);
+    s::query("UPDATE products SET name='Renamed service' WHERE id=2").execute(&pool).await?;
+    assert_eq!(ai::ask(&pool,&actor,&cash).await?.receipt_ids,vec![first.id]);
     pool.close().await;Ok(())
 }

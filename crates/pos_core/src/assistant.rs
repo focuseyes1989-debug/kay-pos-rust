@@ -86,6 +86,20 @@ fn distance(a:&str,b:&str)->usize {
 
 /// Approximate matches are offered to the user, never silently substituted.
 pub async fn candidates(pool:&PgPool,actor:&Session,r:&Request)->Result<Vec<String>> {
+    if r.scope==Scope::Receipts {
+        let name=r.receipt_category.trim_start_matches("product:");
+        if !name.is_empty() {
+            let mut tx=pool.begin().await?;sqlx::query("SET TRANSACTION READ ONLY").execute(&mut *tx).await?;ai::authorize(&mut tx,actor,r.scope).await?;
+            let names:Vec<String>=sqlx::query_scalar("SELECT name FROM products UNION SELECT product_name AS name FROM sale_items WHERE product_name IS NOT NULL").fetch_all(&mut *tx).await?;
+            tx.commit().await?;
+            if names.iter().any(|n|normalized(n)==normalized(name)) {return Ok(vec![]);}
+            if r.receipt_category.starts_with("product:") {
+                let q=normalized(name);let mut choices:Vec<_>=names.into_iter().filter_map(|n|{let norm=normalized(&n);let d=distance(&q,&norm);(norm.contains(&q)||d<=((q.chars().count()/4).max(1).min(3))).then_some((d,n))}).collect();
+                choices.sort();choices.dedup();return Ok(choices.into_iter().take(5).map(|(_,n)|n).collect());
+            }
+
+        }
+    }
     let term=match r.scope {Scope::CategorySales=>&r.product,Scope::Receipts=>&r.receipt_category,Scope::Products|Scope::Suppliers|Scope::Customers|Scope::Credit|Scope::Employees=>&r.product,_=>return Ok(vec![])};
     if term.is_empty(){return Ok(vec![]);}
     let mut tx=pool.begin().await?;
@@ -123,7 +137,7 @@ pub async fn candidates(pool:&PgPool,actor:&Session,r:&Request)->Result<Vec<Stri
 
 pub fn choose(mut plan:Plan,name:&str)->Plan {
     for r in std::iter::once(&mut plan.request).chain(plan.comparison.iter_mut()) {
-        if r.scope==Scope::Receipts {r.receipt_category=name.into();} else {r.product=name.into();}
+        if r.scope==Scope::Receipts {r.receipt_category=if r.receipt_category.starts_with("product:"){format!("product:{name}")}else{name.into()};} else {r.product=name.into();}
     }
     plan
 }

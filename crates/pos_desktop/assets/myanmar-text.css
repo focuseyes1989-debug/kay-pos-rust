@@ -581,3 +581,71 @@ body .shell .login_form button.login_header_icon:hover:not(:disabled) { backgrou
 .receipt_serial_list {display:grid;gap:8px;padding:12px 16px;border-top:1px solid var(--line);font-size:12px;overflow-wrap:anywhere;}
 .receipt_serial_list > div {display:grid;gap:3px;}
 .receipt_serial_list small {color:var(--muted);}
+
+/* Compact, aligned monthly budget and alert panels. */
+.shell .expense_budget_panel {display:flex;flex-direction:column;gap:12px;padding-bottom:12px;background:transparent;border:0;box-shadow:none;}
+.shell .phase4_expenses .phase4_panel.expense_budget_panel {background:transparent;border:0;box-shadow:none;}
+.shell .expense_budget_panel .expense_budget_filters {align-items:center;justify-content:flex-end;flex-wrap:wrap;margin:0;padding:10px 14px;border:1px solid var(--line);border-radius:10px;background:var(--panel);}
+.shell .expense_budget_heading {display:grid;gap:2px;flex:1;min-width:180px;}
+.shell .expense_budget_heading strong {font-size:14px;line-height:1.6;}
+.shell .expense_budget_heading small {font-size:12px;color:var(--muted);line-height:1.6;}
+.shell .expense_budget_panel .expense_budget_filters > label {display:flex;flex-direction:row;align-items:center;gap:8px;flex:0 0 auto;min-width:0;margin:0;}
+.shell .expense_budget_filters input[type=month] {width:200px;}
+.shell .expense_budget_panel .budget_overview {grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:0;}
+.shell .expense_budget_panel .budget_overview > div {flex-direction:row;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;min-width:0;border-radius:10px;}
+.shell .expense_budget_panel .budget_overview small {font-size:12px;line-height:1.6;}
+.shell .expense_budget_panel .budget_overview span {font-size:18px;line-height:1.6;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap;}
+.shell .expense_budget_panel .phase4_table {margin:0;border-radius:10px;}
+.shell .expense_budget_panel .phase4_table :is(th,td) {padding:7px 12px;font-size:12px;line-height:1.8;}
+.shell .expense_budget_panel .phase4_table :is(th,td):last-child {width:90px;text-align:right;white-space:nowrap;}
+.shell .expense_budget_table th:first-child {width:26%;}
+.shell .expense_budget_table :is(th,td):nth-child(5) {width:150px;}
+.shell .expense_budget_table :is(th,td):nth-child(6) {width:125px;}
+.shell .expense_budget_table td:first-child {overflow-wrap:anywhere;}
+.shell .expense_budget_panel .expense_alert_settings {margin:0;padding:9px 14px;gap:12px;flex-wrap:wrap;border-radius:10px;font-size:12px;}
+.shell .expense_alerts_panel .budget_overview {grid-template-columns:repeat(2,minmax(0,1fr));}
+.shell .expense_alerts_panel .budget_overview > div {padding:9px 14px;}
+.shell .expense_alert_table th:first-child {width:150px;}
+.shell .expense_alert_table th:nth-child(2) {width:24%;}
+.shell .expense_alert_table th:nth-child(4) {width:100px;}
+.shell .expense_alert_table td[colspan] {padding:0;white-space:normal;text-align:initial;}
+.shell .expense_alert_table .budget_empty {display:flex;flex-direction:column;gap:5px;min-height:150px;padding:24px;}
+.shell .expense_alert_table .budget_empty .ui_svg_icon {width:26px;height:26px;margin-bottom:4px;color:light-dark(#16845c,#86dcb2);}
+.shell .expense_alert_table .budget_empty strong {font-size:13px;font-weight:500;}
+.shell .expense_alert_table .budget_empty small {font-size:12px;}
+@media(max-width:700px) {
+ .shell .expense_budget_panel .budget_overview {grid-template-columns:1fr;gap:8px;}
+ .shell .expense_budget_heading {flex-basis:100%;}
+ .shell .expense_budget_panel .expense_budget_filters > label {flex:1;}
+ .shell .expense_budget_filters input[type=month] {width:100%;min-width:140px;}
+}
+
+.shell .expense_budget_panel button:not([hidden]) {display:inline-flex;align-items:center;justify-content:center;gap:6px;padding-inline:10px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink);font:inherit;cursor:pointer;}
+.shell .expense_budget_panel button:not([hidden]):hover:not(:disabled) {border-color:var(--accent);background:color-mix(in srgb,var(--accent) 6%,var(--panel));}
+.shell .expense_budget_panel button:disabled {opacity:.5;cursor:default;}
+.shell .expense_budget_panel .phase4_table button {min-width:76px;}
+
+/* Category groups share the categories panel treatment, including custom themes. */
+.shell .category_management_groups > .customers_page.category_groups_page {background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:none;overflow:hidden;}
+.shell .category_groups_page > .customers_header {background:var(--panel);min-height:76px;}
+.shell .category_groups_page > .customers_header > .category_groups_heading {display:grid;gap:4px;min-width:0;}
+.shell .category_groups_heading small {font-size:11px;color:var(--muted);}
+.shell .category_groups_page > .phase6_filters {display:flex;align-items:center;gap:10px;background:var(--panel);}
+.shell .category_groups_page > .phase6_filters label {min-width:0;flex:1;}
+.shell .category_groups_page .category_group_list {padding:12px;gap:8px;background:var(--panel);}
+.shell .category_groups_page .category_group_card {min-height:74px;padding:10px 12px;border-radius:8px;background:var(--panel);}
+.shell .category_group_identity {flex:1;}
+.shell .category_group_title {display:flex;align-items:center;flex-wrap:wrap;gap:6px;}
+.shell .category_group_title strong {font-size:13px;line-height:1.8;overflow-wrap:anywhere;}
+.shell .category_groups_page .group_swatch {width:10px;height:10px;border-radius:3px;flex-shrink:0;}
+.shell .category_group_title :is(.group_status,.group_favorite) {padding:2px 6px;border-radius:4px;font-size:10px;line-height:1.8;white-space:nowrap;}
+.shell .category_group_title .active {background:light-dark(#e1f5ee,#173b31);color:light-dark(#13734b,#9ae6c1);}
+.shell .category_group_title .inactive {background:var(--bg);color:var(--muted);}
+.shell .category_group_title .group_favorite {background:light-dark(#f0eaff,#302447);color:light-dark(#6d28d9,#d1b6ff);}
+.shell .category_group_identity p {font-size:12px;line-height:1.7;margin:3px 0;}
+.shell .category_group_identity small {font-size:11px;line-height:1.6;margin-top:3px;}
+.shell .category_groups_page button:not(.customer_primary):not([hidden]) {padding-inline:12px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink);}
+.shell .category_group_card > button {min-width:78px;}
+.shell .category_groups_page button:disabled {opacity:.5;}
+.shell .category_groups_empty {padding:24px 14px;text-align:center;color:var(--muted);font-size:13px;}
+@media(max-width:600px) {.shell .category_groups_page > .phase6_filters {flex-wrap:wrap;}.shell .category_groups_page > .phase6_filters label {flex-basis:100%;}}

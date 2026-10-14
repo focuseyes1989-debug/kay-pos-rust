@@ -88,29 +88,33 @@ pub fn GroupsPage(db_form: DbForm) -> Element {
     let mut busy = use_signal(|| false);
     let mut error = use_signal(String::new);
     rsx! {section{class:"customers_page phase6_page category_groups_page",
-        header{class:"customers_header",h2{ActionLabel{label:"Category groups"}}div{class:"customers_actions",
+        header{class:"customers_header",div {class:"category_groups_heading",h2{ActionLabel{label:"Category groups"}} if let Some(Ok(rows))=data.read().as_ref(){small {"{rows.len()} groups · {rows.iter().filter(|g|g.is_active==1).count()} active"}}}div{class:"customers_actions",
             button{hidden:true,"data-page-refresh":"true",disabled:busy()||!data.finished(),onclick:move |_|data.restart(),"Refresh"}
             button{class:"customer_primary",disabled:busy(),onclick:{let db=db_form.clone();move |_|{let db=db.clone();busy.set(true);spawn(async move{
                 let result=async{let actor=session().ok_or_else(||anyhow::anyhow!("Sign in again"))?;groups::reserve(&pos_core::connect(&db.database_config()?).await?,&actor).await}.await;
                 busy.set(false);match result{Ok(g)=>editor.set(Some((g,true))),Err(e)=>error.set(format!("{e:#}"))}
             });}},ActionLabel{label:"Add group"}}
         }}
-        div{class:"phase6_filters",label{input{r#type:"search",aria_label:"Search category groups",placeholder:"Search category groups",value:"{query}",oninput:move|e|query.set(e.value())}}}
+        div{class:"phase6_filters",label{input{r#type:"search",aria_label:"Search category groups",placeholder:"Search category groups",value:"{query}",oninput:move|e|query.set(e.value())}} button {disabled:query().is_empty(),onclick:move |_|query.set(String::new()),"Clear search"}}
         if !error().is_empty(){p{role:"alert","{error}"}}
         match data.read().as_ref(){None=>rsx!{p{"Loading..."}},Some(Err(e))=>rsx!{p{role:"alert","{e}"}},Some(Ok(rows))=>rsx!{
             div{class:"category_group_list",
                 for g in rows.iter().filter(|g|g.name.to_lowercase().contains(&query().to_lowercase())){
                     article{class:"category_group_card",key:"{g.id}",
                         div{class:"category_group_identity",
-                            strong{span{class:"group_swatch",style:"background:{g.color}"}"{g.name}"}
+                            div {class:"category_group_title",
+                                strong{span{class:"group_swatch",style:"background:{g.color}"}"{g.name}"}
+                                span {class:if g.is_active==1 {"group_status active"}else{"group_status inactive"},if g.is_active==1 {"Active"}else{"Inactive"}}
+                                if g.is_favorite==1 {span {class:"group_favorite","Favorite"}}
+                            }
                             if !g.description.trim().is_empty(){p{"{g.description}"}}
-                            small{"Order: {g.sort_order} · " if g.is_favorite==1{"Favorite · "} if g.is_active==1{"Active"}else{"Inactive"}}
+                            small{"Order: {g.sort_order}"}
                         }
                         button{onclick:{let g=g.clone();move |_|editor.set(Some((g.clone(),false)))},ActionLabel{label:"Edit"}}
                     }
                 }
             }
-            if rows.is_empty(){p{"No category groups."}}
+            if !rows.iter().any(|g|g.name.to_lowercase().contains(&query().to_lowercase())){div {class:"category_groups_empty",if rows.is_empty(){"No category groups yet. Add a group to get started."}else{"No groups match your search."}}}
         }}
         if let Some((group,new))=editor(){GroupEditor{db_form:db_form.clone(),group,new,onclose:move |_|editor.set(None),onsaved:move |_|{editor.set(None);data.restart();}}}
     }}
