@@ -60,6 +60,7 @@ pub fn InventoryPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
     let valuation=pos_core::stock_valuation::calculate(&products);
     let filtered_products=rows.iter().map(|p|(*p).clone()).collect::<Vec<_>>();
     let filtered_value=pos_core::stock_valuation::calculate(&filtered_products);
+    let export_scope=format!("Search: {} | Category: {}",if query.is_empty(){"All"}else{&query},categories.iter().find(|c|c.id.to_string()==cat).map(|c|c.name.as_str()).unwrap_or("All categories"));
     let current = products.iter().find(|p| Some(p.id) == selected()).cloned();
     rsx! {
         section {class:"customers_page products_touch inventory_touch",
@@ -76,7 +77,7 @@ pub fn InventoryPage(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
             if show_value() {
                 if !data.finished() {p {role:"status","Loading stock value..."}}
                 else if let Some(Err(e))=state.as_ref() {p {role:"alert","{e}"}}
-                else {StockValueDetails {total:valuation.clone(),filtered:filtered_value}}
+                else {StockValueDetails {total:valuation.clone(),filtered:filtered_value,scope:export_scope}}
             } else {
             div {class:"inventory_columns",
                 section {class:"inventory_list",h3 {"Products & stock"}
@@ -327,12 +328,35 @@ pub(crate) fn stock_money(value:pos_core::Money)->String {
 }
 
 #[component]
-fn StockValueDetails(total:pos_core::stock_valuation::StockValuation,filtered:pos_core::stock_valuation::StockValuation)->Element {
+fn StockValueDetails(total:pos_core::stock_valuation::StockValuation,filtered:pos_core::stock_valuation::StockValuation,scope:String)->Element {
     let mut limit=use_signal(||50usize);
     let mut missing_limit=use_signal(||50usize);
+    let mut exporting=use_signal(||false);
+    let mut export_message=use_signal(String::new);
     let valued=filtered.rows.iter().filter(|r|r.unit_cost.is_some()).collect::<Vec<_>>();
     let missing=filtered.rows.iter().filter(|r|r.unit_cost.is_none()).collect::<Vec<_>>();
     rsx! {section {class:"stock_value_details",
+        div {class:"stock_value_export_toolbar",
+            small {"Export both lists for the current search and category, including rows not yet loaded on screen."}
+            button {disabled:exporting(),onclick:{
+                let snapshot=filtered.clone();let scope=scope.clone();
+                move |_| {
+                    let snapshot=snapshot.clone();let scope=scope.clone();
+                    let currency=crate::regional::current().symbol().to_string();
+                    exporting.set(true);
+                    spawn(async move {
+                        if let Some(file)=rfd::AsyncFileDialog::new().add_filter("Excel",&["xlsx"]).set_file_name(format!("Stock-Value-{}.xlsx",chrono::Local::now().format("%Y-%m-%d"))).save_file().await {
+                            let path=file.path().to_path_buf();
+                            let result=tokio::task::spawn_blocking(move ||export_stock_value(&snapshot,&scope,&currency,&path)).await;
+                            export_message.set(match result {Ok(Ok(()))=>"Excel export saved.".into(),Ok(Err(e))=>format!("Export failed: {e:#}"),Err(e)=>format!("Export failed: {e}")});
+                        }
+                        exporting.set(false);
+                    });
+                }
+            },if exporting(){"Exporting..."}else{crate::icons::ActionLabel {label:"Export Excel"}}}
+        }
+        if !export_message().is_empty(){MessageBox {title:"Stock value export".to_string(),message:export_message(),on_close:move |_|export_message.set(String::new())}}
+
         div {class:"stock_value_summary",
             article {class:"dashboard_metric",small {crate::icons::CardLabel {label:"Total stock value"}} strong {"{stock_money(total.total)}"} small {"All products · Current stock"}}
             article {class:"dashboard_metric",small {crate::icons::CardLabel {label:"Filtered stock value"}} strong {"{stock_money(filtered.total)}"} small {"Current search and category"}}
@@ -368,4 +392,80 @@ fn StockValueDetails(total:pos_core::stock_valuation::StockValuation,filtered:po
             if missing.len()>missing_limit(){button {onclick:move |_|missing_limit+=50,"Load more"}}
         }
     }}
+}
+
+
+fn export_stock_value(snapshot:&pos_core::stock_valuation::StockValuation,scope:&str,currency:&str,path:&std::path::Path)->anyhow::Result<()> {
+    use rust_xlsxwriter::{Workbook,Format,Color};
+    let mut book=Workbook::new();
+    let title=Format::new().set_bold().set_font_size(16);
+    let heading=Format::new().set_bold().set_background_color(Color::RGB(0xEAF0FA));
+    let money=Format::new().set_num_format("#,##0.00");
+    let quantity=Format::new().set_num_format("#,##0.###");
+    let note=Format::new().set_font_color(Color::RGB(0x58677D));
+    let exported=chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    for missing in [false,true] {
+        let rows=snapshot.rows.iter().filter(|r|r.unit_cost.is_none()==missing).collect::<Vec<_>>();
+        anyhow::ensure!(rows.len()<=1_048_564,"Too many rows for Excel; narrow the search or category");
+        let sheet=book.add_worksheet();
+        sheet.set_name(if missing{"Products without cost"}else{"Stock value"})?;
+        sheet.set_landscape();
+        sheet.set_column_width(0,10)?;
+        sheet.set_column_width(1,36)?;
+        sheet.set_column_width(2,30)?;
+        sheet.set_column_width(3,24)?;
+        sheet.set_column_width(4,16)?;
+        sheet.set_column_width(5,22)?;
+        if !missing {sheet.set_column_width(6,22)?;}
+        sheet.write_string_with_format(0,0,if missing{"Products without cost"}else{"Stock value"},&title)?;
+        sheet.write_string(1,0,format!("Exported: {exported} | Currency: {currency}"))?;
+        sheet.write_string(2,0,scope)?;
+        sheet.write_string_with_format(3,0,"Services excluded. Current positive stock x current cost; variant stock counted once.",&note)?;
+        sheet.write_string_with_format(4,0,"Zero / missing costs excluded from total. Negative stock contributes zero value.",&note)?;
+        sheet.write_string(5,0,format!("Missing cost: {} products ({} in stock) | Service products excluded: {} | Negative stock rows: {}",snapshot.missing_cost_products,snapshot.missing_cost_in_stock,snapshot.excluded_services,snapshot.negative_stock_rows))?;
+        sheet.write_string_with_format(6,0,"Filtered stock value",&heading)?;
+        sheet.write_number_with_format(6,5,snapshot.total.to_string().parse::<f64>()?,&money)?;
+        let headers:Vec<&str>=if missing {vec!["Product ID","Product","Variant","Category","Stock","Status"]}else{vec!["Product ID","Product","Variant","Category","Stock","Unit cost","Stock value"]};
+        for (col,label) in headers.iter().enumerate(){sheet.write_string_with_format(8,col as u16,*label,&heading)?;}
+        for (index,row) in rows.iter().enumerate() {
+            let r=index as u32+9;
+            sheet.write_number(r,0,row.product_id as f64)?;
+            sheet.write_string(r,1,&row.name)?;
+            sheet.write_string(r,2,&row.variant)?;
+            sheet.write_string(r,3,&row.category)?;
+            sheet.write_number_with_format(r,4,row.stock,&quantity)?;
+            if missing {sheet.write_string(r,5,"Cost not set")?;}
+            else {
+                if let Some(cost)=row.unit_cost {sheet.write_number_with_format(r,5,cost.to_string().parse::<f64>()?,&money)?;}
+                if let Some(value)=row.value {sheet.write_number_with_format(r,6,value.to_string().parse::<f64>()?,&money)?;}
+                else {sheet.write_string(r,6,"Unavailable")?;}
+            }
+        }
+        sheet.set_freeze_panes(9,0)?;
+        if !rows.is_empty(){sheet.autofilter(8,0,rows.len() as u32+8,(headers.len()-1) as u16)?;}
+        else {sheet.write_string(9,0,"No matching products.")?;}
+    }
+    // Write beside the destination, preserving an existing file if generation fails.
+    let temp=tempfile::NamedTempFile::new_in(path.parent().ok_or_else(||anyhow::anyhow!("Invalid export path"))?)?;
+    book.save(temp.path())?;
+    temp.persist(path)?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod stock_export_tests {
+    #[test]
+    fn export_includes_every_row_and_keeps_missing_cost_separate() {
+        use pos_core::{Money,stock_valuation::{StockValuation,StockValueRow}};
+        let mut snapshot=StockValuation::default();
+        for id in 1..=65 {snapshot.rows.push(StockValueRow {product_id:id,name:if id==1{"=1+1".into()}else{"Solar panel".into()},variant:"550W".into(),category:"Solar".into(),stock:2.5,unit_cost:Some(Money::from(100)),value:Some(Money::from(250))});}
+        snapshot.rows.push(StockValueRow {product_id:66,name:"Battery".into(),variant:String::new(),category:"Solar".into(),stock:3.0,unit_cost:None,value:None});
+        snapshot.total=Money::from(16250);snapshot.missing_cost_products=1;snapshot.missing_cost_in_stock=1;
+        let dir=tempfile::tempdir().unwrap();
+        let path=dir.path().join("stock.xlsx");
+        super::export_stock_value(&snapshot,"Search: All | Category: Solar","Ks",&path).unwrap();
+        assert!(std::fs::metadata(&path).unwrap().len()>1000);
+        if let Some(path)=std::env::var_os("STOCK_VALUE_TEST_EXPORT") {super::export_stock_value(&snapshot,"Search: All | Category: Solar","Ks",std::path::Path::new(&path)).unwrap();}
+        super::export_stock_value(&StockValuation::default(),"No matches","Ks",&path).unwrap();
+    }
 }

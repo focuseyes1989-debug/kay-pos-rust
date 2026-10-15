@@ -47,3 +47,42 @@ body .shell :is(.settings_search,.catalog_search,.category_search) { padding-inl
 .shell .ui_tab_label {display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;vertical-align:middle;}
 .shell .ui_tab_label .ui_svg_icon {width:15px;min-width:15px;height:15px;flex:0 0 15px;color:var(--accent);}
 .shell.shell[data-theme] :is(.receipt_tabs,.inventory_action_tabs) button:is(.active,[aria-selected="true"],:hover) .ui_tab_label .ui_svg_icon {color:currentColor;}
+
+/* Sales category selection shares the search row, freeing catalog space. */
+.shell .workspace.sales_workspace {grid-template-columns:minmax(0,1fr) 320px;}
+.shell .sales_catalog_controls {display:grid;grid-template-columns:minmax(0,1fr) minmax(160px,240px);gap:10px;margin:14px 16px;align-items:center;min-width:0;}
+.shell .sales_catalog_controls .catalog_search {margin:0;min-width:0;height:var(--control-height);}
+.shell .sales_category_combo {position:relative;display:block;min-width:0;height:var(--control-height);padding:0;border:0;background:transparent;color:var(--muted);}
+.shell .sales_catalog_controls .sales_category_combo select {width:100%;min-width:0;padding-left:10px;padding-right:10px;border:1px solid var(--line);border-radius:6px;background:var(--ae-input,var(--panel));color:var(--ink);font:inherit;box-shadow:none;}
+.shell .sales_category_combo:focus-within {outline:none;}
+@media(max-width:1000px){.shell .sales_catalog_controls{grid-template-columns:minmax(0,1fr) 180px;}}
+@media(max-width:700px){.shell .workspace.sales_workspace{grid-template-columns:minmax(0,1fr);}.shell .sales_catalog_controls{grid-template-columns:minmax(0,1fr);}}
+
+body .shell .sales_category_combo select {height:var(--control-height)!important;min-height:var(--control-height)!important;}
+
+/* One compact catalog header: title, search, category and item count. */
+.shell .sales_workspace .catalog {grid-template-rows:auto minmax(0,1fr);}
+.shell .sales_workspace .sales_catalog_header {display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:14px;padding:12px 14px;}
+.shell .sales_catalog_header .sales_catalog_controls {display:grid;margin:0;grid-template-columns:minmax(0,1fr) minmax(150px,210px);gap:10px;}
+.shell .sales_catalog_header .count_badge {white-space:nowrap;}
+@media(max-width:1000px){.shell .sales_catalog_header .sales_catalog_controls{grid-template-columns:minmax(0,1fr) 150px;}.shell .sales_workspace .sales_catalog_header{gap:8px;}}
+@media(max-width:700px){.shell .sales_workspace .sales_catalog_header{grid-template-columns:minmax(0,1fr) auto;}.shell .sales_catalog_header .sales_catalog_controls{grid-column:1 / -1;grid-row:2;}.shell .sales_catalog_header .count_badge{grid-column:2;grid-row:1;}}
+
+/* Enhanced dropdowns must scroll inside their viewport-bounded popup. */
+.shell .touch-combo.open .touch-combo-list {grid-auto-rows:max-content;overscroll-behavior:contain;box-sizing:border-box;}
+/* Header div styling must never reveal a closed enhanced dropdown. */
+.shell .touch-combo:not(.open) > .touch-combo-list {display:none;}
+
+.shell .sales_workspace .catalog {grid-template-rows:auto auto minmax(0,1fr);}
+.shell .sales_quick_categories {display:flex;align-items:center;gap:6px;min-width:0;overflow-x:auto;padding:8px 14px;border-bottom:1px solid var(--line);}
+.shell .sales_quick_categories > small {flex-shrink:0;color:var(--muted);font-size:11px;}
+.shell .sales_quick_categories button.quick_category {flex:0 0 auto;max-width:190px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:4px 10px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink);font-size:12px;}
+.shell .sales_quick_categories button.quick_category.active {background:var(--shop-category,var(--accent));border-color:var(--shop-category,var(--accent));color:var(--ae-category-text,#fff);}
+/* Reserve the count column so filtering never shifts search/category controls. */
+.shell .sales_workspace .sales_catalog_header {grid-template-columns:auto minmax(0,1fr) 76px;}
+.shell .sales_catalog_header .count_badge {width:76px;box-sizing:border-box;text-align:center;font-variant-numeric:tabular-nums;}
+@media(max-width:700px){.shell .sales_workspace .sales_catalog_header{grid-template-columns:minmax(0,1fr) 76px;}}
+
+/* Search and category occupy the header after removing its title. */
+.shell .sales_workspace .sales_catalog_header {grid-template-columns:minmax(0,1fr) 76px;}
+@media(max-width:700px){.shell .sales_catalog_header .sales_catalog_controls{grid-column:1;grid-row:1;}.shell .sales_catalog_header .count_badge{grid-column:2;grid-row:1;}}

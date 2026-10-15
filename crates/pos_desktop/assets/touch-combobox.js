@@ -20,6 +20,22 @@
     });
   }
 
+  function positionList(combo) {
+    if (!combo.root.classList.contains('open')) return;
+    const rect = combo.input.getBoundingClientRect();
+    const margin = 8, gap = 4;
+    const below = Math.max(0, innerHeight - rect.bottom - margin - gap);
+    const above = Math.max(0, rect.top - margin - gap);
+    const opensAbove = below < 180 && above > below;
+    const height = Math.min(320, opensAbove ? above : below);
+    const width = Math.min(Math.max(rect.width, 200), innerWidth - margin * 2);
+    combo.list.style.width = width + 'px';
+    combo.list.style.maxHeight = height + 'px';
+    combo.list.style.left = Math.max(margin, Math.min(rect.left, innerWidth - width - margin)) + 'px';
+    combo.list.style.top = opensAbove ? 'auto' : (rect.bottom + gap) + 'px';
+    combo.list.style.bottom = opensAbove ? (innerHeight - rect.top + gap) + 'px' : 'auto';
+  }
+
   function refresh(select) {
     const combo = select._touchCombo;
     if (!combo) return;
@@ -66,6 +82,7 @@
       empty.textContent = 'No matching options';
       combo.list.appendChild(empty);
     }
+    positionList(combo);
   }
 
   function enhance(select) {
@@ -122,6 +139,8 @@
     });
     input.addEventListener('keydown', event => {
       if (event.key === 'Escape') {
+        event.preventDefault();
+        input.setAttribute('aria-expanded','false');
         root.classList.remove('open');
         input.value = selectedText(select);
         return;
@@ -169,6 +188,9 @@
   document.addEventListener('pointerdown', event => {
     if (!event.target.closest?.('.touch-combo')) closeAll();
   });
+  const repositionOpen = () => document.querySelectorAll('.touch-combo.open').forEach(root => positionList(root._select._touchCombo));
+  window.addEventListener('resize', repositionOpen);
+  document.addEventListener('scroll', repositionOpen, true);
   document.addEventListener('reset', event => {
     setTimeout(() => {
       enhanceWithin(event.target);

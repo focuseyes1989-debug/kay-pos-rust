@@ -1235,3 +1235,22 @@ async fn standalone_stock_value_variants_services_missing_cost_and_dashboard()->
     assert_eq!(pos_core::dashboard::load(&pool,&actor,&day,&day).await?.stock_value.total,rust_decimal::Decimal::from(45800));
     Ok(())
 }
+#[tokio::test]
+async fn standalone_quick_categories_rank_top_seven_exclude_returns_and_old_sales()->Result<()> {
+    let (_dir,pool,_actor)=fixture().await?;
+    for id in 10..20 {
+        s::query("INSERT INTO categories(id,name) VALUES($1,$2)").bind(id).bind(format!("Category {id}")).execute(&pool).await?;
+        s::query("INSERT INTO products(id,name,category_id,price,cost,stock) VALUES($1,$2,$1,100,0,0)").bind(id).bind(format!("Product {id}")).execute(&pool).await?;
+        s::query("INSERT INTO sales(id,invoice_no,created_at,status,total,payment,payment_type) VALUES($1,$2,'2026-10-15 12:00:00','completed',100,100,'Cash')").bind(id).bind(format!("TEST-{id}")).execute(&pool).await?;
+        s::query("INSERT INTO sale_items(sale_id,product_id,product_name,qty,refunded_qty,price,total) VALUES($1,$1,'Product',2,1,$2,$2*2)").bind(id).bind(id as f64*100.0).execute(&pool).await?;
+    }
+    s::query("INSERT INTO sales(id,invoice_no,created_at,status,total,payment,payment_type) VALUES(100,'OLD','2026-09-01 12:00:00','completed',999999,999999,'Cash'),(101,'REFUND','2026-10-15 12:00:00','refunded',999999,999999,'Cash'),(102,'RETURN','2026-10-15 12:00:00','completed',999999,999999,'Cash')").execute(&pool).await?;
+    s::query("INSERT INTO sale_items(sale_id,product_id,product_name,qty,refunded_qty,price,total) VALUES(100,10,'Old',1,0,999999,999999),(101,10,'Refund',1,0,999999,999999),(102,10,'Returned',1,1,999999,999999)").execute(&pool).await?;
+    let start=chrono::NaiveDate::from_ymd_opt(2026,9,16).unwrap();
+    let end=chrono::NaiveDate::from_ymd_opt(2026,10,16).unwrap();
+    let rows=db::top_sales_categories_between(&pool,start,end).await?;
+    assert_eq!(rows.iter().map(|r|r.id).collect::<Vec<_>>(),vec![19,18,17,16,15,14,13]);
+    assert_eq!(rows[0].amount,1900.0);
+    assert!(db::top_sales_categories_between(&pool,end,end+chrono::Duration::days(1)).await?.is_empty());
+    Ok(())
+}

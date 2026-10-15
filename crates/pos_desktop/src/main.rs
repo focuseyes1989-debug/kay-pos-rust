@@ -217,6 +217,7 @@ fn App() -> Element {
     use_effect(|| {let _=document::eval(include_str!("../assets/search-autocomplete.js"));});
     let mut categories = use_signal(Vec::<UiCategory>::new);
     let mut selected_category = use_signal(|| None::<i32>);
+    let mut quick_categories=use_signal(Vec::<pos_core::db::QuickCategory>::new);
     let mut sales_quantities=use_signal(HashMap::<i32,f64>::new);
     let mut db_status = use_signal(|| "DB not checked".to_string());
     let mut checkout_status = use_signal(String::new);
@@ -232,7 +233,6 @@ fn App() -> Element {
     let db_form = use_signal(load_saved_db_form);
     use_context_provider(|| db_form);
     let mut query = use_signal(String::new);
-    let mut category_query = use_signal(String::new);
     let mut cart = use_signal(Vec::<CartLine>::new);
     let mut cart_serial_index=use_signal(||None::<usize>);
     let mut held_token=use_signal(||None::<String>);
@@ -317,7 +317,8 @@ fn App() -> Element {
     use_effect(move || {
         if let Some(Some(result)) = sales_catalog.read().as_ref() {
             match result {
-                Ok((loaded_categories, loaded_products, loaded_quantities)) => {
+                Ok((loaded_categories, loaded_products, loaded_quantities, loaded_quick_categories)) => {
+                    quick_categories.set(loaded_quick_categories.clone());
                     sales_quantities.set(loaded_quantities.clone());
                     categories.set(loaded_categories.clone());
                     products.set(loaded_products.clone());
@@ -327,6 +328,7 @@ fn App() -> Element {
                 }
                 Err(error) => {
                     // Do not allow selling from a stale snapshot after a failed refresh.
+                    quick_categories.set(Vec::new());
                     products.set(Vec::new());
                     message_box.set(Some(format!("Catalog refresh failed: {error}")));
                 }
@@ -459,15 +461,6 @@ fn App() -> Element {
 
     let total = cart.read().iter().map(line_total).sum::<f64>();
     let cart_item_count = cart.read().iter().map(|line| line.qty).sum::<f64>();
-    let filtered_categories = {
-        let query = category_query.read().to_lowercase();
-        categories
-            .read()
-            .iter()
-            .filter(|category| query.is_empty() || category.name.to_lowercase().contains(&query))
-            .cloned()
-            .collect::<Vec<_>>()
-    };
     let open_cash_drawer = use_callback(move |_: ()| {
         if drawer_busy() { return; }
                     let printer = app_settings
@@ -554,14 +547,7 @@ fn App() -> Element {
     drop(display_receipt);
     drop(display_cart);
     drop(display_settings);
-    let category_tiles = filtered_categories
-        .iter()
-        .cloned()
-        .map(|category| {
-            let tone = category_tone(category.id, &category.name);
-            (category, tone)
-        })
-        .collect::<Vec<_>>();
+    let category_options = categories.read().clone();
 
     rsx! {
         style { "{APP_CSS}" }
@@ -1035,43 +1021,10 @@ fn App() -> Element {
                     },
                 }
             } else {
-            section { class: "workspace",
-                aside { class: "categories panel",
-                    div { class: "panel_head",
-                        strong { crate::icons::ActionLabel { label:"Categories" } }
-                        span { class: "count_badge", "{categories.read().len()}" }
-                    }
-                    label { class: "category_search",
-
-                        input {
-                            r#type: "search",
-                            placeholder: "Search categories",
-                            value: "{category_query}",
-                            oninput: move |event| category_query.set(event.value())
-                        }
-                    }
-                    nav {
-                        for (category, tone) in category_tiles {
-                            button {
-                                class: if *selected_category.read() == category.id { format!("category tone{tone} active") } else { format!("category tone{tone}") },
-                                onclick: move |_| {
-                                    selected_category.set(category.id);
-                                    visible_product_limit.set(PRODUCT_BATCH_SIZE);
-                                },
-                                "{category.name}"
-                            }
-                        }
-                    }
-                }
-
+            section { class: "workspace sales_workspace",
                 section { class: "catalog panel",
-                    div { class: "panel_head",
-                        div {
-                            strong { crate::icons::ActionLabel { label:"Products" } }
-                        }
-                        span { class: "count_badge", "{filtered_products.len()} items" }
-                        button { hidden:true, "data-page-refresh":"true", tabindex:-1, aria_hidden:"true", disabled: !sales_catalog.finished(), onclick: move |_| sales_catalog.restart(), "Refresh" }
-                    }
+                    div { class: "panel_head sales_catalog_header",
+                    div {class:"sales_catalog_controls",
                     label { class: "catalog_search",
 
                         input {
@@ -1109,6 +1062,28 @@ fn App() -> Element {
                                 visible_product_limit.set(PRODUCT_BATCH_SIZE);
                             }
                         }
+                    }
+                        label {class:"sales_category_combo",
+                            select {aria_label:"Filter products by category",value:selected_category().map(|id|id.to_string()).unwrap_or_default(),
+                                onchange:move |event| {
+                                    selected_category.set(event.value().parse::<i32>().ok());
+                                    visible_product_limit.set(PRODUCT_BATCH_SIZE);
+                                },
+                                for category in category_options {
+                                    option {value:category.id.map(|id|id.to_string()).unwrap_or_default(),"{category.name}"}
+                                }
+                            }
+                        }
+                    }
+                        span { class: "count_badge", "{filtered_products.len()} items" }
+                        button { hidden:true, "data-page-refresh":"true", tabindex:-1, aria_hidden:"true", disabled: !sales_catalog.finished(), onclick: move |_| sales_catalog.restart(), "Refresh" }
+                    }
+                    nav {class:"sales_quick_categories",aria_label:"Top selling categories",
+                        button {class:if selected_category().is_none(){"quick_category active"}else{"quick_category"},aria_pressed:selected_category().is_none(),onclick:move |_|{selected_category.set(None);visible_product_limit.set(PRODUCT_BATCH_SIZE);},"All"}
+                        for category in quick_categories.read().iter() {
+                            button {class:if selected_category()==Some(category.id){"quick_category active"}else{"quick_category"},aria_pressed:selected_category()==Some(category.id),title:format!("{} · Last 30 days: {}",category.name,format_ks(category.amount)),onclick:{let id=category.id;move |_|{selected_category.set(Some(id));visible_product_limit.set(PRODUCT_BATCH_SIZE);}},"{category.name}"}
+                        }
+                        if quick_categories.read().is_empty(){small {"No category sales in the last 30 days"}}
                     }
                     // Keep suggestions independent of the filtered/paginated cards.
                     div { hidden: true, "data-sales-search-catalog": "true",
@@ -1447,7 +1422,7 @@ fn load_env_files() {
 
 async fn load_catalog_from_database(
     form: DbForm,
-) -> anyhow::Result<(Vec<UiCategory>, Vec<Product>, HashMap<i32,f64>)> {
+) -> anyhow::Result<(Vec<UiCategory>, Vec<Product>, HashMap<i32,f64>,Vec<pos_core::db::QuickCategory>)> {
     let config = form.database_config()?;
     let pool = connect(&config).await?;
     let categories = list_categories(&pool)
@@ -1468,7 +1443,8 @@ async fn load_catalog_from_database(
     category_names.extend(categories);
 
     let quantities=pos_core::db::product_sales_quantities(&pool).await?;
-    Ok((category_names, products, quantities))
+    let quick=pos_core::db::top_sales_categories(&pool).await?;
+    Ok((category_names, products, quantities,quick))
 }
 
 async fn load_app_settings_from_database(form: DbForm) -> anyhow::Result<HashMap<String, String>> {

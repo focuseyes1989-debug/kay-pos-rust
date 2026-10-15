@@ -376,3 +376,23 @@ pub async fn product_sales_quantities(pool:&PgPool)->anyhow::Result<std::collect
     let rows:Vec<(i32,f64)>=sqlx::query_as("SELECT i.product_id,SUM(GREATEST(COALESCE(i.qty,0)-COALESCE(i.refunded_qty,0),0))::float8 FROM sale_items i JOIN sales s ON s.id=i.sale_id WHERE s.status='completed' AND i.product_id IS NOT NULL GROUP BY i.product_id").fetch_all(pool).await?;
     Ok(rows.into_iter().filter(|(_,qty)|qty.is_finite() && *qty>0.0).collect())
 }
+
+
+#[derive(Clone, Debug, PartialEq, sqlx::FromRow)]
+pub struct QuickCategory {
+    pub id:i32,
+    pub name:String,
+    pub amount:f64,
+}
+
+/// Rolling 30 calendar days through today, before invoice-level discounts.
+/// Returns reduce quantities; refunded/cancelled receipts never contribute.
+pub async fn top_sales_categories(pool:&PgPool)->anyhow::Result<Vec<QuickCategory>> {
+    let today=chrono::Local::now().date_naive();
+    top_sales_categories_between(pool,today-chrono::Duration::days(29),today+chrono::Duration::days(1)).await
+}
+
+pub async fn top_sales_categories_between(pool:&PgPool,start:chrono::NaiveDate,end:chrono::NaiveDate)->anyhow::Result<Vec<QuickCategory>> {
+    Ok(sqlx::query_as("SELECT c.id,c.name,SUM(GREATEST(COALESCE(i.qty,0)-COALESCE(i.refunded_qty,0),0)*COALESCE(i.price,0))::float8 AS amount FROM sale_items i JOIN sales s ON s.id=i.sale_id JOIN products p ON p.id=i.product_id JOIN categories c ON c.id=p.category_id WHERE s.status='completed' AND s.created_at >= $1 AND s.created_at < $2 GROUP BY c.id,c.name HAVING SUM(GREATEST(COALESCE(i.qty,0)-COALESCE(i.refunded_qty,0),0)*COALESCE(i.price,0))>0 ORDER BY amount DESC,c.id LIMIT 7")
+        .bind(start.and_hms_opt(0,0,0).unwrap()).bind(end.and_hms_opt(0,0,0).unwrap()).fetch_all(pool).await?)
+}

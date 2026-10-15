@@ -97,3 +97,6 @@
 @media(max-width:800px) {.shell .stock_value_summary {grid-template-columns:minmax(0,1fr);}}
 .shell .inventory_touch > :is(.receipt_tabs,.inventory_filters,.stock_value_details) {flex:0 0 auto;}
 .shell .inventory_touch > .receipt_tabs {align-self:flex-start;margin:0 0 14px;}
+.shell .stock_value_export_toolbar {display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;}
+.shell .stock_value_export_toolbar small {color:var(--muted);font-size:12px;}
+.shell .stock_value_export_toolbar button {flex-shrink:0;}
