@@ -1044,7 +1044,7 @@ fn App() -> Element {
                                 if let Some((product, variant)) = variant_match {
                                     add_variant_to_cart(&mut cart, product, variant);
                                     query.set(String::new());
-                                } else if let Some(product) = catalog.iter().find(|p| p.barcode.as_deref() == Some(code.as_str()) || p.sku.as_deref() == Some(code.as_str())).cloned() {
+                                } else if let Some(product) = catalog.iter().find(|p| p.barcode.as_deref() == Some(code.as_str()) || p.sku.as_deref() == Some(code.as_str()) || p.name.trim().to_lowercase()==query().trim().to_lowercase()).cloned() {
                                     query.set(String::new());
                                     if is_service_product(&product) {
                                         service_product.set(Some(product)); service_price.set(String::new());
@@ -1090,6 +1090,7 @@ fn App() -> Element {
                         for product in products.read().iter().filter(|p| selected_category().map(|id| p.category_id == Some(id)).unwrap_or(true)) {
                             span {
                                 "data-search-value": product.name.clone(),
+                                "data-search-codes": product.sku.iter().chain(product.barcode.iter()).map(String::as_str).chain(product.variants.iter().flat_map(|v|v.sku.iter().chain(v.barcode.iter()).map(String::as_str))).collect::<Vec<_>>().join("\n"),
                                 "data-search-detail": format!("SKU: {} · {} Ks", product.sku.as_deref().unwrap_or("—"), format_ks(product.price)),
                                 "data-search-match": format!("{} {} {}", product.name, product.sku.as_deref().unwrap_or(""), product.barcode.as_deref().unwrap_or("")),
                             }
