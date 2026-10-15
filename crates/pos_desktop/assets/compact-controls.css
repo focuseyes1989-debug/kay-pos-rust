@@ -86,3 +86,27 @@ body .shell .sales_category_combo select {height:var(--control-height)!important
 /* Search and category occupy the header after removing its title. */
 .shell .sales_workspace .sales_catalog_header {grid-template-columns:minmax(0,1fr) 76px;}
 @media(max-width:700px){.shell .sales_catalog_header .sales_catalog_controls{grid-column:1;grid-row:1;}.shell .sales_catalog_header .count_badge{grid-column:2;grid-row:1;}}
+
+/* Use one font for both scripts inside Sales category controls so fallback
+   font metrics cannot move Myanmar text relative to English text. */
+body .shell .sales_category_combo :is(select,input.touch-combo-input,button.touch-combo-option) {
+  font-family:"Myanmar Text","Segoe UI",sans-serif!important;
+  font-size:14px!important;
+  line-height:1.8!important;
+  font-weight:400;
+}
+body .shell .sales_category_combo .touch-combo-list button.touch-combo-option {
+  display:block;text-align:left;padding-top:4px!important;padding-bottom:4px!important;
+}
+
+/* Selected category text shares the product search's exact font metrics.
+   The combo's 36px border box and search's 34px borderless input both have
+   a 34px inner text area, keeping their native input baselines identical. */
+body .shell .sales_catalog_controls :is(#sales_product_search,.sales_category_combo input.touch-combo-input) {
+  font-family:"Myanmar Text","Segoe UI",sans-serif!important;
+  font-size:14px!important;line-height:1.8!important;font-weight:400!important;
+  padding-top:4px!important;padding-bottom:4px!important;
+}
+
+/* Separate payment-name editing from the payment-method list. */
+.shell .payment_preferences .payment_editor + .settings_table {margin-top:14px;}
