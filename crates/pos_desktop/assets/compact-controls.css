@@ -110,3 +110,30 @@ body .shell .sales_catalog_controls :is(#sales_product_search,.sales_category_co
 
 /* Separate payment-name editing from the payment-method list. */
 .shell .payment_preferences .payment_editor + .settings_table {margin-top:14px;}
+
+/* Optical alignment for Myanmar Text: lower glyphs without moving controls
+   or icons. Keep the total vertical inset unchanged. */
+body .shell .sales_catalog_controls :is(#sales_product_search,.sales_category_combo input.touch-combo-input) {
+  padding-top:8px!important;padding-bottom:0!important;
+}
+
+/* Shared search appearance follows the Sales product-search control.
+   Generated combo inputs retain their dropdown styling. */
+body .shell.shell.shell.shell input[type="search"]:not(.touch-combo-input):not(.sales_search_ghost_field) {
+  box-sizing:border-box;min-width:0;
+  height:var(--control-height)!important;min-height:var(--control-height)!important;
+  border:1px solid var(--line);border-radius:6px;
+  background-color:var(--ae-input,var(--panel));color:var(--ink);
+  font-family:"Myanmar Text","Segoe UI",sans-serif!important;
+  font-size:14px!important;font-weight:400!important;line-height:1.8!important;
+  padding-top:8px!important;padding-bottom:0!important;padding-left:30px!important;padding-right:10px;
+  background-position:8px center!important;
+}
+body .shell.shell.shell.shell input[type="search"]:not(.touch-combo-input):not(.sales_search_ghost_field):focus-visible {
+  outline:2px solid var(--shop-focus,var(--accent));outline-offset:1px;
+}
+/* Existing search wrappers own the single border and focus ring. */
+body .shell.shell.shell.shell :is(.settings_search,.catalog_search,.category_search) input[type="search"]:not(.touch-combo-input):not(.sales_search_ghost_field) {
+  height:100%!important;min-height:0!important;border:0;border-radius:0;
+  background-color:transparent;box-shadow:none;outline:none!important;
+}
