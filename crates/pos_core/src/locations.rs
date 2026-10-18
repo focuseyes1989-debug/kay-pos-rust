@@ -39,6 +39,20 @@ pub async fn set_default_sales_location(pool: &PgPool, actor: &crate::auth::Sess
     Ok(())
 }
 
+/// Normalize an existing selection to its top-level selling location.
+pub fn sales_parent_location(all: &[Location], requested: Option<i32>, saved: Option<i32>) -> Option<i32> {
+    let mut current=requested.and_then(|id|all.iter().find(|l|l.id==id));
+    let mut seen=std::collections::BTreeSet::new();
+    while let Some(location)=current {
+        if !seen.insert(location.id) { break; }
+        match location.parent_id {
+            None => return Some(location.id),
+            Some(parent) => current=all.iter().find(|l|l.id==parent),
+        }
+    }
+    initial_sales_location(all,saved).filter(|id|all.iter().any(|l|l.id==*id&&l.parent_id.is_none()))
+}
+
 pub fn initial_sales_location(all: &[Location], saved: Option<i32>) -> Option<i32> {
     saved.filter(|id| all.iter().any(|l| l.id == *id && l.parent_id.is_none()))
         .or_else(|| all.iter().find(|l| l.name.trim().eq_ignore_ascii_case("Shop") && l.parent_id.is_none()).map(|l| l.id))
@@ -244,6 +258,11 @@ mod tree_tests {
         assert_eq!(initial_sales_location(&all,Some(1)),Some(2));
         assert_eq!(initial_sales_location(&all,Some(99)),Some(2));
         assert_eq!(initial_sales_location(&[],None),None);
+        assert_eq!(sales_parent_location(&all,Some(3),Some(2)),Some(3));
+        assert_eq!(sales_parent_location(&all,Some(1),Some(3)),Some(2));
+        assert_eq!(sales_parent_location(&all,None,Some(3)),Some(3));
+        assert_eq!(sales_parent_location(&all,Some(99),Some(3)),Some(3));
+
     }
     #[test]
     fn display_groups_children_below_their_parent() {

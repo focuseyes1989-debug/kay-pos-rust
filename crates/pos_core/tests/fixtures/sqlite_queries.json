@@ -1200,99 +1200,99 @@
     "sql": "INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value"
   },
   {
-    "source": "locations.rs:57",
+    "source": "locations.rs:71",
     "sql": "SELECT l.id,l.name,h.parent_id FROM locations l LEFT JOIN rust_location_hierarchy h ON h.location_id=l.id ORDER BY LOWER(l.name),l.id"
   },
   {
-    "source": "locations.rs:67",
+    "source": "locations.rs:81",
     "sql": "LOCK TABLE locations,product_locations,products,stock_movements IN SHARE ROW EXCLUSIVE MODE"
   },
   {
-    "source": "locations.rs:69",
+    "source": "locations.rs:83",
     "sql": "SELECT to_regclass('variant_stock_batches') IS NOT NULL"
   },
   {
-    "source": "locations.rs:73",
+    "source": "locations.rs:87",
     "sql": "LOCK TABLE variant_stock_batches IN SHARE ROW EXCLUSIVE MODE"
   },
   {
-    "source": "locations.rs:77",
+    "source": "locations.rs:91",
     "sql": "LOCK TABLE rust_location_hierarchy IN SHARE ROW EXCLUSIVE MODE"
   },
   {
-    "source": "locations.rs:81",
+    "source": "locations.rs:95",
     "sql": "SELECT l.id,l.name,h.parent_id FROM locations l LEFT JOIN rust_location_hierarchy h ON h.location_id=l.id"
   },
   {
-    "source": "locations.rs:86",
+    "source": "locations.rs:100",
     "sql": "SELECT EXISTS(SELECT 1 FROM locations WHERE LOWER(TRIM(name))=LOWER($1) AND id<>$2)"
   },
   {
-    "source": "locations.rs:96",
+    "source": "locations.rs:110",
     "sql": "INSERT INTO locations(name) VALUES($1) RETURNING id"
   },
   {
-    "source": "locations.rs:97",
+    "source": "locations.rs:111",
     "sql": "INSERT INTO rust_location_hierarchy(location_id,parent_id) VALUES($1,$2)"
   },
   {
-    "source": "locations.rs:99",
+    "source": "locations.rs:113",
     "sql": "SELECT name FROM locations WHERE id=$1"
   },
   {
-    "source": "locations.rs:104",
+    "source": "locations.rs:118",
     "sql": "SELECT EXISTS(SELECT 1 FROM rust_location_hierarchy WHERE parent_id=$1)"
   },
   {
-    "source": "locations.rs:106",
+    "source": "locations.rs:120",
     "sql": "SELECT EXISTS(SELECT 1 FROM product_locations WHERE LOWER(TRIM(location))=LOWER(TRIM($1)))"
   },
   {
-    "source": "locations.rs:112",
+    "source": "locations.rs:126",
     "sql": "SELECT EXISTS(SELECT 1 FROM variant_stock_batches WHERE LOWER(TRIM(location))=LOWER(TRIM($1)))"
   },
   {
-    "source": "locations.rs:131",
+    "source": "locations.rs:145",
     "sql": "UPDATE variant_stock_batches SET location=$1 WHERE LOWER(TRIM(location))=LOWER(TRIM($2))"
   },
   {
-    "source": "locations.rs:133",
+    "source": "locations.rs:147",
     "sql": "DELETE FROM rust_location_hierarchy WHERE location_id=$1"
   },
   {
-    "source": "locations.rs:134",
+    "source": "locations.rs:148",
     "sql": "INSERT INTO rust_location_hierarchy(location_id,parent_id) VALUES($1,$2)"
   },
   {
-    "source": "locations.rs:135",
+    "source": "locations.rs:149",
     "sql": "UPDATE sale_items SET location=$1 WHERE LOWER(TRIM(location))=LOWER(TRIM($2))"
   },
   {
-    "source": "locations.rs:137",
+    "source": "locations.rs:151",
     "sql": "DELETE FROM locations WHERE id=$1"
   },
   {
-    "source": "locations.rs:142",
+    "source": "locations.rs:156",
     "sql": "UPDATE locations SET name=$1 WHERE id=$2"
   },
   {
-    "source": "locations.rs:153",
+    "source": "locations.rs:167",
     "sql": "WITH stock AS (\n SELECT p.id,p.name,COALESCE(p.sku,'') AS sku,COALESCE(p.category,'') AS category,\n COALESCE(pl.location,'') AS location,COALESCE(SUM(pl.quantity),0)::float8 AS quantity,NULL::integer AS variant_id\n FROM product_locations pl JOIN products p ON p.id=pl.product_id\n WHERE lower(COALESCE(p.sold_by,'Each'))<>'variants' GROUP BY p.id,p.name,p.sku,p.category,pl.location\n UNION ALL\n SELECT p.id,p.name||' / '||concat_ws(' / ',NULLIF(v.size,''),NULLIF(v.color,''),NULLIF(v.sku,'')),\n COALESCE(v.sku,p.sku,''),COALESCE(p.category,''),b.location,SUM(b.quantity)::float8,v.id\n FROM variant_stock_batches b JOIN products p ON p.id=b.product_id JOIN product_variants v ON v.id=b.variant_id AND v.product_id=p.id\n GROUP BY p.id,p.name,p.sku,p.category,v.id,v.size,v.color,v.sku,b.location\n UNION ALL\n SELECT p.id,p.name||' / '||concat_ws(' / ',NULLIF(v.size,''),NULLIF(v.color,''),NULLIF(v.sku,'')),\n COALESCE(v.sku,p.sku,''),COALESCE(p.category,''),'Legacy / unassigned',\n (v.stock-COALESCE((SELECT SUM(b.quantity) FROM variant_stock_batches b WHERE b.product_id=p.id AND b.variant_id=v.id),0))::float8,v.id\n FROM product_variants v JOIN products p ON p.id=v.product_id\n WHERE lower(COALESCE(p.sold_by,''))='variants' AND v.stock>COALESCE((SELECT SUM(b.quantity) FROM variant_stock_batches b WHERE b.product_id=p.id AND b.variant_id=v.id),0)\n) SELECT id,name,sku,category,location,SUM(quantity)::float8 AS quantity,variant_id FROM stock\n GROUP BY id,name,sku,category,location,variant_id\n HAVING lower(trim(location))<>'legacy / unassigned' OR SUM(quantity)<>0\n ORDER BY LOWER(name),location,id,variant_id"
   },
   {
-    "source": "locations.rs:177",
+    "source": "locations.rs:191",
     "sql": "SELECT to_regclass('rust_location_hierarchy') IS NOT NULL"
   },
   {
-    "source": "locations.rs:180",
+    "source": "locations.rs:194",
     "sql": "LOCK TABLE locations IN SHARE ROW EXCLUSIVE MODE"
   },
   {
-    "source": "locations.rs:195",
+    "source": "locations.rs:209",
     "sql": "LOCK TABLE locations,rust_location_hierarchy IN SHARE MODE"
   },
   {
-    "source": "locations.rs:196",
+    "source": "locations.rs:210",
     "sql": "SELECT l.id,l.name,h.parent_id FROM locations l LEFT JOIN rust_location_hierarchy h ON h.location_id=l.id"
   },
   {

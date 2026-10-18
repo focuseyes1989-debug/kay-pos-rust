@@ -320,12 +320,12 @@ fn App() -> Element {
             Some(load_catalog_from_database(form,location).await.map_err(|e| format!("{e:#}")))
         }
     });
-    use_effect(move || {
-        if let Some(Some(result)) = sales_catalog.read().as_ref() {
+    live_search::use_resource_completion(sales_catalog, move |result| {
+        if let Some(result) = result.as_ref() {
             match result {
                 Ok((loaded_categories, loaded_products, loaded_quantities, loaded_quick_categories,loaded_locations,loaded_location)) => {
                     sales_locations.set(loaded_locations.clone());
-                    if sales_location()!=Some(*loaded_location){sales_location.set(Some(*loaded_location));}
+                    if *sales_location.peek()!=Some(*loaded_location){sales_location.set(Some(*loaded_location));}
                     quick_categories.set(loaded_quick_categories.clone());
                     sales_quantities.set(loaded_quantities.clone());
                     categories.set(loaded_categories.clone());
@@ -1168,7 +1168,7 @@ fn App() -> Element {
                     div { class: "panel_head",
                         label { class:"cart_sales_location", title:if cart.read().is_empty(){"Selling location includes child locations. Stock outside this location tree is excluded."}else{"Clear the cart before changing sales location."},
                             select {aria_label:"Sales location",disabled:!cart.read().is_empty()||checkout_saving()||!sales_catalog.finished()||matches!(&*pending.read(),Ok(Some(_))),value:sales_location().map(|id|id.to_string()).unwrap_or_default(),onchange:move |e|{if cart.read().is_empty()&&!checkout_saving(){sales_location.set(e.value().parse().ok());visible_product_limit.set(PRODUCT_BATCH_SIZE);}},
-                            for location in sales_locations.read().iter() {option {value:"{location.id}",{pos_core::locations::display_path(&sales_locations.read(),location.id)}}}
+                            for location in sales_locations.read().iter().filter(|location|location.parent_id.is_none()) {option {value:"{location.id}","{location.name}"}}
                         }
                         }
                         div { class: "cart_head_actions",
@@ -1471,7 +1471,7 @@ async fn load_catalog_from_database(
     let quick=pos_core::db::top_sales_categories(&pool).await?;
     let (locations,stock)=pos_core::locations::list(&pool).await?;
     let saved_default=pos_core::locations::default_sales_location(&pool).await?;
-    let selected=selected_location.filter(|id|locations.iter().any(|l|l.id==*id)).or_else(||pos_core::locations::initial_sales_location(&locations,saved_default)).context("Add a sales location in Locations before selling")?;
+    let selected=pos_core::locations::sales_parent_location(&locations,selected_location,saved_default).context("Add a sales location in Locations before selling")?;
     let names=pos_core::locations::scope_names(&locations,selected)?;
     pos_core::locations::apply_sales_scope(&mut products,&stock,&names);
     Ok((category_names, products, quantities,quick,locations,selected))

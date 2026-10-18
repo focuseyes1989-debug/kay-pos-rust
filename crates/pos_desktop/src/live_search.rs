@@ -15,6 +15,17 @@ pub fn use_debounced_search(query: Signal<String>) -> Signal<String> {
     settled
 }
 
+/// Subscribe to the result even while pending: Resource::finished() only peeks
+/// at state and does not register a reactive dependency.
+pub fn use_resource_completion<T: Clone + 'static>(resource: Resource<T>, mut on_ready: impl FnMut(T) + 'static) {
+    use_effect(move || {
+        let snapshot=resource.read();
+        if resource.finished() {
+            if let Some(value)=snapshot.as_ref() { on_ready(value.clone()); }
+        }
+    });
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -56,5 +67,52 @@ mod tests {
         state.input.set(String::new());
         pump(&mut dom, Duration::from_millis(340)).await;
         assert!(state.settled.peek().is_empty());
+    }
+}
+
+#[cfg(test)]
+mod completion_tests {
+    use super::*;
+    use std::time::{Duration,Instant};
+    #[derive(Clone,Copy)]
+    struct State {selected:Signal<Option<i32>>,loaded:Signal<Option<Result<i32,String>>>}
+    fn probe()->Element {
+        let mut selected=use_signal(||None::<i32>);
+        let mut loaded=use_signal(||None::<Result<i32,String>>);
+        let resource=use_resource(move ||{
+            let location=selected();
+            async move {
+                tokio::time::sleep(Duration::from_millis(30)).await;
+                if location==Some(9) {Err("Catalog unavailable".into())}else{Ok(location.unwrap_or(1))}
+            }
+        });
+        use_resource_completion(resource,move |result|{
+            if let Ok(id)=&result {if *selected.peek()!=Some(*id){selected.set(Some(*id));}}
+            loaded.set(Some(result));
+        });
+        use_context_provider(move ||State{selected,loaded});
+        rsx!{span {"Catalog"}}
+    }
+    async fn pump(dom:&mut VirtualDom) {
+        let end=Instant::now()+Duration::from_millis(150);
+        while Instant::now()<end {
+            tokio::select! {_=dom.wait_for_work()=>{dom.render_immediate_to_vec();},_=tokio::time::sleep_until(end.into())=>break}
+        }
+    }
+    #[tokio::test(flavor="current_thread")]
+    async fn initial_load_selection_changes_and_errors_complete_without_another_click() {
+        let mut dom=VirtualDom::new(probe);dom.rebuild_in_place();
+        let mut state=dom.in_scope(ScopeId::APP,consume_context::<State>);
+        pump(&mut dom).await;
+        assert_eq!(*state.loaded.peek(),Some(Ok(1)));
+        state.selected.set(Some(2));dom.render_immediate_to_vec();
+        assert_eq!(*state.selected.peek(),Some(2),"old catalog must not reset the new location");
+        pump(&mut dom).await;
+        assert_eq!(*state.loaded.peek(),Some(Ok(2)));
+        state.selected.set(Some(3));dom.render_immediate_to_vec();
+        state.selected.set(Some(4));pump(&mut dom).await;
+        assert_eq!(*state.loaded.peek(),Some(Ok(4)));
+        state.selected.set(Some(9));pump(&mut dom).await;
+        assert_eq!(*state.loaded.peek(),Some(Err("Catalog unavailable".into())));
     }
 }
