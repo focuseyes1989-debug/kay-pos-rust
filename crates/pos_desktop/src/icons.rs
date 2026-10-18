@@ -144,7 +144,7 @@ fn tab_icon(label: &str) -> &'static str {
         "Expense History" | "Purchase History" | "Supplier Ledger" => "history",
         "Products & stock" | "Stock value" | "Stock In" | "Stock Out" => "inventory",
         "Adjustment" => "edit",
-        "Stock by location" | "Manage locations" => "location_on",
+        "Location" | "Stock by location" | "Manage locations" => "location_on",
         "Products" | "Items" => "products",
         "Daily" | "Attendance" | "Shifts" | "Shift Assignments" | "Leave" => "calendar",
         "Employees" => "groups",

@@ -1286,5 +1286,9 @@
     "note",
     "actor",
     "created_at"
+  ],
+  "rust_location_hierarchy": [
+    "location_id",
+    "parent_id"
   ]
 }

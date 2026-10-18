@@ -34,6 +34,7 @@ pub async fn complete_sale(
     }
     crate::warranty::validate_sale_serials(draft)?;
     if draft.items.iter().any(|i|!i.serials.is_empty()) {crate::warranty::ensure_schema(pool).await?;}
+    if draft.location_id.is_some(){crate::locations::ensure_schema(pool).await?;}
     let fingerprint = crate::auth::fingerprint(&serde_json::to_vec(draft)?);
     let mut tx = pool
         .begin()
@@ -221,11 +222,12 @@ pub async fn complete_sale(
         sqlx::query("UPDATE customers SET total_visit=COALESCE(total_visit,0)+1,total_spent=COALESCE(total_spent,0)+$1 WHERE id=$2").bind(total).bind(customer).execute(&mut *tx).await?;
     }
     crate::loyalty::award(&mut tx,sale.id,&invoice_no,draft.customer_id,&draft.payment_type,total).await?;
+    let allowed_locations=if let Some(id)=draft.location_id {Some(crate::locations::sale_scope(&mut tx,id).await?)}else{None};
     crate::sale_stock::lock_products(&mut tx, &draft.items).await?;
     crate::discounts::validate_sale(&mut tx, &draft.items).await?;
     for item in &draft.items {
         let allocations =
-            crate::sale_stock::deduct(&mut tx, item, &invoice_no, actor.username()).await?;
+            crate::sale_stock::deduct(&mut tx, item, &invoice_no, actor.username(),allowed_locations.as_deref()).await?;
         let mut serial_offset=0usize;
         for allocation in allocations {
             if !item.serials.is_empty() {anyhow::ensure!(allocation.quantity.fract()==0.0,"Serialized stock must be allocated in whole units");}

@@ -18,6 +18,21 @@ pub fn group_hidden(settings: &HashMap<String, String>, pages: &[&str]) -> bool 
     pages.iter().all(|page| hidden(settings, page))
 }
 
+pub fn search_hidden(settings:&HashMap<String,String>,page:&str,query:&str)->bool {
+    hidden(settings,page)||!page_matches(page,query)
+}
+pub fn search_group_hidden(settings:&HashMap<String,String>,pages:&[&str],query:&str)->bool {
+    if query.trim().is_empty(){return group_hidden(settings,pages);}
+    pages.iter().all(|p|search_hidden(settings,p,query))
+}
+pub fn page_matches(page:&str,query:&str)->bool {
+    let aliases=match page {
+        "Sales"=>"အရောင်း", "Receipts"=>"ဘောင်ချာ", "Expenses"=>"အသုံးစရိတ်", "Customers"=>"ဖောက်သည်", "Products"=>"ပစ္စည်း", "Inventory"=>"လက်ကျန် stock", "Categories"=>"အမျိုးအစား", "Settings Center"=>"setting settings ဆက်တင်", "Serial & Warranty"=>"အာမခံ serial warranty", _=>"",
+    };
+    let text=format!("{page} {aliases}").to_lowercase();
+    query.split_whitespace().all(|word|text.contains(&word.to_lowercase()))
+}
+
 #[component]
 pub fn MenuVisibility(settings: HashMap<String,String>, on_saved: EventHandler<HashMap<String,String>>) -> Element {
     let mut hidden_pages=use_signal(|| parse(&settings));
@@ -58,6 +73,17 @@ pub fn MenuVisibility(settings: HashMap<String,String>, on_saved: EventHandler<H
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test] fn menu_search_preserves_hidden_pages_and_matches_names() {
+        let mut settings=HashMap::new();
+        settings.insert(KEY.into(),r#"["Inventory"]"#.into());
+        assert!(search_hidden(&settings,"Inventory","stock"));
+        assert!(!search_hidden(&settings,"Customers","CUSTOM"));
+        assert!(page_matches("Sales","အရောင်း"));
+        assert!(page_matches("Serial & Warranty","serial warranty"));
+        assert!(search_group_hidden(&settings,&["Products","Inventory"],"customer"));
+        assert!(!search_group_hidden(&settings,&["Products","Inventory"],"prod"));
+        assert!(page_matches("Products","  "));
+    }
     #[test] fn defaults_and_recovery_are_visible() {
         let mut settings=HashMap::new();
         assert!(!hidden(&settings,"Sales"));

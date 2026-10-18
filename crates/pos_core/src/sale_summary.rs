@@ -46,6 +46,7 @@ WITH window_sales AS (
 ), raw AS (
  SELECT s.id AS sale_id,si.id AS line_id,
  COALESCE(si.product_name,'[Receipt without items]') AS item,
+ COALESCE(NULLIF(TRIM(si.location),''),'Legacy / unassigned') AS location,
  COALESCE(c.name,p.category,'Uncategorized') AS category,
  COALESCE(parent.name,c.name,p.category,'Uncategorized') AS parent,
  COALESCE(si.qty,0)::numeric AS quantity,
@@ -109,6 +110,7 @@ pub async fn load(pool: &PgPool, from: &str, to: &str) -> Result<Summary> {
         ("item", "TRUE"),
         ("item", "savings>0 OR tier>0"),
         ("item", "header_discount>0"),
+        ("location", "TRUE"),
     ] {
         let sql=format!("{GROUP_LINES} SELECT {field} AS label,COUNT(DISTINCT sale_id) AS receipts,SUM(quantity)::float8 AS quantity,SUM(gross)::float8 AS gross,SUM(discount)::float8 AS discount,SUM(gross-discount)::float8 AS net,SUM(cost)::float8 AS cost,SUM(savings)::float8 AS savings FROM lines WHERE {filter} GROUP BY {field} ORDER BY SUM(gross-discount) DESC,{field}");
         result.groups.push(

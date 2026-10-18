@@ -79,7 +79,7 @@ async fn verify(conn: &mut sqlx::SqliteConnection) -> Result<Summary> {
             .bind(&table)
             .fetch_all(&mut *conn)
             .await?;
-        if actual.is_empty() && crate::warranty::is_addon_table(&table) { continue; }
+        if actual.is_empty() && (crate::warranty::is_addon_table(&table)||table=="rust_location_hierarchy") { continue; }
         ensure!(
             expected.iter().all(|c| actual.contains(c)),
             "Missing standalone columns in {table}"

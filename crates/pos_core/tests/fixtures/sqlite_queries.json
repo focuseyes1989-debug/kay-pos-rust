@@ -276,15 +276,15 @@
     "sql": "UPDATE zkteco_devices SET serial_no=$1,last_sync_at=CURRENT_TIMESTAMP WHERE id=$2"
   },
   {
-    "source": "auth.rs:31",
+    "source": "auth.rs:32",
     "sql": "SELECT 'data:image/jpeg;base64,'||encode(photo_data,'base64') FROM employees WHERE user_id=$1 AND photo_data IS NOT NULL ORDER BY id DESC LIMIT 1"
   },
   {
-    "source": "auth.rs:47",
+    "source": "auth.rs:48",
     "sql": "SELECT username,role,password_hash FROM users WHERE id=$1 AND is_active=1"
   },
   {
-    "source": "auth.rs:77",
+    "source": "auth.rs:78",
     "sql": "SELECT id,username,role,password_hash,salt FROM users WHERE username=$1 AND is_active=1"
   },
   {
@@ -1188,56 +1188,112 @@
     "sql": "UPDATE stock_movements SET notes=COALESCE(notes,'') || $1 WHERE id=$2"
   },
   {
-    "source": "locations.rs:27",
-    "sql": "SELECT id,name FROM locations ORDER BY LOWER(name),id"
+    "source": "locations.rs:33",
+    "sql": "LOCK TABLE locations,rust_location_hierarchy IN SHARE MODE"
+  },
+  {
+    "source": "locations.rs:34",
+    "sql": "SELECT l.id,l.name,h.parent_id FROM locations l LEFT JOIN rust_location_hierarchy h ON h.location_id=l.id"
   },
   {
     "source": "locations.rs:36",
+    "sql": "INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value"
+  },
+  {
+    "source": "locations.rs:57",
+    "sql": "SELECT l.id,l.name,h.parent_id FROM locations l LEFT JOIN rust_location_hierarchy h ON h.location_id=l.id ORDER BY LOWER(l.name),l.id"
+  },
+  {
+    "source": "locations.rs:67",
     "sql": "LOCK TABLE locations,product_locations,products,stock_movements IN SHARE ROW EXCLUSIVE MODE"
   },
   {
-    "source": "locations.rs:38",
+    "source": "locations.rs:69",
     "sql": "SELECT to_regclass('variant_stock_batches') IS NOT NULL"
   },
   {
-    "source": "locations.rs:42",
+    "source": "locations.rs:73",
     "sql": "LOCK TABLE variant_stock_batches IN SHARE ROW EXCLUSIVE MODE"
   },
   {
-    "source": "locations.rs:48",
+    "source": "locations.rs:77",
+    "sql": "LOCK TABLE rust_location_hierarchy IN SHARE ROW EXCLUSIVE MODE"
+  },
+  {
+    "source": "locations.rs:81",
+    "sql": "SELECT l.id,l.name,h.parent_id FROM locations l LEFT JOIN rust_location_hierarchy h ON h.location_id=l.id"
+  },
+  {
+    "source": "locations.rs:86",
     "sql": "SELECT EXISTS(SELECT 1 FROM locations WHERE LOWER(TRIM(name))=LOWER($1) AND id<>$2)"
   },
   {
-    "source": "locations.rs:58",
-    "sql": "INSERT INTO locations(name) VALUES($1)"
+    "source": "locations.rs:96",
+    "sql": "INSERT INTO locations(name) VALUES($1) RETURNING id"
   },
   {
-    "source": "locations.rs:63",
+    "source": "locations.rs:97",
+    "sql": "INSERT INTO rust_location_hierarchy(location_id,parent_id) VALUES($1,$2)"
+  },
+  {
+    "source": "locations.rs:99",
     "sql": "SELECT name FROM locations WHERE id=$1"
   },
   {
-    "source": "locations.rs:68",
+    "source": "locations.rs:104",
+    "sql": "SELECT EXISTS(SELECT 1 FROM rust_location_hierarchy WHERE parent_id=$1)"
+  },
+  {
+    "source": "locations.rs:106",
     "sql": "SELECT EXISTS(SELECT 1 FROM product_locations WHERE LOWER(TRIM(location))=LOWER(TRIM($1)))"
   },
   {
-    "source": "locations.rs:74",
+    "source": "locations.rs:112",
     "sql": "SELECT EXISTS(SELECT 1 FROM variant_stock_batches WHERE LOWER(TRIM(location))=LOWER(TRIM($1)))"
   },
   {
-    "source": "locations.rs:93",
+    "source": "locations.rs:131",
     "sql": "UPDATE variant_stock_batches SET location=$1 WHERE LOWER(TRIM(location))=LOWER(TRIM($2))"
   },
   {
-    "source": "locations.rs:96",
+    "source": "locations.rs:133",
+    "sql": "DELETE FROM rust_location_hierarchy WHERE location_id=$1"
+  },
+  {
+    "source": "locations.rs:134",
+    "sql": "INSERT INTO rust_location_hierarchy(location_id,parent_id) VALUES($1,$2)"
+  },
+  {
+    "source": "locations.rs:135",
+    "sql": "UPDATE sale_items SET location=$1 WHERE LOWER(TRIM(location))=LOWER(TRIM($2))"
+  },
+  {
+    "source": "locations.rs:137",
     "sql": "DELETE FROM locations WHERE id=$1"
   },
   {
-    "source": "locations.rs:101",
+    "source": "locations.rs:142",
     "sql": "UPDATE locations SET name=$1 WHERE id=$2"
   },
   {
-    "source": "locations.rs:112",
+    "source": "locations.rs:153",
     "sql": "WITH stock AS (\n SELECT p.id,p.name,COALESCE(p.sku,'') AS sku,COALESCE(p.category,'') AS category,\n COALESCE(pl.location,'') AS location,COALESCE(SUM(pl.quantity),0)::float8 AS quantity,NULL::integer AS variant_id\n FROM product_locations pl JOIN products p ON p.id=pl.product_id\n WHERE lower(COALESCE(p.sold_by,'Each'))<>'variants' GROUP BY p.id,p.name,p.sku,p.category,pl.location\n UNION ALL\n SELECT p.id,p.name||' / '||concat_ws(' / ',NULLIF(v.size,''),NULLIF(v.color,''),NULLIF(v.sku,'')),\n COALESCE(v.sku,p.sku,''),COALESCE(p.category,''),b.location,SUM(b.quantity)::float8,v.id\n FROM variant_stock_batches b JOIN products p ON p.id=b.product_id JOIN product_variants v ON v.id=b.variant_id AND v.product_id=p.id\n GROUP BY p.id,p.name,p.sku,p.category,v.id,v.size,v.color,v.sku,b.location\n UNION ALL\n SELECT p.id,p.name||' / '||concat_ws(' / ',NULLIF(v.size,''),NULLIF(v.color,''),NULLIF(v.sku,'')),\n COALESCE(v.sku,p.sku,''),COALESCE(p.category,''),'Legacy / unassigned',\n (v.stock-COALESCE((SELECT SUM(b.quantity) FROM variant_stock_batches b WHERE b.product_id=p.id AND b.variant_id=v.id),0))::float8,v.id\n FROM product_variants v JOIN products p ON p.id=v.product_id\n WHERE lower(COALESCE(p.sold_by,''))='variants' AND v.stock>COALESCE((SELECT SUM(b.quantity) FROM variant_stock_batches b WHERE b.product_id=p.id AND b.variant_id=v.id),0)\n) SELECT id,name,sku,category,location,SUM(quantity)::float8 AS quantity,variant_id FROM stock\n GROUP BY id,name,sku,category,location,variant_id\n HAVING lower(trim(location))<>'legacy / unassigned' OR SUM(quantity)<>0\n ORDER BY LOWER(name),location,id,variant_id"
+  },
+  {
+    "source": "locations.rs:177",
+    "sql": "SELECT to_regclass('rust_location_hierarchy') IS NOT NULL"
+  },
+  {
+    "source": "locations.rs:180",
+    "sql": "LOCK TABLE locations IN SHARE ROW EXCLUSIVE MODE"
+  },
+  {
+    "source": "locations.rs:195",
+    "sql": "LOCK TABLE locations,rust_location_hierarchy IN SHARE MODE"
+  },
+  {
+    "source": "locations.rs:196",
+    "sql": "SELECT l.id,l.name,h.parent_id FROM locations l LEFT JOIN rust_location_hierarchy h ON h.location_id=l.id"
   },
   {
     "source": "loyalty.rs:36",
@@ -1512,203 +1568,203 @@
     "sql": "SELECT id FROM products WHERE id=$1 FOR UPDATE"
   },
   {
-    "source": "sale_stock.rs:39",
+    "source": "sale_stock.rs:40",
     "sql": "SELECT COALESCE(stock,0)::float8,COALESCE(sold_by,'Each') FROM products WHERE id=$1"
   },
   {
-    "source": "sale_stock.rs:71",
+    "source": "sale_stock.rs:72",
     "sql": "SELECT COALESCE(stock,0)::float8 FROM product_variants WHERE id=$1 AND product_id=$2 AND COALESCE(active,1)=1 FOR UPDATE"
   },
   {
-    "source": "sale_stock.rs:74",
+    "source": "sale_stock.rs:75",
     "sql": "SELECT COALESCE(SUM(stock),0)::float8 FROM product_variants WHERE product_id=$1"
   },
   {
-    "source": "sale_stock.rs:83",
+    "source": "sale_stock.rs:84",
     "sql": "UPDATE products SET stock=$1,last_updated=CURRENT_TIMESTAMP WHERE id=$2"
   },
   {
-    "source": "sale_stock.rs:111",
+    "source": "sale_stock.rs:112",
     "sql": "SELECT quantity FROM variant_stock_batches WHERE product_id=$1 AND variant_id=$2 FOR UPDATE"
   },
   {
-    "source": "sale_stock.rs:122",
+    "source": "sale_stock.rs:123",
     "sql": "INSERT INTO variant_stock_batches(product_id,variant_id,location,batch_no,expire_date,quantity,expiry_unknown) VALUES($1,$2,'Legacy / unassigned','LEGACY-OPENING','',$3,1) ON CONFLICT(product_id,variant_id,location,batch_no,expire_date) DO UPDATE SET quantity=variant_stock_batches.quantity+EXCLUDED.quantity,expiry_unknown=1"
   },
   {
-    "source": "sale_stock.rs:168",
+    "source": "sale_stock.rs:174",
     "sql": "UPDATE product_variants SET stock=stock-$1,updated_at=CURRENT_TIMESTAMP WHERE id=$2"
   },
   {
-    "source": "sale_stock.rs:175",
+    "source": "sale_stock.rs:181",
     "sql": "UPDATE products SET stock=stock-$1,last_updated=CURRENT_TIMESTAMP WHERE id=$2"
   },
   {
-    "source": "sale_stock.rs:180",
+    "source": "sale_stock.rs:186",
     "sql": "INSERT INTO stock_movements(product_id,variant_id,type,quantity,old_stock,new_stock,reason,reference,created_by,location) VALUES($1,$2,'sale',$3,$4,$5,'POS sale',$6,$7,'Multiple batches')"
   },
   {
     "source": "sale_summary.rs:43",
-    "sql": "\nWITH window_sales AS (\n SELECT * FROM sales WHERE status='completed' AND created_at >= $1 AND created_at < $2\n), raw AS (\n SELECT s.id AS sale_id,si.id AS line_id,\n COALESCE(si.product_name,'[Receipt without items]') AS item,\n COALESCE(c.name,p.category,'Uncategorized') AS category,\n COALESCE(parent.name,c.name,p.category,'Uncategorized') AS parent,\n COALESCE(si.qty,0)::numeric AS quantity,\n (COALESCE(si.qty,0)*COALESCE(si.price,0))::numeric AS gross,\n (COALESCE(si.qty,0)*COALESCE(si.cost,v.cost,p.cost,0))::numeric AS cost,\n COALESCE(s.discount_amount,0)::numeric AS header_discount,\n COALESCE(si.wholesale_savings,0)::numeric AS savings,\n COALESCE(si.wholesale_tier_min_qty,0) AS tier\n FROM window_sales s LEFT JOIN sale_items si ON si.sale_id=s.id\n LEFT JOIN products p ON p.id=COALESCE(si.product_id,(SELECT p2.id FROM products p2 WHERE p2.name=si.product_name ORDER BY p2.id DESC LIMIT 1))\n LEFT JOIN product_variants v ON v.id=si.variant_id AND v.product_id=p.id\n LEFT JOIN categories c ON c.id=COALESCE(p.category_id,(SELECT c2.id FROM categories c2 WHERE c2.name=p.category ORDER BY c2.id DESC LIMIT 1))\n LEFT JOIN categories parent ON parent.id=c.parent_id\n), portions AS (\n SELECT *,ROW_NUMBER() OVER(PARTITION BY sale_id ORDER BY line_id) AS pos,\n COUNT(*) OVER(PARTITION BY sale_id) AS line_count,\n ROUND(CASE WHEN SUM(gross) OVER(PARTITION BY sale_id)<>0\n THEN header_discount*gross/SUM(gross) OVER(PARTITION BY sale_id)\n ELSE header_discount/COUNT(*) OVER(PARTITION BY sale_id) END,2) AS portion\n FROM raw\n), lines AS (\n SELECT *,CASE WHEN pos=line_count THEN header_discount-(SUM(portion) OVER(PARTITION BY sale_id)-portion) ELSE portion END AS discount\n FROM portions\n)  SELECT * FROM lines"
+    "sql": "\nWITH window_sales AS (\n SELECT * FROM sales WHERE status='completed' AND created_at >= $1 AND created_at < $2\n), raw AS (\n SELECT s.id AS sale_id,si.id AS line_id,\n COALESCE(si.product_name,'[Receipt without items]') AS item,\n COALESCE(NULLIF(TRIM(si.location),''),'Legacy / unassigned') AS location,\n COALESCE(c.name,p.category,'Uncategorized') AS category,\n COALESCE(parent.name,c.name,p.category,'Uncategorized') AS parent,\n COALESCE(si.qty,0)::numeric AS quantity,\n (COALESCE(si.qty,0)*COALESCE(si.price,0))::numeric AS gross,\n (COALESCE(si.qty,0)*COALESCE(si.cost,v.cost,p.cost,0))::numeric AS cost,\n COALESCE(s.discount_amount,0)::numeric AS header_discount,\n COALESCE(si.wholesale_savings,0)::numeric AS savings,\n COALESCE(si.wholesale_tier_min_qty,0) AS tier\n FROM window_sales s LEFT JOIN sale_items si ON si.sale_id=s.id\n LEFT JOIN products p ON p.id=COALESCE(si.product_id,(SELECT p2.id FROM products p2 WHERE p2.name=si.product_name ORDER BY p2.id DESC LIMIT 1))\n LEFT JOIN product_variants v ON v.id=si.variant_id AND v.product_id=p.id\n LEFT JOIN categories c ON c.id=COALESCE(p.category_id,(SELECT c2.id FROM categories c2 WHERE c2.name=p.category ORDER BY c2.id DESC LIMIT 1))\n LEFT JOIN categories parent ON parent.id=c.parent_id\n), portions AS (\n SELECT *,ROW_NUMBER() OVER(PARTITION BY sale_id ORDER BY line_id) AS pos,\n COUNT(*) OVER(PARTITION BY sale_id) AS line_count,\n ROUND(CASE WHEN SUM(gross) OVER(PARTITION BY sale_id)<>0\n THEN header_discount*gross/SUM(gross) OVER(PARTITION BY sale_id)\n ELSE header_discount/COUNT(*) OVER(PARTITION BY sale_id) END,2) AS portion\n FROM raw\n), lines AS (\n SELECT *,CASE WHEN pos=line_count THEN header_discount-(SUM(portion) OVER(PARTITION BY sale_id)-portion) ELSE portion END AS discount\n FROM portions\n)  SELECT * FROM lines"
   },
   {
-    "source": "sale_summary.rs:86",
+    "source": "sale_summary.rs:87",
     "sql": "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
   },
   {
-    "source": "sale_summary.rs:131",
+    "source": "sale_summary.rs:133",
     "sql": "SELECT COALESCE(NULLIF(category,''),'Uncategorized') AS label,COUNT(*) AS records,COALESCE(SUM(amount),0)::float8 AS amount FROM expenses WHERE expense_date >= $1 AND expense_date < $2 GROUP BY COALESCE(NULLIF(category,''),'Uncategorized') ORDER BY SUM(amount) DESC,label"
   },
   {
-    "source": "sale_summary.rs:156",
+    "source": "sale_summary.rs:158",
     "sql": "SET TRANSACTION READ ONLY"
   },
   {
-    "source": "sale_summary.rs:157",
+    "source": "sale_summary.rs:159",
     "sql": "SET LOCAL statement_timeout='10s'"
   },
   {
-    "source": "sales.rs:42",
+    "source": "sales.rs:43",
     "sql": "SET LOCAL lock_timeout='10s'"
   },
   {
-    "source": "sales.rs:48",
+    "source": "sales.rs:49",
     "sql": "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))"
   },
   {
-    "source": "sales.rs:52",
+    "source": "sales.rs:53",
     "sql": "SELECT fingerprint,sale_id FROM rust_checkout_requests WHERE request_id=$1"
   },
   {
-    "source": "sales.rs:62",
+    "source": "sales.rs:63",
     "sql": "SELECT id,invoice_no,total,payment,change_amount,created_at FROM sales WHERE id=$1"
   },
   {
-    "source": "sales.rs:91",
+    "source": "sales.rs:92",
     "sql": "SELECT key,value FROM settings"
   },
   {
-    "source": "sales.rs:162",
+    "source": "sales.rs:163",
     "sql": "SELECT COALESCE(credit_limit,0)::float8,COALESCE(current_balance,0)::float8 FROM customers WHERE id=$1 FOR UPDATE"
   },
   {
-    "source": "sales.rs:165",
+    "source": "sales.rs:166",
     "sql": "SELECT COALESCE(value,'1') FROM settings WHERE key='credit_limit_enabled'"
   },
   {
-    "source": "sales.rs:183",
+    "source": "sales.rs:184",
     "sql": "\n        INSERT INTO sales (\n            invoice_no, total, payment, change_amount, customer_id,\n            status, payment_type, discount_amount, cogs, gross_profit, net_profit, created_by, created_at\n        )\n        VALUES ($1, $2, $3, $4, $5, 'completed', $6, $7, $8, $9, $10, $11, $12)\n        RETURNING id, invoice_no, total, payment, change_amount, created_at\n        "
   },
   {
-    "source": "sales.rs:212",
+    "source": "sales.rs:213",
     "sql": "INSERT INTO credit_sales(invoice_no,customer_id,total_amount,paid_amount,balance_amount,sale_date,due_date,status,notes,sale_id) VALUES($1,$2,$3::float8,$4::float8,$5::float8,$6,'',$7,'Rust POS checkout',$8)"
   },
   {
-    "source": "sales.rs:214",
+    "source": "sales.rs:215",
     "sql": "UPDATE customers SET current_balance=COALESCE(current_balance,0)+$1 WHERE id=$2"
   },
   {
-    "source": "sales.rs:221",
+    "source": "sales.rs:222",
     "sql": "UPDATE customers SET total_visit=COALESCE(total_visit,0)+1,total_spent=COALESCE(total_spent,0)+$1 WHERE id=$2"
   },
   {
-    "source": "sales.rs:233",
+    "source": "sales.rs:235",
     "sql": "\n            INSERT INTO sale_items (\n                sale_id, product_id, variant_id, product_name, qty, price, total, cost,\n                wholesale_regular_price, wholesale_savings, wholesale_tier_min_qty, wholesale_unit_label,\n                location_id, location, batch_no, expire_date\n            )\n            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) RETURNING id\n            "
   },
   {
-    "source": "sales.rs:272",
+    "source": "sales.rs:274",
     "sql": "INSERT INTO rust_checkout_requests(request_id,fingerprint,sale_id) VALUES($1,$2,$3)"
   },
   {
-    "source": "sales.rs:305",
+    "source": "sales.rs:307",
     "sql": "SET LOCAL lock_timeout='10s'"
   },
   {
-    "source": "sales.rs:316",
+    "source": "sales.rs:318",
     "sql": "SELECT pg_advisory_xact_lock(hashtextextended($1,0))"
   },
   {
-    "source": "sales.rs:321",
+    "source": "sales.rs:323",
     "sql": "SELECT fingerprint,sale_id FROM rust_checkout_requests WHERE request_id=$1"
   },
   {
-    "source": "sales.rs:332",
+    "source": "sales.rs:334",
     "sql": "INSERT INTO rust_checkout_requests(request_id,fingerprint,sale_id) VALUES($1,$2,NULL)"
   },
   {
-    "source": "sales.rs:445",
+    "source": "sales.rs:447",
     "sql": "SET LOCAL lock_timeout='10s'"
   },
   {
-    "source": "sales.rs:452",
+    "source": "sales.rs:454",
     "sql": "SELECT COALESCE(status,'completed'),COALESCE(payment_type,''),COALESCE(invoice_no,''),customer_id FROM sales WHERE id=$1 FOR UPDATE"
   },
   {
-    "source": "sales.rs:463",
+    "source": "sales.rs:465",
     "sql": "SELECT id FROM customers WHERE id=$1 FOR UPDATE"
   },
   {
-    "source": "sales.rs:468",
+    "source": "sales.rs:470",
     "sql": "SELECT id,total_amount::float8,COALESCE(paid_amount,0)::float8,COALESCE(balance_amount,0)::float8,COALESCE(status,'pending') FROM credit_sales WHERE customer_id=$1 AND (sale_id=$2 OR (sale_id IS NULL AND invoice_no=$3)) FOR UPDATE"
   },
   {
-    "source": "sales.rs:485",
+    "source": "sales.rs:487",
     "sql": "UPDATE customers SET current_balance=GREATEST(0,COALESCE(current_balance,0)-$1::float8) WHERE id=$2"
   },
   {
-    "source": "sales.rs:487",
+    "source": "sales.rs:489",
     "sql": "UPDATE credit_sales SET status='refunded',balance_amount=0,notes=COALESCE(notes,'') || ' [REFUNDED: Rust POS receipt refund]' WHERE id=$1"
   },
   {
-    "source": "sales.rs:490",
+    "source": "sales.rs:492",
     "sql": "INSERT INTO credit_payments(credit_sale_id,customer_id,amount,payment_date,payment_method,note) VALUES($1,$2,$3::float8,$4,'refund','Rust POS receipt refund') RETURNING id"
   },
   {
-    "source": "sales.rs:494",
+    "source": "sales.rs:496",
     "sql": "INSERT INTO credit_adjustments(customer_id,credit_sale_id,amount,adjustment_type,reason,created_by) VALUES($1,$2,$3::float8,'refund','Receipt refund',$4)"
   },
   {
-    "source": "sales.rs:497",
+    "source": "sales.rs:499",
     "sql": "SELECT product_id,variant_id,COALESCE(qty,0)::float8 AS qty,COALESCE(refunded_qty,0)::float8 AS refunded,location_id,location,COALESCE(batch_no,'') AS batch,COALESCE(expire_date,'') AS expiry FROM sale_items WHERE sale_id=$1 ORDER BY product_id,variant_id,id FOR UPDATE"
   },
   {
-    "source": "sales.rs:505",
+    "source": "sales.rs:507",
     "sql": "SELECT COALESCE(stock,0)::float8,COALESCE(sold_by,'Each') FROM products WHERE id=$1 FOR UPDATE"
   },
   {
-    "source": "sales.rs:512",
+    "source": "sales.rs:514",
     "sql": "SELECT COALESCE(stock,0)::float8 FROM product_variants WHERE id=$1 AND product_id=$2 FOR UPDATE"
   },
   {
-    "source": "sales.rs:519",
+    "source": "sales.rs:521",
     "sql": "UPDATE product_variants SET stock=COALESCE(stock,0)+$1,updated_at=$2 WHERE id=$3"
   },
   {
-    "source": "sales.rs:527",
+    "source": "sales.rs:529",
     "sql": "UPDATE products SET stock=COALESCE(stock,0)+$1,last_updated=$2 WHERE id=$3"
   },
   {
-    "source": "sales.rs:544",
+    "source": "sales.rs:546",
     "sql": "INSERT INTO variant_stock_batches(product_id,variant_id,location,batch_no,expire_date,quantity,expiry_unknown) VALUES($1,$2,$3,$4,$5,$6,0) ON CONFLICT(product_id,variant_id,location,batch_no,expire_date) DO UPDATE SET quantity=variant_stock_batches.quantity+EXCLUDED.quantity"
   },
   {
-    "source": "sales.rs:547",
+    "source": "sales.rs:549",
     "sql": "UPDATE product_locations SET quantity=COALESCE(quantity,0)+$1,last_updated=$2 WHERE id=$3 AND product_id=$4"
   },
   {
-    "source": "sales.rs:550",
+    "source": "sales.rs:552",
     "sql": "INSERT INTO product_locations(product_id,location,batch_no,expire_date,quantity) VALUES($1,$2,$3,$4,$5) ON CONFLICT(product_id,location,batch_no,expire_date) DO UPDATE SET quantity=product_locations.quantity+EXCLUDED.quantity,last_updated=EXCLUDED.last_updated"
   },
   {
-    "source": "sales.rs:555",
+    "source": "sales.rs:557",
     "sql": "INSERT INTO stock_movements(product_id,variant_id,type,quantity,old_stock,new_stock,reason,reference,created_by,location,created_at) VALUES($1,$2,'refund',$3,$4,$5,'Receipt refund',$6,$9,$7,$8)"
   },
   {
-    "source": "sales.rs:559",
+    "source": "sales.rs:561",
     "sql": "UPDATE sale_items SET refunded_qty=qty,refund_reason='Receipt refund' WHERE sale_id=$1"
   },
   {
-    "source": "sales.rs:564",
+    "source": "sales.rs:566",
     "sql": "UPDATE sales SET status='refunded' WHERE id=$1"
   },
   {

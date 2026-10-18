@@ -77,13 +77,14 @@ pub fn ExpensesPage(
 ) -> Element {
     let session=use_context::<Signal<Option<pos_core::auth::Session>>>();
     let Some(actor)=session() else {return rsx!{}};
+    let can_manage=actor.allows(pos_core::auth::Permission::Manage);
     let mut tab=use_signal(||0usize);
     use_effect(move||{if new_expense(){tab.set(0)}});
     rsx!{section{class:"customers_page phase4_page phase4_expenses",
         nav{class:"receipt_tabs",aria_label:"Expense views",
-            for (i,label) in ["Expenses","Budgets","Alerts","Comparison"].iter().enumerate(){button{role:"tab",aria_selected:(tab()==i).to_string(),class:if tab()==i{"active"}else{""},onclick:move |_|tab.set(i),crate::icons::TabLabel {label:*label}}}
+            for (i,label) in ["Expenses","Budgets","Alerts","Comparison"].iter().enumerate(){if i==0||can_manage {button{role:"tab",aria_selected:(tab()==i).to_string(),class:if tab()==i{"active"}else{""},onclick:move |_|tab.set(i),crate::icons::TabLabel {label:*label}}}}
         }
-        if tab()==0 {ExpenseHistory{db_form,new_expense,on_sales}}
+        if tab()==0||!can_manage {ExpenseHistory{db_form,new_expense,on_sales}}
         else if tab()==3 {crate::expense_comparison::ExpenseComparison{db_form,actor}}
         else {crate::expense_management::BudgetPanel{key:"{tab()}",db_form,actor,alerts:tab()==2}}
     }}
@@ -96,6 +97,7 @@ fn ExpenseHistory(
     on_sales: EventHandler<()>,
 ) -> Element {
     let session=use_context::<Signal<Option<pos_core::auth::Session>>>();
+    let can_manage=session().is_some_and(|actor|actor.allows(pos_core::auth::Permission::Manage));
     let source = db_form.clone();
     let mut data = use_resource(move || {
         let form = source.clone();
@@ -276,8 +278,8 @@ fn ExpenseHistory(
                                                 div {dt {"Notes"} dd {if row.notes.is_empty(){"-"}else{"{row.notes}"}}}
                                             }
                                             div {class:"expense_category_record_actions",
-                                                button {onclick:{let id=row.id;move |_|attachments.set(Some(id))},crate::icons::ActionLabel {label:"Attachments"}}
-                                                button {onclick:{let row=(*row).clone();move |_|editor.set(Some(row.clone()))},crate::icons::ActionLabel {label:"Edit"}}
+                                                if can_manage {button {onclick:{let id=row.id;move |_|attachments.set(Some(id))},crate::icons::ActionLabel {label:"Attachments"}}}
+                                                if can_manage {button {onclick:{let row=(*row).clone();move |_|editor.set(Some(row.clone()))},crate::icons::ActionLabel {label:"Edit"}}}
                                             }
                                         }
                                     }
@@ -343,9 +345,9 @@ fn ExpenseHistory(
                             }
                         }
                         div { class: "receipt_detail_actions expense_detail_actions",
-                            button { onclick: { let id=row.id; move |_| attachments.set(Some(id)) }, crate::icons::ActionLabel { label:"Attachments" } }
-                            button { onclick: { let row=row.clone(); move |_| editor.set(Some(row.clone())) }, crate::icons::ActionLabel { label:"Edit" } }
-                            button { class: "expense_delete", onclick: { let row=row.clone(); move |_| deleting.set(Some(row.clone())) }, crate::icons::ActionLabel { label:"Delete" } }
+                            if can_manage {button { onclick: { let id=row.id; move |_| attachments.set(Some(id)) }, crate::icons::ActionLabel { label:"Attachments" } }}
+                            if can_manage {button { onclick: { let row=row.clone(); move |_| editor.set(Some(row.clone())) }, crate::icons::ActionLabel { label:"Edit" } }}
+                            if can_manage {button { class: "expense_delete", onclick: { let row=row.clone(); move |_| deleting.set(Some(row.clone())) }, crate::icons::ActionLabel { label:"Delete" } }}
                         }
                     }
                 } else {

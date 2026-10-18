@@ -60,6 +60,7 @@ fn SummaryDetails(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
         3 => 1,
         4 => 2,
         6 => 3,
+        8 => 5,
         _ => 4,
     };
     let mut group_totals = [0.0; 7];
@@ -95,7 +96,7 @@ fn SummaryDetails(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
                 for (label,value) in [("Sales",sales),("Discount",discount),("Refunds",refunds),("Cost of goods",cost),("Gross profit",sales-cost)] {div {small {crate::icons::CardLabel {label}} strong {{crate::format_ks(value)}}}}
             }
             if estimated>0 {p {class:"summary_warning","Estimated cost: {estimated} item lines use current product/variant cost."}}
-            div {class:"receipt_tabs summary_tabs",role:"tablist",for (index,label) in ["Daily","Payments","Categories (Sales)","Parent","Items","Categories (Expense)","Wholesale","Discount"].iter().enumerate() {button {role:"tab",aria_selected:tab()==index,class:if tab()==index{"active"}else{""},onclick:move |_|tab.set(index),crate::icons::TabLabel {label:*label}}}}
+            div {class:"receipt_tabs summary_tabs",role:"tablist",for (index,label) in ["Daily","Payments","Categories (Sales)","Parent","Items","Categories (Expense)","Wholesale","Discount","Location"].iter().enumerate() {button {role:"tab",aria_selected:tab()==index,class:if tab()==index{"active"}else{""},onclick:move |_|tab.set(index),crate::icons::TabLabel {label:*label}}}}
             if tab()<2 {
             div {class:"summary_table",table {thead {tr {th {if tab()==1{"Payment method"}else{"Date"}} for title in ["Receipts","Sales","Item gross","Discount","Net sales","Cost of goods","Gross profit","Refunds"] {th {"{title}"}}}}
                 tbody {if rows.is_empty(){tr {td {colspan:"9","No sales in this date range."}}} for row in rows {tr {td {"{row.label}"} td {"{row.receipts}"} for value in [row.sales,row.gross,row.discount,row.gross-row.discount,row.cost,row.sales-row.cost,row.refunds] {td {{crate::format_ks(value)}}}}}}
@@ -107,8 +108,9 @@ fn SummaryDetails(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
                     for row in &result.expenses {tr {td {"{row.label}"} td {"{row.records}"} td {{crate::format_ks(row.amount)}}}}
                 } tfoot {tr {th {scope:"row","Total"} td {"{expense_records}"} td {{crate::format_ks(expense_amount)}}}}}}
             } else {
-                div {class:"summary_table",table {thead {tr {for label in ["Name","Receipts","Quantity","Item gross","Allocated discount","Net sales","Cost of goods","Net less cost","Wholesale savings"] {th {"{label}"}}}} tbody {
-                    if let Some(group)=result.groups.get(match tab(){2=>0,3=>1,4=>2,6=>3,_=>4}) {
+                if tab()==8 {p {class:"summary_receipts_note","Sales grouped by the stock location recorded on each item. A receipt using multiple locations appears in each location; the total counts it once."}}
+                div {class:"summary_table",table {thead {tr {for label in [if tab()==8{"Location"}else{"Name"},"Receipts","Quantity","Item gross","Allocated discount","Net sales","Cost of goods","Net less cost","Wholesale savings"] {th {"{label}"}}}} tbody {
+                    if let Some(group)=result.groups.get(group_index) {
                         if group.is_empty(){tr {td {colspan:"9","No sales in this date range."}}}
                         for row in group {{let category=row.label.clone();rsx!{tr {class:if tab()==2{"summary_category_row"}else{""},title:if tab()==2{"Double-click to view category receipts"}else{""},ondoubleclick:move |_|{if tab()==2 {let (a,b)=range();selected_category.set(Some((category.clone(),a,b)));}},td {if tab()==2 {button {class:"summary_category_link",onclick:{let category=row.label.clone();move |_|{let (a,b)=range();selected_category.set(Some((category.clone(),a,b)));}},"{row.label}"}}else{"{row.label}"}} td {"{row.receipts}"} td {{crate::format_qty(row.quantity)}} for value in [row.gross,row.discount,row.net,row.cost,row.net-row.cost,row.savings] {td {{crate::format_ks(value)}}}}}}}
                     }

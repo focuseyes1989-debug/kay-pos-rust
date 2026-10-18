@@ -92,6 +92,7 @@ pub async fn connect(url: &str) -> Result<Pool> {
         version == 1,
         "Standalone schema version {version} is not supported by this app"
     );
+    sqlx::raw_sql(crate::locations::HIERARCHY_SCHEMA).execute(&mut *tx).await?;
     sqlx::raw_sql(crate::warranty::SCHEMA).execute(&mut *tx).await?;
     tx.commit().await?;
     Ok(Pool::Sqlite(pool))

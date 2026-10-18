@@ -19,6 +19,7 @@ async fn fixture() -> Result<(tempfile::TempDir, s::Pool, auth::Session)> {
 }
 fn draft(method: &str, paid: f64) -> SaleDraft {
     SaleDraft {
+        location_id: None,
         held_token: None,
         invoice_no: auth::new_request_id(),
         customer_id: Some(1),
@@ -685,11 +686,23 @@ async fn standalone_variants_expiry_and_fractional_report_allocation() -> Result
     // Whole-valued NUMERIC columns must not cause SQLite's integer division.
     s::query("INSERT INTO sales(id,invoice_no,total,payment,discount_amount,status,payment_type) VALUES(100,'FRACTION',29,29,1,'completed','Cash')").execute(&pool).await?;
     s::query("INSERT INTO sale_items(sale_id,product_id,product_name,qty,price,total,cost) VALUES(100,1,'Test product',1,10,10,5),(100,2,'Variant product',2,10,20,5)").execute(&pool).await?;
+    s::query("UPDATE sale_items SET location=CASE WHEN product_id=1 THEN 'Shop' ELSE 'Warehouse' END WHERE sale_id=100").execute(&pool).await?;
     let day = chrono::Local::now().format("%Y-%m-%d").to_string();
     let (period, _) = sales_comparison::load(&pool, &actor, &day, &day, &day, &day).await?;
     assert!((period.sales.to_string().parse::<f64>()? - 29.0).abs() < 0.0000001);
     let summary = pos_core::sale_summary::load(&pool, &day, &day).await?;
     assert!((summary.groups[0].iter().map(|v| v.discount).sum::<f64>() - 1.0).abs() < 0.0000001);
+    let locations=&summary.groups[5];
+    assert_eq!(locations.len(),2);
+    assert_eq!(summary.group_receipts[5],1);
+    let shop=locations.iter().find(|r|r.label=="Shop").unwrap();
+    let warehouse=locations.iter().find(|r|r.label=="Warehouse").unwrap();
+    assert_eq!((shop.receipts,warehouse.receipts),(1,1));
+    assert_eq!((shop.quantity,warehouse.quantity),(1.0,2.0));
+    assert!((shop.net+warehouse.net-29.0).abs()<0.0000001);
+    assert!((shop.discount+warehouse.discount-1.0).abs()<0.0000001);
+    assert_eq!(shop.cost+warehouse.cost,15.0);
+
     pool.close().await;
     Ok(())
 }
@@ -933,6 +946,8 @@ async fn postgres_export_import_preserves_all_tables_blobs_credit_sequences_and_
     let warranty_claim=pos_core::warranty::open_claim(&source,&admin,&warranty_unit,"Battery fault").await?;
     pos_core::warranty::update_claim(&source,&admin,&warranty_claim,"in_progress","Supplier inspection").await?;
     assert_eq!(pos_core::warranty::events(&source,&admin,&warranty_claim).await?.len(),2);
+    s::query("INSERT INTO locations(id,name) VALUES(1000,'PG Child Location')").execute(&source).await?;
+    s::query("INSERT INTO rust_location_hierarchy(location_id,parent_id) VALUES(1000,1)").execute(&source).await?;
     let pg_value=pos_core::stock_valuation::calculate(&db::search_product_metadata(&source,"",0).await?);
     assert_eq!(pg_value.total,rust_decimal::Decimal::from(45000));
     assert_eq!(pg_value.excluded_services,1);
@@ -945,6 +960,7 @@ async fn postgres_export_import_preserves_all_tables_blobs_credit_sequences_and_
     let imported_admin = auth::login(&result, "owner", "test-password").await?;
     let copied_value=pos_core::stock_valuation::calculate(&db::search_product_metadata(&result,"",0).await?);
     assert_eq!(pg_value,copied_value);
+    assert_eq!(pos_core::locations::list_names(&source).await?,pos_core::locations::list_names(&result).await?);
 
     assert_eq!(
         s::query_scalar::<_, Vec<u8>>("SELECT image_data FROM products WHERE id=1")
@@ -1252,5 +1268,96 @@ async fn standalone_quick_categories_rank_top_seven_exclude_returns_and_old_sale
     assert_eq!(rows.iter().map(|r|r.id).collect::<Vec<_>>(),vec![19,18,17,16,15,14,13]);
     assert_eq!(rows[0].amount,1900.0);
     assert!(db::top_sales_categories_between(&pool,end,end+chrono::Duration::days(1)).await?.is_empty());
+    Ok(())
+}
+#[tokio::test]
+async fn cashier_can_add_and_view_expenses_without_manager_access()->Result<()> {
+    let (_dir,pool,_admin)=fixture().await?;
+    s::query("INSERT INTO expense_categories(name) VALUES('Cashier expense')").execute(&pool).await?;
+    s::query("UPDATE users SET role='Cashier' WHERE username='owner'").execute(&pool).await?;
+    let cashier=auth::login(&pool,"owner","test-password").await?;
+    assert!(cashier.allows(auth::Permission::Expenses));
+    assert!(!cashier.allows(auth::Permission::Manage));
+    let mut expense=pos_core::expenses::Expense {expense_no:"CASHIER-EXP-1".into(),category:"Cashier expense".into(),description:"Shop supplies".into(),amount:1500.into(),expense_date:"2026-10-18".into(),payment_method:"Cash".into(),..Default::default()};
+    pos_core::expenses::save(&pool,&expense,&cashier).await?;
+    let rows=pos_core::expenses::list(&pool,&cashier).await?;
+    assert_eq!(rows.len(),1);assert_eq!(rows[0].amount,rust_decimal::Decimal::from(1500));
+    expense=rows[0].clone();expense.amount=9000.into();
+    assert!(pos_core::expenses::save(&pool,&expense,&cashier).await.is_err());
+    assert!(pos_core::expenses::delete(&pool,expense.id,&cashier).await.is_err());
+    assert!(pos_core::dashboard::load(&pool,&cashier,"2026-10-18","2026-10-18").await.is_err());
+    assert_eq!(pos_core::expenses::list(&pool,&cashier).await?[0].amount,rust_decimal::Decimal::from(1500));
+    s::query("UPDATE users SET role='Admin' WHERE username='owner'").execute(&pool).await?;
+    let admin=auth::login(&pool,"owner","test-password").await?;
+    pos_core::expenses::save(&pool,&expense,&admin).await?;
+    pos_core::expenses::delete(&pool,expense.id,&admin).await?;
+    assert!(pos_core::expenses::list(&pool,&admin).await?.is_empty());
+    Ok(())
+}
+
+#[tokio::test]
+async fn standalone_location_tree_checkout_refund_retry_and_isolation()->Result<()> {
+    use pos_core::locations::{self,Location};
+    let (dir,pool,actor)=fixture().await?;
+    let shop=locations::list_names(&pool).await?.into_iter().find(|l|l.name=="Shop").unwrap();
+    locations::save(&pool,&Location{id:0,name:"Shop backroom".into(),parent_id:Some(shop.id)},false).await?;
+    locations::save(&pool,&Location{id:0,name:"Warehouse".into(),parent_id:None},false).await?;
+    let all=locations::list_names(&pool).await?;let child=all.iter().find(|l|l.name=="Shop backroom").unwrap().clone();
+    assert!(locations::save(&pool,&Location{parent_id:Some(child.id),..shop.clone()},false).await.is_err());
+    assert!(locations::save(&pool,&shop,true).await.is_err());
+    s::query("UPDATE products SET stock=15 WHERE id=1").execute(&pool).await?;
+    s::query("UPDATE product_locations SET quantity=4 WHERE product_id=1").execute(&pool).await?;
+    s::query("INSERT INTO product_locations(product_id,location,batch_no,expire_date,quantity) VALUES(1,'Shop backroom','CHILD','',6),(1,'Warehouse','WAREHOUSE','2020-01-01',5)").execute(&pool).await?;
+    let mut request=draft("Cash",120000.0);request.location_id=Some(shop.id);request.items[0].qty=6.0;request.expected_total=120000.0;
+    let sale=complete_sale(&pool,&request,&actor).await?;
+    assert_eq!(complete_sale(&pool,&request,&actor).await?.id,sale.id);
+    let wh:f64=s::query_scalar("SELECT quantity::float8 FROM product_locations WHERE location='Warehouse' AND product_id=1").fetch_one(&pool).await?;assert_eq!(wh,5.0);
+    let sources:Vec<String>=s::query_scalar("SELECT DISTINCT location FROM sale_items WHERE sale_id=$1").bind(sale.id).fetch_all(&pool).await?;
+    assert!(sources.iter().all(|v|v=="Shop"||v=="Shop backroom"));
+    let mut too_much=request.clone();too_much.invoice_no=auth::new_request_id();too_much.items[0].qty=5.0;too_much.expected_total=100000.0;too_much.payment=100000.0;
+    assert!(complete_sale(&pool,&too_much,&actor).await.is_err());
+    assert_eq!(s::query_scalar::<_,f64>("SELECT stock::float8 FROM products WHERE id=1").fetch_one(&pool).await?,9.0);
+    let mut changed=request.clone();changed.location_id=Some(child.id);assert!(complete_sale(&pool,&changed,&actor).await.is_err());
+    refund_sale(&pool,sale.id,&actor).await?;
+    assert_eq!(s::query_scalar::<_,f64>("SELECT SUM(quantity)::float8 FROM product_locations WHERE product_id=1 AND location IN ('Shop','Shop backroom')").fetch_one(&pool).await?,10.0);
+    assert_eq!(s::query_scalar::<_,f64>("SELECT quantity::float8 FROM product_locations WHERE location='Warehouse' AND product_id=1").fetch_one(&pool).await?,5.0);
+    let mut child_only=draft("Cash",120000.0);child_only.location_id=Some(child.id);child_only.items[0].qty=6.0;child_only.expected_total=120000.0;
+    assert!(complete_sale(&pool,&child_only,&actor).await.is_ok());
+    let mut bad=draft("Cash",20000.0);bad.location_id=Some(99999);assert!(complete_sale(&pool,&bad,&actor).await.is_err());
+    let export=dir.path().join("location-tree.db");pos_core::data_transfer::export(&pool,&actor,&export).await?;
+    let imported=dir.path().join("location-tree-copy.db");pos_core::data_transfer::import(&export,&imported).await?;
+    let copy=sqlite::connect(&format!("sqlite://{}",imported.display())).await?;
+    assert_eq!(locations::list_names(&copy).await?,locations::list_names(&pool).await?);
+    copy.close().await;
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn standalone_location_tree_variant_stock_and_refund()->Result<()> {
+    use pos_core::locations::{self,Location};
+    let (_dir,pool,actor)=fixture().await?;
+    let shop=locations::list_names(&pool).await?.into_iter().find(|l|l.name=="Shop").unwrap();
+    locations::save(&pool,&Location{id:0,name:"Variant room".into(),parent_id:Some(shop.id)},false).await?;
+    locations::save(&pool,&Location{id:0,name:"Variant Warehouse".into(),parent_id:None},false).await?;
+    s::query("INSERT INTO products(id,name,sold_by,stock,price,cost) VALUES(2,'Variant product','Variants',12,1000,500)").execute(&pool).await?;
+    s::query("INSERT INTO product_variants(id,product_id,size,stock,price,cost,active) VALUES(100,2,'Large',12,1000,500,1)").execute(&pool).await?;
+    s::query("INSERT INTO variant_stock_batches(product_id,variant_id,location,batch_no,expire_date,quantity,expiry_unknown) VALUES(2,100,'Shop','S','',3,1),(2,100,'Variant room','C','',4,1),(2,100,'Variant Warehouse','W','2020-01-01',5,0)").execute(&pool).await?;
+    let mut request=draft("Cash",5000.0);request.location_id=Some(shop.id);request.expected_total=5000.0;
+    let item=&mut request.items[0];item.product_id=2;item.variant_id=Some(100);item.product_name="Variant product".into();item.qty=5.0;item.price=1000.0;item.cost=500.0;
+    let sale=complete_sale(&pool,&request,&actor).await?;
+    assert_eq!(s::query_scalar::<_,i64>("SELECT quantity FROM variant_stock_batches WHERE variant_id=100 AND location='Variant Warehouse'").fetch_one(&pool).await?,5);
+    let mut fail=request.clone();fail.invoice_no=auth::new_request_id();fail.items[0].qty=3.0;fail.expected_total=3000.0;fail.payment=3000.0;assert!(complete_sale(&pool,&fail,&actor).await.is_err());
+    let child=locations::list_names(&pool).await?.into_iter().find(|l|l.name=="Variant room").unwrap();
+    locations::save(&pool,&Location{name:"Variant room renamed".into(),..child},false).await?;
+    refund_sale(&pool,sale.id,&actor).await?;
+    assert_eq!(s::query_scalar::<_,i64>("SELECT SUM(quantity) FROM variant_stock_batches WHERE variant_id=100 AND location IN ('Shop','Variant room renamed')").fetch_one(&pool).await?,7);
+    s::query("UPDATE product_variants SET stock=15 WHERE id=100").execute(&pool).await?;
+    s::query("UPDATE products SET stock=15 WHERE id=2").execute(&pool).await?;
+    let mut legacy=request.clone();legacy.invoice_no=auth::new_request_id();legacy.items[0].qty=8.0;legacy.expected_total=8000.0;legacy.payment=8000.0;assert!(complete_sale(&pool,&legacy,&actor).await.is_err());
+    assert_eq!(s::query_scalar::<_,i64>("SELECT COUNT(*) FROM variant_stock_batches WHERE variant_id=100 AND location='Legacy / unassigned'").fetch_one(&pool).await?,0);
+    let (all,stock)=locations::list(&pool).await?;let mut products=db::search_product_metadata(&pool,"",0).await?;
+    locations::apply_sales_scope(&mut products,&stock,&locations::scope_names(&all,shop.id)?);
+    assert_eq!(products.iter().find(|p|p.id==2).unwrap().variants[0].stock,7.0);
     Ok(())
 }

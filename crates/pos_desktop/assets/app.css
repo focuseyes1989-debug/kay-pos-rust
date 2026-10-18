@@ -3137,7 +3137,7 @@ footer {
 @media(max-height:800px) { .inventory_detail { max-height: calc(100vh - 112px); } }
 @media(max-width:800px) { .inventory_detail { max-height: none; } }
 @media(max-width:800px) { .inventory_columns { grid-template-columns: minmax(0,1fr); } .inventory_detail { position: static; } .inventory_filters { grid-template-columns: repeat(2,minmax(0,1fr)); } }
-.location_filters { display: grid; grid-template-columns: minmax(0,2fr) minmax(0,1fr) auto auto; gap: 12px; padding: 16px; background: light-dark(white, #1c283b); border-block: 1px solid var(--line); align-items: end; flex-shrink: 0; }
+.location_filters { display: grid; grid-template-columns: minmax(0,2fr) minmax(0,1fr) auto; gap: 12px; padding: 16px; background: light-dark(white, #1c283b); border-block: 1px solid var(--line); align-items: end; flex-shrink: 0; }
 .location_filters label { display: flex; flex-direction: column; gap: 8px; min-width: 0; font-size: 12px; }
 .location_filters input,.location_filters select { width: 100%; min-width: 0; height: 46px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 6px; background: light-dark(white, #1c283b); font: inherit; }
 .locations_touch .products_items_header { flex-shrink: 0; gap: 12px; }
@@ -4073,7 +4073,7 @@ footer {
 .shell .side_menu .side_group button.side_active {
   background: color-mix(in srgb, var(--shop-sidebar-text, #fff) 12%, var(--shop-sidebar, #101827));
   border-color: var(--side-line);
-  box-shadow: inset 3px 0 0 var(--shop-sidebar-text, #fff);
+  box-shadow: none;
 }
 .shell .side_menu .side_group button:hover:not(:disabled) {
   background: color-mix(in srgb, var(--shop-hover-text, #fff) 20%, var(--shop-hover, #1e40af));

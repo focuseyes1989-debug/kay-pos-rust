@@ -181,6 +181,7 @@ fn App() -> Element {
         .clone()
         .expect("App is mounted only after login");
     let can_manage = actor.allows(pos_core::auth::Permission::Manage);
+    let can_expense=actor.allows(pos_core::auth::Permission::Expenses);
     let instance = use_hook(|| {
         std::rc::Rc::new(
             pending_checkout::acquire_instance(&load_saved_db_form()).map_err(|e| format!("{e:#}")),
@@ -216,6 +217,8 @@ fn App() -> Element {
     use_effect(|| {let _=document::eval(include_str!("../assets/receipt-drag.js"));});
     use_effect(|| {let _=document::eval(include_str!("../assets/search-autocomplete.js"));});
     let mut categories = use_signal(Vec::<UiCategory>::new);
+    let mut sales_location=use_signal(||None::<i32>);
+    let mut sales_locations=use_signal(Vec::<pos_core::locations::Location>::new);
     let mut selected_category = use_signal(|| None::<i32>);
     let mut quick_categories=use_signal(Vec::<pos_core::db::QuickCategory>::new);
     let mut sales_quantities=use_signal(HashMap::<i32,f64>::new);
@@ -230,6 +233,8 @@ fn App() -> Element {
     let mut received = use_signal(String::new);
     let mut show_db_dialog = use_signal(|| false);
     let mut show_side_menu = use_signal(|| false);
+    let mut menu_search=use_signal(String::new);
+    use_effect(move ||{if !show_side_menu(){menu_search.set(String::new());}});
     let db_form = use_signal(load_saved_db_form);
     use_context_provider(|| db_form);
     let mut query = use_signal(String::new);
@@ -309,15 +314,18 @@ fn App() -> Element {
     let mut sales_catalog = use_resource(move || {
         let view = active_view();
         let form = db_form.read().clone();
+        let location=sales_location();
         async move {
             if view != WorkspaceView::Sales { return None; }
-            Some(load_catalog_from_database(form).await.map_err(|e| format!("{e:#}")))
+            Some(load_catalog_from_database(form,location).await.map_err(|e| format!("{e:#}")))
         }
     });
     use_effect(move || {
         if let Some(Some(result)) = sales_catalog.read().as_ref() {
             match result {
-                Ok((loaded_categories, loaded_products, loaded_quantities, loaded_quick_categories)) => {
+                Ok((loaded_categories, loaded_products, loaded_quantities, loaded_quick_categories,loaded_locations,loaded_location)) => {
+                    sales_locations.set(loaded_locations.clone());
+                    if sales_location()!=Some(*loaded_location){sales_location.set(Some(*loaded_location));}
                     quick_categories.set(loaded_quick_categories.clone());
                     sales_quantities.set(loaded_quantities.clone());
                     categories.set(loaded_categories.clone());
@@ -582,7 +590,7 @@ fn App() -> Element {
                 }
                 nav { class: "top_navigation", aria_label: "Quick navigation",
                     button { class: "top_nav_link", aria_current: if *active_view.read()==WorkspaceView::Sales {"page"}else{"false"}, onclick: move |_| { show_side_menu.set(false); active_view.set(WorkspaceView::Sales); }, crate::icons::ActionLabel { label:"Sales" } }
-                    if can_manage { button { class: "top_nav_link", onclick: move |_| { show_side_menu.set(false); if *active_view.read()==WorkspaceView::Expenses {new_expense.set(true);}else{quick_expense.set(true);} }, crate::icons::ActionLabel {label:"Add Expense"} } }
+                    if can_expense { button { class: "top_nav_link", onclick: move |_| { show_side_menu.set(false); if *active_view.read()==WorkspaceView::Expenses {new_expense.set(true);}else{quick_expense.set(true);} }, crate::icons::ActionLabel {label:"Add Expense"} } }
                     button { class: "top_nav_link", aria_current: if *active_view.read()==WorkspaceView::Ai {"page"}else{"false"}, onclick: move |_| { show_side_menu.set(false); active_view.set(WorkspaceView::Ai); }, crate::icons::ActionLabel { label:"Kay Assistant" } }
                 }
                 div { class: "top_actions",
@@ -608,7 +616,7 @@ fn App() -> Element {
                 }
             }
 
-            if quick_expense() && can_manage {
+            if quick_expense() && can_expense {
                 expenses::QuickExpense { db_form: db_form.read().clone(),
                     on_close: move |_| quick_expense.set(false),
                     on_saved: move |_| { quick_expense.set(false); checkout_status.set("Expense saved.".into()); }
@@ -632,10 +640,17 @@ fn App() -> Element {
                         }
                         button { class: "side_close", aria_label: "Close menu", title: "Close menu", onclick: move |_| show_side_menu.set(false), icons::Icon {name:"close"} }
                     }
+                    label {class:"side_page_search",
+                        input {r#type:"search",aria_label:"Search menu pages",placeholder:"Search pages...",value:menu_search(),
+                            oninput:move |e|menu_search.set(e.value()),
+                            onkeydown:move |e|{if e.key()==Key::Escape {menu_search.set(String::new());}else if e.key()==Key::Enter {document::eval("const pages=[...document.querySelectorAll('.side_navigation .side_group:not([hidden]) > button:not([hidden])')];if(pages.length===1)pages[0].click();");}}
+                        }
+                    }
                     div {class:"side_navigation",aria_label:"Main navigation",
-                    div { class: "side_group", hidden:menu_visibility::group_hidden(&app_settings.read(),if can_manage {&["Sales","Receipts","Expenses","Service Order","Serial & Warranty"]}else{&["Sales","Receipts","Service Order","Serial & Warranty"]}),
+                    p {class:"side_search_empty",role:"status","No matching pages"}
+                    div { class: "side_group", hidden:menu_visibility::search_group_hidden(&app_settings.read(),if can_manage {&["Sales","Receipts","Expenses","Service Order","Serial & Warranty"]}else{&["Sales","Receipts","Expenses","Service Order"]},&menu_search()),
                         span { "SALES" }
-                        button { hidden:menu_visibility::hidden(&app_settings.read(),"Sales"),
+                        button { hidden:menu_visibility::search_hidden(&app_settings.read(),"Sales",&menu_search()),
                             class: if *active_view.read() == WorkspaceView::Sales { "side_active" } else { "" },
                             onclick: move |_| {
                                 show_side_menu.set(false);
@@ -643,7 +658,7 @@ fn App() -> Element {
                             },
                             crate::icons::ActionLabel { label:"Sales" }
                         }
-                        button { hidden:menu_visibility::hidden(&app_settings.read(),"Receipts"),
+                        button { hidden:menu_visibility::search_hidden(&app_settings.read(),"Receipts",&menu_search()),
                             class: if *active_view.read()==WorkspaceView::Receipts {"side_active"}else{""},
                             onclick: move |_| {
                                 show_side_menu.set(false);
@@ -681,43 +696,46 @@ fn App() -> Element {
                             },
                             crate::icons::ActionLabel { label:"Receipts" }
                         }
-                        if can_manage { button { hidden:menu_visibility::hidden(&app_settings.read(),"Expenses"), class: if *active_view.read()==WorkspaceView::Expenses {"side_active"}else{""}, onclick: move |_| { new_expense.set(false); active_view.set(WorkspaceView::Expenses); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Expenses" } } }
-                        button {hidden:menu_visibility::hidden(&app_settings.read(),"Serial & Warranty"),class:if *active_view.read()==WorkspaceView::Warranty {"side_active"}else{""},onclick:move |_|{active_view.set(WorkspaceView::Warranty);show_side_menu.set(false);},icons::ActionLabel {label:"Serial & Warranty"}}
-                        button { hidden:menu_visibility::hidden(&app_settings.read(),"Service Order"), class: if *active_view.read()==WorkspaceView::ServiceOrders {"side_active"}else{""}, onclick:move |_|{active_view.set(WorkspaceView::ServiceOrders);show_side_menu.set(false);},crate::icons::ActionLabel { label:"Service Order" } }
+                        if can_expense { button { hidden:menu_visibility::search_hidden(&app_settings.read(),"Expenses",&menu_search()), class: if *active_view.read()==WorkspaceView::Expenses {"side_active"}else{""}, onclick: move |_| { new_expense.set(false); active_view.set(WorkspaceView::Expenses); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Expenses" } } }
+                        if auth::can_open(&actor,WorkspaceView::Warranty) {
+                        button {hidden:menu_visibility::search_hidden(&app_settings.read(),"Serial & Warranty",&menu_search()),class:if *active_view.read()==WorkspaceView::Warranty {"side_active"}else{""},onclick:move |_|{active_view.set(WorkspaceView::Warranty);show_side_menu.set(false);},icons::ActionLabel {label:"Serial & Warranty"}}
+                        }
+                        button { hidden:menu_visibility::search_hidden(&app_settings.read(),"Service Order",&menu_search()), class: if *active_view.read()==WorkspaceView::ServiceOrders {"side_active"}else{""}, onclick:move |_|{active_view.set(WorkspaceView::ServiceOrders);show_side_menu.set(false);},crate::icons::ActionLabel { label:"Service Order" } }
                     }
                     if can_manage {
-                    div { class: "side_group", hidden:menu_visibility::group_hidden(&app_settings.read(),&["Employees","Customers","Suppliers","Purchases"]),
+                    div { class: "side_group", hidden:menu_visibility::search_group_hidden(&app_settings.read(),&["Employees","Customers","Suppliers","Purchases"],&menu_search()),
                         span { "PEOPLE" }
-                        button { hidden:menu_visibility::hidden(&app_settings.read(),"Employees"),class:if *active_view.read()==WorkspaceView::Employees{"side_active"}else{""},onclick:move |_|{active_view.set(WorkspaceView::Employees);show_side_menu.set(false);},crate::icons::ActionLabel { label:"Employees" }}
-                        button { hidden:menu_visibility::hidden(&app_settings.read(),"Customers"),
+                        button { hidden:menu_visibility::search_hidden(&app_settings.read(),"Employees",&menu_search()),class:if *active_view.read()==WorkspaceView::Employees{"side_active"}else{""},onclick:move |_|{active_view.set(WorkspaceView::Employees);show_side_menu.set(false);},crate::icons::ActionLabel { label:"Employees" }}
+                        button { hidden:menu_visibility::search_hidden(&app_settings.read(),"Customers",&menu_search()),
                             class: if *active_view.read()==WorkspaceView::Customers {"side_active"}else{""},
                             onclick: move |_| { active_view.set(WorkspaceView::Customers); show_side_menu.set(false); },
                             crate::icons::ActionLabel { label:"Customers" }
                         }
-                        button { hidden:menu_visibility::hidden(&app_settings.read(),"Suppliers"), class: if *active_view.read()==WorkspaceView::Suppliers {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Suppliers); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Suppliers" } }
-                        button { hidden:menu_visibility::hidden(&app_settings.read(),"Purchases"), class: if *active_view.read()==WorkspaceView::Purchases {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Purchases); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Purchases" } }
+                        button { hidden:menu_visibility::search_hidden(&app_settings.read(),"Suppliers",&menu_search()), class: if *active_view.read()==WorkspaceView::Suppliers {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Suppliers); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Suppliers" } }
+                        button { hidden:menu_visibility::search_hidden(&app_settings.read(),"Purchases",&menu_search()), class: if *active_view.read()==WorkspaceView::Purchases {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Purchases); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Purchases" } }
                     }
-                    div { class: "side_group", hidden:menu_visibility::group_hidden(&app_settings.read(),&["Products","Discounts","Categories","Locations","Inventory"]),
+                    div { class: "side_group", hidden:menu_visibility::search_group_hidden(&app_settings.read(),&["Products","Discounts","Categories","Locations","Inventory"],&menu_search()),
                         span { "PRODUCTS & STOCK" }
-                        button { hidden:menu_visibility::hidden(&app_settings.read(),"Products"), class: if *active_view.read()==WorkspaceView::Products {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Products); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Products" } }
-                        button { hidden:menu_visibility::hidden(&app_settings.read(),"Discounts"), class: if *active_view.read()==WorkspaceView::Discounts {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Discounts); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Discounts" } }
-                        button { hidden:menu_visibility::hidden(&app_settings.read(),"Categories"), class: if *active_view.read()==WorkspaceView::Categories {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Categories); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Categories" } }
-                        button { hidden:menu_visibility::hidden(&app_settings.read(),"Locations"), class: if *active_view.read()==WorkspaceView::Locations {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Locations); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Locations" } }
-                        button { hidden:menu_visibility::hidden(&app_settings.read(),"Inventory"), class: if *active_view.read()==WorkspaceView::Inventory {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Inventory); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Inventory" } }
+                        button { hidden:menu_visibility::search_hidden(&app_settings.read(),"Products",&menu_search()), class: if *active_view.read()==WorkspaceView::Products {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Products); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Products" } }
+                        button { hidden:menu_visibility::search_hidden(&app_settings.read(),"Discounts",&menu_search()), class: if *active_view.read()==WorkspaceView::Discounts {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Discounts); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Discounts" } }
+                        button { hidden:menu_visibility::search_hidden(&app_settings.read(),"Categories",&menu_search()), class: if *active_view.read()==WorkspaceView::Categories {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Categories); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Categories" } }
+                        button { hidden:menu_visibility::search_hidden(&app_settings.read(),"Locations",&menu_search()), class: if *active_view.read()==WorkspaceView::Locations {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Locations); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Locations" } }
+                        button { hidden:menu_visibility::search_hidden(&app_settings.read(),"Inventory",&menu_search()), class: if *active_view.read()==WorkspaceView::Inventory {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Inventory); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Inventory" } }
                     }
-                    div { class: "side_group", hidden:menu_visibility::group_hidden(&app_settings.read(),&["Kay Assistant","Activity Log","Reports","Dashboard","Sale Summary"]),
+                    div { class: "side_group", hidden:menu_visibility::search_group_hidden(&app_settings.read(),&["Kay Assistant","Activity Log","Reports","Dashboard","Sale Summary"],&menu_search()),
                         span { "REPORTS" }
-                        button { hidden:menu_visibility::hidden(&app_settings.read(),"Kay Assistant"), class: if *active_view.read()==WorkspaceView::Ai {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Ai); show_side_menu.set(false); }, crate::icons::ActionLabel {label:"Kay Assistant"} }
-                        button { hidden:menu_visibility::hidden(&app_settings.read(),"Activity Log"), class: if *active_view.read()==WorkspaceView::Activity {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Activity); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Activity Log" } }
-                        button { hidden:menu_visibility::hidden(&app_settings.read(),"Reports"), class: if *active_view.read()==WorkspaceView::Reports {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Reports); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Reports" } }
-                        button { hidden:menu_visibility::hidden(&app_settings.read(),"Dashboard"), class: if *active_view.read()==WorkspaceView::Dashboard {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Dashboard); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Dashboard" } }
-                        button { hidden:menu_visibility::hidden(&app_settings.read(),"Sale Summary"), class: if *active_view.read()==WorkspaceView::SaleSummary {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::SaleSummary); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Sale Summary" } }
+                        button { hidden:menu_visibility::search_hidden(&app_settings.read(),"Kay Assistant",&menu_search()), class: if *active_view.read()==WorkspaceView::Ai {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Ai); show_side_menu.set(false); }, crate::icons::ActionLabel {label:"Kay Assistant"} }
+                        button { hidden:menu_visibility::search_hidden(&app_settings.read(),"Activity Log",&menu_search()), class: if *active_view.read()==WorkspaceView::Activity {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Activity); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Activity Log" } }
+                        button { hidden:menu_visibility::search_hidden(&app_settings.read(),"Reports",&menu_search()), class: if *active_view.read()==WorkspaceView::Reports {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Reports); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Reports" } }
+                        button { hidden:menu_visibility::search_hidden(&app_settings.read(),"Dashboard",&menu_search()), class: if *active_view.read()==WorkspaceView::Dashboard {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::Dashboard); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Dashboard" } }
+                        button { hidden:menu_visibility::search_hidden(&app_settings.read(),"Sale Summary",&menu_search()), class: if *active_view.read()==WorkspaceView::SaleSummary {"side_active"}else{""}, onclick: move |_| { active_view.set(WorkspaceView::SaleSummary); show_side_menu.set(false); }, crate::icons::ActionLabel { label:"Sale Summary" } }
                     }
                     if actor.allows(pos_core::auth::Permission::Admin) {
-                    div { class: "side_group",
+                    div { class: "side_group",hidden:menu_visibility::search_group_hidden(&app_settings.read(),if pos_core::ERP_ENABLED{&["ERP Operations","Settings Center"]}else{&["Settings Center"]},&menu_search()),
                         span { "SETTINGS" }
-                        if pos_core::ERP_ENABLED {button { class: if *active_view.read()==WorkspaceView::ErpOperations {"side_active"}else{""}, onclick:move |_|{active_view.set(WorkspaceView::ErpOperations);show_side_menu.set(false);},crate::icons::ActionLabel { label:"ERP Operations" } }}
+                        if pos_core::ERP_ENABLED {button { hidden:!menu_visibility::page_matches("ERP Operations",&menu_search()),class: if *active_view.read()==WorkspaceView::ErpOperations {"side_active"}else{""}, onclick:move |_|{active_view.set(WorkspaceView::ErpOperations);show_side_menu.set(false);},crate::icons::ActionLabel { label:"ERP Operations" } }}
                         button {
+                            hidden:!menu_visibility::page_matches("Settings Center",&menu_search()),
                             class: if *active_view.read() == WorkspaceView::Settings { "side_active" } else { "" },
                             onclick: move |_| {
                                 show_side_menu.set(false);
@@ -1148,8 +1166,10 @@ fn App() -> Element {
 
                 aside { class: "cart panel",
                     div { class: "panel_head",
-                        div {
-                            strong { "Cart" }
+                        label { class:"cart_sales_location", title:if cart.read().is_empty(){"Selling location includes child locations. Stock outside this location tree is excluded."}else{"Clear the cart before changing sales location."},
+                            select {aria_label:"Sales location",disabled:!cart.read().is_empty()||checkout_saving()||!sales_catalog.finished()||matches!(&*pending.read(),Ok(Some(_))),value:sales_location().map(|id|id.to_string()).unwrap_or_default(),onchange:move |e|{if cart.read().is_empty()&&!checkout_saving(){sales_location.set(e.value().parse().ok());visible_product_limit.set(PRODUCT_BATCH_SIZE);}},
+                            for location in sales_locations.read().iter() {option {value:"{location.id}",{pos_core::locations::display_path(&sales_locations.read(),location.id)}}}
+                        }
                         }
                         div { class: "cart_head_actions",
                             held_sales::Controls {db_form:db_form.read().clone(),actor:actor.clone(),cart,customer:checkout_customer,payment:checkout_sale_type,active:held_token,clear_requested:clear_held,
@@ -1289,6 +1309,8 @@ fn App() -> Element {
                         };
                         if matches!(&*pending.read(), Ok(None)) {
                             if let Err(e)=pos_core::warranty::validate_sale_serials(&request.draft) {message_box.set(Some(format!("{e:#}")));return;}
+                            request.draft.location_id=sales_location();
+                            if request.draft.location_id.is_none(){message_box.set(Some("Select a sales location before checkout".into()));return;}
                             request.draft.held_token=held_token();
                             if let Err(e) = pending_checkout::save(&checkout_db, &request) { message_box.set(Some(format!("{e:#}"))); return; }
                         }
@@ -1307,6 +1329,7 @@ fn App() -> Element {
                                         Err(e) => { checkout_saving.set(false); message_box.set(Some(format!("Sale saved, but recovery file could not be cleared: {e}. Do not save a new sale."))); return; }
                                     }
                                     cart.set(Vec::new());
+                                    sales_catalog.restart();
                                     show_checkout.set(false);
                                     checkout_saving.set(false);
                                     checkout_discount.set(String::new());
@@ -1423,7 +1446,8 @@ fn load_env_files() {
 
 async fn load_catalog_from_database(
     form: DbForm,
-) -> anyhow::Result<(Vec<UiCategory>, Vec<Product>, HashMap<i32,f64>,Vec<pos_core::db::QuickCategory>)> {
+    selected_location:Option<i32>,
+) -> anyhow::Result<(Vec<UiCategory>, Vec<Product>, HashMap<i32,f64>,Vec<pos_core::db::QuickCategory>,Vec<pos_core::locations::Location>,i32)> {
     let config = form.database_config()?;
     let pool = connect(&config).await?;
     let categories = list_categories(&pool)
@@ -1445,7 +1469,12 @@ async fn load_catalog_from_database(
 
     let quantities=pos_core::db::product_sales_quantities(&pool).await?;
     let quick=pos_core::db::top_sales_categories(&pool).await?;
-    Ok((category_names, products, quantities,quick))
+    let (locations,stock)=pos_core::locations::list(&pool).await?;
+    let saved_default=pos_core::locations::default_sales_location(&pool).await?;
+    let selected=selected_location.filter(|id|locations.iter().any(|l|l.id==*id)).or_else(||pos_core::locations::initial_sales_location(&locations,saved_default)).context("Add a sales location in Locations before selling")?;
+    let names=pos_core::locations::scope_names(&locations,selected)?;
+    pos_core::locations::apply_sales_scope(&mut products,&stock,&names);
+    Ok((category_names, products, quantities,quick,locations,selected))
 }
 
 async fn load_app_settings_from_database(form: DbForm) -> anyhow::Result<HashMap<String, String>> {

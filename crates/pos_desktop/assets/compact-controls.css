@@ -137,3 +137,31 @@ body .shell.shell.shell.shell :is(.settings_search,.catalog_search,.category_sea
   height:100%!important;min-height:0!important;border:0;border-radius:0;
   background-color:transparent;box-shadow:none;outline:none!important;
 }
+
+.shell .side_menu .side_page_search {display:block;flex:0 0 auto;margin:12px 0;}
+.shell .side_menu .side_page_search input[type="search"] {width:100%;}
+.shell .side_search_empty {display:none;color:var(--shop-sidebar-text,#fff);padding:12px 8px;font-size:12px;}
+.shell .side_navigation:not(:has(.side_group:not([hidden]) > button:not([hidden]))) .side_search_empty {display:block;}
+.shell .side_menu :is(.side_group[hidden],.side_group > button[hidden]) {display:none!important;}
+/* Keep the selling location beside the fixed cart actions. */
+.shell .sales_workspace .catalog {grid-template-rows:auto auto minmax(0,1fr);}
+.shell .cart > .panel_head {display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;}
+.shell .cart_sales_location {display:block;min-width:0;width:100%;}
+.shell .cart_sales_location :is(select,.touch-combo) {width:100%;min-width:0;max-width:100%;}
+.shell .cart_sales_location input.touch-combo-input {text-overflow:ellipsis;}
+.shell .cart .cart_head_actions {flex-shrink:0;}
+.shell .location_tree_row[data-child="true"] {margin-left:20px;border-left:3px solid var(--accent);}
+.shell .location_parent_picker {display:grid;gap:6px;margin:12px 0;font-size:12px;color:var(--muted);}
+
+/* Match the Cart location text to Sales search/category text metrics. */
+body .shell .cart_sales_location :is(select,input.touch-combo-input,button.touch-combo-option) {
+  font-family:"Myanmar Text","Segoe UI",sans-serif!important;
+  font-size:14px!important;line-height:1.8!important;font-weight:400!important;
+}
+body .shell.shell.shell.shell .cart_sales_location .touch-combo input.touch-combo-input,
+body .shell.shell.shell.shell .cart_sales_location > select {
+  padding-top:8px!important;padding-bottom:0!important;
+}
+body .shell .cart_sales_location .touch-combo-list button.touch-combo-option {
+  display:block;text-align:left;padding-top:4px!important;padding-bottom:4px!important;
+}

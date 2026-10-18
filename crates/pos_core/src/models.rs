@@ -99,6 +99,8 @@ pub struct SaleItemDraft {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SaleDraft {
     #[serde(default,skip_serializing_if="Option::is_none")]
+    pub location_id: Option<i32>,
+    #[serde(default,skip_serializing_if="Option::is_none")]
     pub held_token: Option<String>,
     pub invoice_no: String,
     pub customer_id: Option<i32>,

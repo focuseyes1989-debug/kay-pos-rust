@@ -243,6 +243,11 @@ async fn dashboard_separates_credit_collections_and_current_balances() -> Result
         INSERT INTO expenses VALUES(50,'2026-09-25'),(999,'2026-09-26');
         INSERT INTO service_orders VALUES('received'),('delivered');")
         .execute(&pool).await?;
+    // Dashboard stock valuation now reads the complete catalog metadata.
+    sqlx::raw_sql("CREATE TABLE categories(id int PRIMARY KEY,name text);
+        ALTER TABLE products ADD COLUMN name text DEFAULT 'Test product',ADD COLUMN description text,ADD COLUMN category_id int,ADD COLUMN sku text,ADD COLUMN barcode text,ADD COLUMN price float8 DEFAULT 100,ADD COLUMN low_stock float8 DEFAULT 0,ADD COLUMN image_filename text,ADD COLUMN image_data bytea,ADD COLUMN image_mime text,ADD COLUMN is_favourite int DEFAULT 0;
+        ALTER TABLE product_variants ADD COLUMN size text,ADD COLUMN color text,ADD COLUMN sku text,ADD COLUMN barcode text,ADD COLUMN price float8 DEFAULT 100,ADD COLUMN cost float8 DEFAULT 0,ADD COLUMN low_stock float8 DEFAULT 0,ADD COLUMN wholesale_min_qty int DEFAULT 0,ADD COLUMN wholesale_price float8 DEFAULT 0;
+        CREATE TABLE product_price_tiers(id int,product_id int,min_qty int,unit_multiplier int,unit_label text,unit_price float8,active int);").execute(&pool).await?;
     let mut request=draft(vec![item(1,1.0)]);
     request.payment_type="Credit".into();request.payment=0.0;request.customer_id=Some(1);
     let sale=complete_sale(&pool,&request,&cashier).await?;
@@ -294,6 +299,7 @@ async fn short_numbers_are_reserved_once_and_skip_existing_batches() -> Result<(
 fn draft(items: Vec<SaleItemDraft>) -> SaleDraft {
     let total = items.iter().map(|i| i.qty * i.price).sum();
     SaleDraft {
+        location_id: None,
         held_token:None,
         invoice_no: auth::new_request_id(),
         customer_id: None,

@@ -15,6 +15,7 @@ pub struct Session {
 #[derive(Clone, Copy)]
 pub enum Permission {
     Sell,
+    Expenses,
     Manage,
     Admin,
 }
@@ -63,7 +64,7 @@ impl Session {
 
 fn allows(role: &str, permission: Permission) -> bool {
     match permission {
-        Permission::Sell => matches!(
+        Permission::Sell | Permission::Expenses => matches!(
             role.to_ascii_lowercase().as_str(),
             "cashier" | "manager" | "admin"
         ),

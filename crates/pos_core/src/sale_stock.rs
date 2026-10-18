@@ -34,6 +34,7 @@ pub async fn deduct(
     item: &SaleItemDraft,
     invoice: &str,
     actor: &str,
+    allowed_locations:Option<&[String]>,
 ) -> Result<Vec<Allocation>> {
     let (mut master, mode): (f64, String) = sqlx::query_as(
         "SELECT COALESCE(stock,0)::float8,COALESCE(sold_by,'Each') FROM products WHERE id=$1",
@@ -131,9 +132,14 @@ pub async fn deduct(
             && (rows.iter().map(|r| r.5).sum::<f64>() - old).abs() < 0.000001,
         "Batch/location stock differs from total. Reconcile in Main POS first"
     );
+    if let Some(names)=allowed_locations {
+        let available:f64=rows.iter().filter(|r|names.contains(&r.2.trim().to_lowercase())).map(|r|r.5).sum();
+        ensure!(available+0.000001>=item.qty,"Insufficient stock in selected sales location for {}",item.product_name);
+    }
     let mut remaining = item.qty;
     let mut allocations = Vec::new();
     for (ctid, id, location, batch, expiry, quantity) in rows {
+        if allowed_locations.is_some_and(|names|!names.contains(&location.trim().to_lowercase())){continue;}
         let take = remaining.min(quantity);
         if take <= 0.0 {
             continue;
@@ -180,4 +186,32 @@ pub async fn deduct(
     sqlx::query("INSERT INTO stock_movements(product_id,variant_id,type,quantity,old_stock,new_stock,reason,reference,created_by,location) VALUES($1,$2,'sale',$3,$4,$5,'POS sale',$6,$7,'Multiple batches')")
         .bind(item.product_id).bind(item.variant_id).bind(item.qty).bind(old).bind(old-item.qty).bind(invoice).bind(actor).execute(&mut *connection).await?;
     Ok(allocations)
+}
+
+#[cfg(test)]
+mod scoped_tests {
+    #[tokio::test]
+    #[ignore="requires disposable PostgreSQL on port 55487"]
+    async fn postgres_location_scope_never_deducts_warehouse()->anyhow::Result<()> {
+        use crate::storage as s;
+        let url=std::env::var("P1_TEST_DATABASE_URL")?;anyhow::ensure!(url.contains("127.0.0.1:55487/"),"Use isolated PostgreSQL only");
+        let pool:s::Pool=::sqlx::postgres::PgPoolOptions::new().max_connections(1).connect(&url).await?.into();
+        let mut tx=pool.begin().await?;
+        s::raw_sql("CREATE TEMP TABLE products(id int,stock float8,sold_by text,last_updated timestamp) ON COMMIT DROP;CREATE TEMP TABLE locations(id int,name text) ON COMMIT DROP;CREATE TEMP TABLE rust_location_hierarchy(location_id int,parent_id int) ON COMMIT DROP;CREATE TEMP TABLE product_locations(id serial,product_id int,location text,batch_no text,expire_date text,quantity float8,last_updated timestamp) ON COMMIT DROP;CREATE TEMP TABLE stock_movements(product_id int,variant_id int,type text,quantity float8,old_stock float8,new_stock float8,reason text,reference text,created_by text,location text) ON COMMIT DROP;INSERT INTO products VALUES(1,15,'Each',NULL);INSERT INTO locations VALUES(1,'Shop'),(2,'Backroom'),(3,'Warehouse');INSERT INTO rust_location_hierarchy VALUES(2,1);INSERT INTO product_locations(product_id,location,batch_no,expire_date,quantity) VALUES(1,'Shop','S','',4),(1,'Backroom','B','',6),(1,'Warehouse','W','2020-01-01',5);").execute(&mut *tx).await?;
+        let item=crate::SaleItemDraft {serials:vec![],promotion:None,product_id:1,variant_id:None,product_name:"Product".into(),qty:6.0,price:10.0,cost:1.0,is_service:false,wholesale_regular_price:0.0,wholesale_savings:0.0,wholesale_tier_min_qty:None,wholesale_unit_label:None};
+        let names=crate::locations::sale_scope(&mut tx,1).await?;
+        let rows=super::deduct(&mut tx,&item,"TEST","owner",Some(&names)).await?;
+        assert_eq!(rows.iter().map(|r|r.quantity).sum::<f64>(),6.0);
+        assert!(rows.iter().all(|r|r.location.as_deref()!=Some("Warehouse")));
+        let wh:f64=s::query_scalar("SELECT quantity FROM product_locations WHERE location='Warehouse'").fetch_one(&mut *tx).await?;assert_eq!(wh,5.0);
+        let mut too_much=item.clone();too_much.qty=5.0;assert!(super::deduct(&mut tx,&too_much,"TEST2","owner",Some(&names)).await.is_err());
+        assert_eq!(s::query_scalar::<_,f64>("SELECT stock FROM products WHERE id=1").fetch_one(&mut *tx).await?,9.0);
+        s::raw_sql("CREATE TEMP TABLE product_variants(id int,product_id int,stock int,active int,updated_at timestamp) ON COMMIT DROP;CREATE TEMP TABLE variant_stock_batches(product_id int,variant_id int,location text,batch_no text,expire_date text,quantity int,expiry_unknown int,UNIQUE(product_id,variant_id,location,batch_no,expire_date)) ON COMMIT DROP;INSERT INTO products VALUES(2,12,'Variants',NULL);INSERT INTO product_variants VALUES(20,2,12,1,NULL);INSERT INTO variant_stock_batches VALUES(2,20,'Shop','S','',3,1),(2,20,'Backroom','B','',4,1),(2,20,'Warehouse','W','2020-01-01',5,0);").execute(&mut *tx).await?;
+        let mut variant=item.clone();variant.product_id=2;variant.variant_id=Some(20);variant.qty=5.0;
+        let allocations=super::deduct(&mut tx,&variant,"VARIANT","owner",Some(&names)).await?;
+        assert!(allocations.iter().all(|a|a.location.as_deref()!=Some("Warehouse")));
+        assert_eq!(s::query_scalar::<_,i32>("SELECT quantity FROM variant_stock_batches WHERE location='Warehouse'").fetch_one(&mut *tx).await?,5);
+        variant.qty=3.0;assert!(super::deduct(&mut tx,&variant,"FAIL","owner",Some(&names)).await.is_err());
+        tx.rollback().await?;pool.close().await;Ok(())
+    }
 }
