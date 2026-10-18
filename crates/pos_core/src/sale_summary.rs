@@ -21,8 +21,9 @@ pub struct Summary {
     pub groups: Vec<Vec<GroupRow>>,
     pub group_receipts: Vec<i64>,
     pub expenses: Vec<ExpenseRow>,
+    pub location_groups: Vec<LocationGroup>,
 }
-#[derive(Clone, sqlx::FromRow)]
+#[derive(Clone, Default, sqlx::FromRow)]
 pub struct GroupRow {
     pub label: String,
     pub receipts: i64,
@@ -33,6 +34,47 @@ pub struct GroupRow {
     pub cost: f64,
     pub savings: f64,
 }
+#[derive(Clone)]
+pub struct LocationGroup {
+    pub total: GroupRow,
+    pub children: Vec<(GroupRow, usize)>,
+}
+#[derive(sqlx::FromRow)]
+struct LocationReceipt { label: String, sale_id: i32 }
+
+fn location_rollup(all: &[crate::locations::Location], rows: &[GroupRow], receipts: &[LocationReceipt]) -> Vec<LocationGroup> {
+    use std::collections::{BTreeMap, BTreeSet};
+    let mut groups: BTreeMap<String,(LocationGroup,BTreeSet<i32>)> = BTreeMap::new();
+    for row in rows {
+        let location=all.iter().find(|l|l.name.trim().eq_ignore_ascii_case(row.label.trim()));
+        let mut root=location;
+        let mut seen=BTreeSet::new();
+        let mut depth=0;
+        while let Some(current)=root {
+            if !seen.insert(current.id) { break; }
+            let Some(parent)=current.parent_id.and_then(|id|all.iter().find(|l|l.id==id)) else {break};
+            root=Some(parent);depth+=1;
+        }
+        let label=root.map(|l|l.name.clone()).unwrap_or_else(||row.label.clone());
+        let (group,ids)=groups.entry(label.clone()).or_insert_with(||(LocationGroup{total:GroupRow{label,..Default::default()},children:Vec::new()},BTreeSet::new()));
+        let total=&mut group.total;
+        total.quantity+=row.quantity;total.gross+=row.gross;total.discount+=row.discount;
+        total.net+=row.net;total.cost+=row.cost;total.savings+=row.savings;
+        ids.extend(receipts.iter().filter(|r|r.label==row.label).map(|r|r.sale_id));
+        let mut detail=row.clone();
+        if let Some(location)=location {detail.label=crate::locations::display_path(all,location.id);}
+        group.children.push((detail,depth));
+    }
+    let order=crate::locations::tree_order(all);
+    let mut result=groups.into_values().map(|(mut group,ids)|{
+        group.total.receipts=ids.len() as i64;
+        group.children.sort_by_key(|(row,_)|order.iter().position(|(l,_)|crate::locations::display_path(all,l.id)==row.label).unwrap_or(usize::MAX));
+        group
+    }).collect::<Vec<_>>();
+    result.sort_by(|a,b|b.total.net.total_cmp(&a.total.net).then(a.total.label.cmp(&b.total.label)));
+    result
+}
+
 #[derive(Clone, sqlx::FromRow)]
 pub struct ExpenseRow {
     pub label: String,
@@ -83,6 +125,7 @@ pub fn dates(from: &str, to: &str) -> Result<(NaiveDate, NaiveDate)> {
 }
 pub async fn load(pool: &PgPool, from: &str, to: &str) -> Result<Summary> {
     let (start, end) = dates(from, to)?;
+    let locations=crate::locations::list_names(pool).await?;
     let mut tx = pool.begin().await?;
     sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
         .execute(&mut *tx)
@@ -130,6 +173,9 @@ pub async fn load(pool: &PgPool, from: &str, to: &str) -> Result<Summary> {
             .await?,
         );
     }
+    let location_receipts:Vec<LocationReceipt>=sqlx::query_as(&format!("{GROUP_LINES} SELECT DISTINCT location AS label,sale_id FROM lines"))
+        .bind(start.and_hms_opt(0,0,0).unwrap()).bind(end.and_hms_opt(0,0,0).unwrap()).fetch_all(&mut *tx).await?;
+    result.location_groups=location_rollup(&locations,&result.groups[5],&location_receipts);
     result.expenses=sqlx::query_as("SELECT COALESCE(NULLIF(category,''),'Uncategorized') AS label,COUNT(*) AS records,COALESCE(SUM(amount),0)::float8 AS amount FROM expenses WHERE expense_date >= $1 AND expense_date < $2 GROUP BY COALESCE(NULLIF(category,''),'Uncategorized') ORDER BY SUM(amount) DESC,label").bind(start.to_string()).bind(end.to_string()).fetch_all(&mut *tx).await?;
     tx.commit().await?;
     Ok(result)
@@ -137,6 +183,21 @@ pub async fn load(pool: &PgPool, from: &str, to: &str) -> Result<Summary> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn parent_rollup_includes_nested_children_and_preserves_unknown_locations() {
+        use crate::locations::Location;
+        let all=vec![Location{id:1,name:"Parent".into(),parent_id:None},Location{id:2,name:"Room".into(),parent_id:Some(1)},Location{id:3,name:"Shelf".into(),parent_id:Some(2)}];
+        let rows=vec![GroupRow{label:"Room".into(),net:10.0,quantity:1.0,..Default::default()},GroupRow{label:"Shelf".into(),net:20.0,quantity:2.0,..Default::default()},GroupRow{label:"Old location".into(),net:5.0,..Default::default()}];
+        let receipts=vec![LocationReceipt{label:"Room".into(),sale_id:1},LocationReceipt{label:"Shelf".into(),sale_id:1},LocationReceipt{label:"Shelf".into(),sale_id:2},LocationReceipt{label:"Old location".into(),sale_id:1}];
+        let groups=location_rollup(&all,&rows,&receipts);
+        assert_eq!(groups.len(),2);
+        assert_eq!(groups[0].total.label,"Parent");
+        assert_eq!(groups[0].total.receipts,2);
+        assert_eq!(groups[0].total.net,30.0);
+        assert_eq!(groups[0].total.quantity,3.0);
+        assert_eq!(groups[0].children[1].1,2);
+        assert_eq!(groups[1].total.label,"Old location");
+    }
     #[test]
     fn inclusive_range() {
         let (a, b) = dates("2026-09-17", "2026-09-17").unwrap();

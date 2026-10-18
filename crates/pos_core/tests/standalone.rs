@@ -702,6 +702,20 @@ async fn standalone_variants_expiry_and_fractional_report_allocation() -> Result
     assert!((shop.net+warehouse.net-29.0).abs()<0.0000001);
     assert!((shop.discount+warehouse.discount-1.0).abs()<0.0000001);
     assert_eq!(shop.cost+warehouse.cost,15.0);
+    let shop_id:i32=s::query_scalar("SELECT id FROM locations WHERE name='Shop'").fetch_one(&pool).await?;
+    let warehouse_id:i32=s::query_scalar("SELECT id FROM locations WHERE name='Warehouse'").fetch_one(&pool).await?;
+    s::query("INSERT INTO rust_location_hierarchy(location_id,parent_id) VALUES($1,$2)").bind(warehouse_id).bind(shop_id).execute(&pool).await?;
+    let grouped=pos_core::sale_summary::load(&pool,&day,&day).await?;
+    assert_eq!(grouped.location_groups.len(),1);
+    let parent=&grouped.location_groups[0];
+    assert_eq!(parent.total.label,"Shop");
+    assert_eq!(parent.total.receipts,1);
+    assert_eq!(parent.total.quantity,3.0);
+    assert!((parent.total.net-29.0).abs()<0.0000001);
+    assert_eq!(parent.children.len(),2);
+    assert_eq!(parent.children[1].0.label,"Shop / Warehouse");
+    assert_eq!(parent.children[1].1,1);
+
 
     pool.close().await;
     Ok(())

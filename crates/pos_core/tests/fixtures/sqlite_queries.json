@@ -1604,23 +1604,23 @@
     "sql": "INSERT INTO stock_movements(product_id,variant_id,type,quantity,old_stock,new_stock,reason,reference,created_by,location) VALUES($1,$2,'sale',$3,$4,$5,'POS sale',$6,$7,'Multiple batches')"
   },
   {
-    "source": "sale_summary.rs:43",
+    "source": "sale_summary.rs:85",
     "sql": "\nWITH window_sales AS (\n SELECT * FROM sales WHERE status='completed' AND created_at >= $1 AND created_at < $2\n), raw AS (\n SELECT s.id AS sale_id,si.id AS line_id,\n COALESCE(si.product_name,'[Receipt without items]') AS item,\n COALESCE(NULLIF(TRIM(si.location),''),'Legacy / unassigned') AS location,\n COALESCE(c.name,p.category,'Uncategorized') AS category,\n COALESCE(parent.name,c.name,p.category,'Uncategorized') AS parent,\n COALESCE(si.qty,0)::numeric AS quantity,\n (COALESCE(si.qty,0)*COALESCE(si.price,0))::numeric AS gross,\n (COALESCE(si.qty,0)*COALESCE(si.cost,v.cost,p.cost,0))::numeric AS cost,\n COALESCE(s.discount_amount,0)::numeric AS header_discount,\n COALESCE(si.wholesale_savings,0)::numeric AS savings,\n COALESCE(si.wholesale_tier_min_qty,0) AS tier\n FROM window_sales s LEFT JOIN sale_items si ON si.sale_id=s.id\n LEFT JOIN products p ON p.id=COALESCE(si.product_id,(SELECT p2.id FROM products p2 WHERE p2.name=si.product_name ORDER BY p2.id DESC LIMIT 1))\n LEFT JOIN product_variants v ON v.id=si.variant_id AND v.product_id=p.id\n LEFT JOIN categories c ON c.id=COALESCE(p.category_id,(SELECT c2.id FROM categories c2 WHERE c2.name=p.category ORDER BY c2.id DESC LIMIT 1))\n LEFT JOIN categories parent ON parent.id=c.parent_id\n), portions AS (\n SELECT *,ROW_NUMBER() OVER(PARTITION BY sale_id ORDER BY line_id) AS pos,\n COUNT(*) OVER(PARTITION BY sale_id) AS line_count,\n ROUND(CASE WHEN SUM(gross) OVER(PARTITION BY sale_id)<>0\n THEN header_discount*gross/SUM(gross) OVER(PARTITION BY sale_id)\n ELSE header_discount/COUNT(*) OVER(PARTITION BY sale_id) END,2) AS portion\n FROM raw\n), lines AS (\n SELECT *,CASE WHEN pos=line_count THEN header_discount-(SUM(portion) OVER(PARTITION BY sale_id)-portion) ELSE portion END AS discount\n FROM portions\n)  SELECT * FROM lines"
   },
   {
-    "source": "sale_summary.rs:87",
+    "source": "sale_summary.rs:130",
     "sql": "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
   },
   {
-    "source": "sale_summary.rs:133",
+    "source": "sale_summary.rs:179",
     "sql": "SELECT COALESCE(NULLIF(category,''),'Uncategorized') AS label,COUNT(*) AS records,COALESCE(SUM(amount),0)::float8 AS amount FROM expenses WHERE expense_date >= $1 AND expense_date < $2 GROUP BY COALESCE(NULLIF(category,''),'Uncategorized') ORDER BY SUM(amount) DESC,label"
   },
   {
-    "source": "sale_summary.rs:158",
+    "source": "sale_summary.rs:219",
     "sql": "SET TRANSACTION READ ONLY"
   },
   {
-    "source": "sale_summary.rs:159",
+    "source": "sale_summary.rs:220",
     "sql": "SET LOCAL statement_timeout='10s'"
   },
   {

@@ -165,3 +165,7 @@ body .shell.shell.shell.shell .cart_sales_location > select {
 body .shell .cart_sales_location .touch-combo-list button.touch-combo-option {
   display:block;text-align:left;padding-top:4px!important;padding-bottom:4px!important;
 }
+
+.shell .summary_location_parent {background:var(--panel-soft,var(--panel));font-weight:600;}
+.shell .summary_location_parent button.summary_category_link {font-weight:600;text-align:left;}
+.shell .summary_location_child td:first-child {color:var(--muted);}

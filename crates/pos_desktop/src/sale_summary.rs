@@ -24,6 +24,7 @@ fn SummaryDetails(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
     let mut range = use_signal(|| (today.to_string(), today.to_string()));
     let mut error = use_signal(String::new);
     let mut tab = use_signal(|| 0usize);
+    let mut expanded_locations=use_signal(std::collections::BTreeSet::<String>::new);
     let mut selected_category=use_signal(||None::<(String,String,String)>);
     let dialog_source=db_form.clone();
     let mut data = use_resource(move || {
@@ -107,8 +108,24 @@ fn SummaryDetails(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
                     if result.expenses.is_empty(){tr {td {colspan:"3","No expenses in this date range."}}}
                     for row in &result.expenses {tr {td {"{row.label}"} td {"{row.records}"} td {{crate::format_ks(row.amount)}}}}
                 } tfoot {tr {th {scope:"row","Total"} td {"{expense_records}"} td {{crate::format_ks(expense_amount)}}}}}}
+            } else if tab()==8 {
+                p {class:"summary_receipts_note","Parent totals include their own stock and all child locations. Expand a parent to see each selling location. Receipt counts are distinct within each parent."}
+                div {class:"summary_table",table {
+                    thead {tr {for label in ["Location","Receipts","Quantity","Item gross","Allocated discount","Net sales","Cost of goods","Net less cost","Wholesale savings"] {th {"{label}"}}}}
+                    tbody {
+                        if result.location_groups.is_empty(){tr {td {colspan:"9","No sales in this date range."}}}
+                        for group in &result.location_groups {
+                            tr {class:"summary_location_parent",td {button {class:"summary_category_link",aria_expanded:expanded_locations.read().contains(&group.total.label),onclick:{let label=group.total.label.clone();move |_|{let mut expanded=expanded_locations.write();if !expanded.remove(&label){expanded.insert(label.clone());}}},if expanded_locations.read().contains(&group.total.label){"▾ "}else{"▸ "}"{group.total.label}"}} td {"{group.total.receipts}"} td {{crate::format_qty(group.total.quantity)}} for value in [group.total.gross,group.total.discount,group.total.net,group.total.cost,group.total.net-group.total.cost,group.total.savings] {td {{crate::format_ks(value)}}}}
+                            if expanded_locations.read().contains(&group.total.label) {
+                                for (row,depth) in &group.children {
+                                    tr {class:"summary_location_child",td {style:format!("padding-left:{}px",24+depth*16),"{row.label}"} td {"{row.receipts}"} td {{crate::format_qty(row.quantity)}} for value in [row.gross,row.discount,row.net,row.cost,row.net-row.cost,row.savings] {td {{crate::format_ks(value)}}}}
+                                }
+                            }
+                        }
+                    }
+                    tfoot {tr {th {scope:"row","Total"} td {title:"Distinct receipts",{result.group_receipts.get(5).copied().unwrap_or(0).to_string()}} td {{crate::format_qty(group_totals[0])}} for value in group_totals.iter().skip(1) {td {{crate::format_ks(*value)}}}}}
+                }}
             } else {
-                if tab()==8 {p {class:"summary_receipts_note","Sales grouped by the stock location recorded on each item. A receipt using multiple locations appears in each location; the total counts it once."}}
                 div {class:"summary_table",table {thead {tr {for label in [if tab()==8{"Location"}else{"Name"},"Receipts","Quantity","Item gross","Allocated discount","Net sales","Cost of goods","Net less cost","Wholesale savings"] {th {"{label}"}}}} tbody {
                     if let Some(group)=result.groups.get(group_index) {
                         if group.is_empty(){tr {td {colspan:"9","No sales in this date range."}}}
