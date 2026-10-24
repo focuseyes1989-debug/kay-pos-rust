@@ -56,6 +56,10 @@ async fn standalone_credit_collection_retry_refund_and_reopen() -> Result<()> {
         .fetch_one(&pool)
         .await?;
     assert_eq!(balance, 20000.0);
+    assert_eq!(pos_core::customers::list(&pool).await?.iter().find(|c|c.id==1).unwrap().current_balance,20000.0);
+    let outstanding=pos_core::customer_credit::invoices(&pool,None).await?;
+    assert!(outstanding.iter().any(|r|r.balance=="20000".parse::<rust_decimal::Decimal>().unwrap()));
+
     let credits = pos_core::customer_credit::invoices(&pool, Some(1)).await?;
     assert_eq!(credits.len(), 1);
     assert_eq!(
@@ -1373,5 +1377,44 @@ async fn standalone_location_tree_variant_stock_and_refund()->Result<()> {
     let (all,stock)=locations::list(&pool).await?;let mut products=db::search_product_metadata(&pool,"",0).await?;
     locations::apply_sales_scope(&mut products,&stock,&locations::scope_names(&all,shop.id)?);
     assert_eq!(products.iter().find(|p|p.id==2).unwrap().variants[0].stock,7.0);
+    Ok(())
+}
+
+#[tokio::test]
+async fn standalone_shop2_sales_only_use_its_parent_and_descendants() -> Result<()> {
+    use pos_core::locations::{self,Location};
+    let (_dir,pool,actor)=fixture().await?;
+    let shop=locations::list_names(&pool).await?.into_iter().find(|l|l.name=="Shop").unwrap();
+    locations::save(&pool,&Location{id:0,name:"Shop child".into(),parent_id:Some(shop.id)},false).await?;
+    locations::save(&pool,&Location{id:0,name:"Shop2 (သားကြီး)".into(),parent_id:None},false).await?;
+    let shop2=locations::list_names(&pool).await?.into_iter().find(|l|l.name=="Shop2 (သားကြီး)").unwrap();
+    locations::save(&pool,&Location{id:0,name:"Shop2 room".into(),parent_id:Some(shop2.id)},false).await?;
+    let room=locations::list_names(&pool).await?.into_iter().find(|l|l.name=="Shop2 room").unwrap();
+    locations::save(&pool,&Location{id:0,name:"Shop2 shelf".into(),parent_id:Some(room.id)},false).await?;
+    s::query("UPDATE products SET stock=26 WHERE id=1").execute(&pool).await?;
+    s::query("UPDATE product_locations SET quantity=10 WHERE product_id=1").execute(&pool).await?;
+    s::query("INSERT INTO product_locations(product_id,location,batch_no,expire_date,quantity) VALUES(1,'Shop child','OTHER','2020-01-01',7),(1,'Shop2 (သားကြီး)','PARENT','',3),(1,'Shop2 room','CHILD','',4),(1,'Shop2 shelf','NESTED','',2)").execute(&pool).await?;
+    let mut request=draft("Cash",100000.0);request.location_id=Some(shop2.id);request.items[0].qty=5.0;request.expected_total=100000.0;
+    let first=complete_sale(&pool,&request,&actor).await?;
+    assert_eq!(complete_sale(&pool,&request,&actor).await?.id,first.id);
+    assert_eq!(s::query_scalar::<_,f64>("SELECT SUM(quantity)::float8 FROM product_locations WHERE product_id=1 AND location IN ('Shop2 (သားကြီး)','Shop2 room','Shop2 shelf')").fetch_one(&pool).await?,4.0);
+    let sources:Vec<String>=s::query_scalar("SELECT DISTINCT location FROM sale_items WHERE sale_id=$1").bind(first.id).fetch_all(&pool).await?;
+    assert!(sources.iter().all(|name|["Shop2 (သားကြီး)","Shop2 room","Shop2 shelf"].contains(&name.as_str())));
+    assert!(sources.contains(&"Shop2 (သားကြီး)".to_string()));
+    assert!(sources.iter().any(|name|name=="Shop2 room"||name=="Shop2 shelf"));
+    let mut insufficient=request.clone();insufficient.invoice_no=auth::new_request_id();
+    assert!(complete_sale(&pool,&insufficient,&actor).await.is_err(),"Shop2 cannot borrow the 17 units in another parent tree");
+    assert_eq!(s::query_scalar::<_,f64>("SELECT stock::float8 FROM products WHERE id=1").fetch_one(&pool).await?,21.0);
+    assert_eq!(s::query_scalar::<_,f64>("SELECT SUM(quantity)::float8 FROM product_locations WHERE product_id=1 AND location IN ('Shop2 (သားကြီး)','Shop2 room','Shop2 shelf')").fetch_one(&pool).await?,4.0);
+    let mut remaining=draft("Cash",80000.0);remaining.location_id=Some(shop2.id);remaining.items[0].qty=4.0;remaining.expected_total=80000.0;
+    let second=complete_sale(&pool,&remaining,&actor).await?;
+    assert_eq!(s::query_scalar::<_,f64>("SELECT SUM(quantity)::float8 FROM product_locations WHERE product_id=1 AND location IN ('Shop2 (သားကြီး)','Shop2 room','Shop2 shelf')").fetch_one(&pool).await?,0.0);
+    assert_eq!(s::query_scalar::<_,f64>("SELECT quantity::float8 FROM product_locations WHERE product_id=1 AND location='Shop'").fetch_one(&pool).await?,10.0);
+    assert_eq!(s::query_scalar::<_,f64>("SELECT quantity::float8 FROM product_locations WHERE product_id=1 AND location='Shop child'").fetch_one(&pool).await?,7.0);
+    refund_sale(&pool,first.id,&actor).await?;refund_sale(&pool,second.id,&actor).await?;
+    assert_eq!(s::query_scalar::<_,f64>("SELECT stock::float8 FROM products WHERE id=1").fetch_one(&pool).await?,26.0);
+    assert_eq!(s::query_scalar::<_,f64>("SELECT SUM(quantity)::float8 FROM product_locations WHERE product_id=1 AND location IN ('Shop2 (သားကြီး)','Shop2 room','Shop2 shelf')").fetch_one(&pool).await?,9.0);
+    assert_eq!(s::query_scalar::<_,f64>("SELECT quantity::float8 FROM product_locations WHERE product_id=1 AND location='Shop'").fetch_one(&pool).await?,10.0);
+    assert_eq!(s::query_scalar::<_,f64>("SELECT quantity::float8 FROM product_locations WHERE product_id=1 AND location='Shop child'").fetch_one(&pool).await?,7.0);
     Ok(())
 }

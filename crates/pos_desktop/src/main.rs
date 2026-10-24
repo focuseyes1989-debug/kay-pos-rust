@@ -1551,6 +1551,23 @@ async fn refund_receipt_in_database(
     Ok(refund_sale(&pool, sale_id, &actor).await?)
 }
 
+fn use_checkout_defaults(
+    data: Resource<Result<(Vec<pos_core::customers::Customer>,HashMap<String,String>),String>>,
+    total:f64,sale_type:String,on_discount:EventHandler<String>,on_received:EventHandler<String>,
+) {
+    let mut defaults_applied=use_signal(||false);
+    live_search::use_resource_completion(data,move |result| {
+        if *defaults_applied.peek() {return;}
+        if let Ok((_,settings))=result {
+            defaults_applied.set(true);
+            let value=checkout_default_discount(&settings,total);
+            on_discount.call(format!("{value:.2}"));
+            on_received.call(checkout_default_received(&sale_type,
+                (total-value).max(0.0)+checkout_tax(&settings,total-value)));
+        }
+    });
+}
+
 #[component]
 fn CheckoutDialog(
     db_form: DbForm,
@@ -1570,10 +1587,8 @@ fn CheckoutDialog(
     on_cancel: EventHandler<()>,
     on_save: EventHandler<()>,
 ) -> Element {
-    let loading_sale_type = sale_type.clone();
     let checkout_data = use_resource(move || {
         let source = db_form.clone();
-        let initial_sale_type = loading_sale_type.clone();
         async move {
             let result = async {
                 let pool = connect(&source.database_config()?).await?;
@@ -1586,17 +1601,10 @@ fn CheckoutDialog(
                 Ok::<_, anyhow::Error>((customers, settings))
             }
             .await;
-            if let Ok((_, settings)) = &result {
-                let value = checkout_default_discount(settings, total);
-                on_discount.call(format!("{value:.2}"));
-                on_received.call(checkout_default_received(
-                    &initial_sale_type,
-                    (total - value).max(0.0) + checkout_tax(settings, total - value),
-                ));
-            }
             result.map_err(|e| format!("{e:#}"))
         }
     });
+    use_checkout_defaults(checkout_data,total,sale_type.clone(),on_discount,on_received);
     let loaded = checkout_data.read();
     let ready = matches!(loaded.as_ref(), Some(Ok(_)));
     let discount_editable = loaded
@@ -4160,5 +4168,38 @@ mod database_mode_tests {
         assert_eq!(a.identity().unwrap(),decoded.identity().unwrap());
         assert!(a.database_config().unwrap().database_url.starts_with("sqlite://"));
         assert_eq!(a.database_config().unwrap().max_connections,1);
+    }
+}
+
+#[cfg(test)]
+mod checkout_received_regression {
+    use super::*;
+    #[derive(Clone,Copy)]
+    struct State {sale_type:Signal<String>,received:Signal<String>,revision:Signal<i32>}
+    fn probe()->Element {
+        let sale_type=use_signal(||"Cash".to_string());
+        let mut received=use_signal(String::new);
+        let revision=use_signal(||0);
+        let data=use_resource(move ||{let _=revision();async move {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+            Ok((Vec::<pos_core::customers::Customer>::new(),HashMap::<String,String>::new()))
+        }});
+        use_checkout_defaults(data,80000.0,sale_type(),EventHandler::new(|_|{}),EventHandler::new(move |value|received.set(value)));
+        use_context_provider(move ||State{sale_type,received,revision});
+        rsx!{span {"{received}"}}
+    }
+    async fn pump(dom:&mut VirtualDom) {
+        let end=tokio::time::Instant::now()+Duration::from_millis(80);
+        loop {tokio::select!{_=dom.wait_for_work()=>{dom.render_immediate_to_vec();},_=tokio::time::sleep_until(end)=>break}}
+    }
+    #[tokio::test(flavor="current_thread")]
+    async fn credit_and_partial_payment_survive_catalog_defaults_refresh() {
+        let mut dom=VirtualDom::new(probe);dom.rebuild_in_place();
+        let mut state=dom.in_scope(ScopeId::APP,consume_context::<State>);
+        pump(&mut dom).await;assert_eq!(&*state.received.peek(),"80000.00");
+        state.sale_type.set("Credit".into());state.received.set("0".into());state.revision.set(1);
+        pump(&mut dom).await;assert_eq!(&*state.received.peek(),"0");
+        state.received.set("10000".into());state.revision.set(2);
+        pump(&mut dom).await;assert_eq!(&*state.received.peek(),"10000");
     }
 }
