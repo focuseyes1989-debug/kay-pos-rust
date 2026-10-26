@@ -11,6 +11,7 @@ pub(crate) fn sample_receipt() -> ReceiptData {
         image_data_url: None, variants: vec![], price_tiers: vec![],
     };
     ReceiptData {
+        customer:Some(pos_core::models::ReceiptCustomer{name:"Sample Customer".into(),address:"အမှတ် ၁၂၊ မန္တလေးမြို့".into()}),
         serials:Vec::new(),
         invoice_no: "PREVIEW-001".into(),
         lines: vec![CartLine { product, variant: None, qty: 2.0, unit_price_override: None, serials:Vec::new() }],

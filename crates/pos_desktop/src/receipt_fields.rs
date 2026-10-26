@@ -2,7 +2,7 @@ use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-pub const FIELDS: [(&str, &str); 17] = [
+pub const FIELDS: [(&str, &str); 19] = [
     ("logo", "Logo"),
     ("title", "Shop name"),
     ("phone", "Phone"),
@@ -10,6 +10,8 @@ pub const FIELDS: [(&str, &str); 17] = [
     ("header", "Header"),
     ("invoice", "Receipt number"),
     ("payment", "Payment method"),
+    ("customer", "Customer name"),
+    ("customer_address", "Customer address"),
     ("items", "Items"),
     ("subtotal", "Subtotal"),
     ("tax", "Tax"),
@@ -42,7 +44,7 @@ pub fn defaults() -> HashMap<String, String> {
         ("receipt_templates".into(), "[]".into()),
     ]);
     for (k, _) in FIELDS {
-        s.insert(format!("receipt_show_{k}"), "1".into());
+        s.insert(format!("receipt_show_{k}"), if matches!(k,"customer"|"customer_address"){"0"}else{"1"}.into());
     }
     for ((k, _), width) in COLUMNS.into_iter().zip([40, 15, 20, 25]) {
         s.insert(format!("receipt_column_{k}"), width.to_string());
@@ -52,7 +54,7 @@ pub fn defaults() -> HashMap<String, String> {
 }
 pub fn visible(s: &HashMap<String, String>, key: &str) -> bool {
     s.get(&format!("receipt_show_{key}"))
-        .is_none_or(|v| v != "0")
+        .map(|v|v!="0").unwrap_or(!matches!(key,"customer"|"customer_address"))
 }
 fn ordered(s: &HashMap<String, String>, key: &str, known: &[(&str, &str)]) -> Vec<String> {
     let mut order = Vec::new();
@@ -70,7 +72,15 @@ fn ordered(s: &HashMap<String, String>, key: &str, known: &[(&str, &str)]) -> Ve
     order
 }
 pub fn order(s: &HashMap<String, String>) -> Vec<String> {
-    ordered(s, "receipt_field_order", &FIELDS)
+    let mut values=ordered(s, "receipt_field_order", &FIELDS);
+    for key in ["customer","customer_address"] {
+        if s.get("receipt_field_order").is_some_and(|order|!order.split(',').any(|field|field==key)) {
+            values.retain(|field|field!=key);
+            let index=values.iter().position(|field|field=="items").unwrap_or(values.len());
+            values.insert(index,key.into());
+        }
+    }
+    values
 }
 pub fn columns(s: &HashMap<String, String>) -> Vec<(String, f64)> {
     ordered(s, "receipt_column_order", &COLUMNS)
@@ -470,4 +480,17 @@ mod tests {
         assert!(!t.contains_key("receipt_templates"));
         crate::receipt_editor::validate(&t).unwrap();
     }
+}
+
+#[component]
+pub fn CustomerVisibility(original:Vec<(String,String)>,mut draft:Signal<HashMap<String,String>>,disabled:bool)->Element {
+    let mut settings:HashMap<String,String>=original.into_iter().collect();
+    settings.extend(draft.read().clone());
+    rsx! {fieldset {class:"receipt_customer_visibility",
+        legend {"Customer on receipt"}
+        for (key,label) in [("customer","Show customer name"),("customer_address","Show customer address")] {
+            label {input {r#type:"checkbox",disabled,checked:visible(&settings,key),onchange:move |event|{draft.write().insert(format!("receipt_show_{key}"),if event.checked(){"1"}else{"0"}.into());}} span {"{label}"}}
+        }
+        small {"Select a customer at checkout. Empty names or addresses are omitted. Save settings to apply."}
+    }}
 }

@@ -145,8 +145,13 @@ pub struct ReceiptItemRow {
     pub total: f64,
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, sqlx::FromRow)]
+pub struct ReceiptCustomer { pub name: String, pub address: String }
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ReceiptDetail {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub customer: Option<ReceiptCustomer>,
     pub summary: SaleSummary,
     pub items: Vec<ReceiptItemRow>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

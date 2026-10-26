@@ -125,8 +125,10 @@ pub async fn submit(
     let pool = connect(&form.database_config()?).await?;
     let sale = complete_sale(&pool, &pending.draft, &actor).await?;
     let subtotal = pending.draft.items.iter().map(|i| i.qty * i.price).sum();
-    let serials=pos_core::warranty::receipt_serials(&pool,sale.id).await?;
+    let detail=pos_core::get_receipt_detail(&pool,sale.id).await?;
+    let serials=detail.serials;
     Ok(ReceiptData {
+        customer:detail.customer,
         serials,
         invoice_no: sale.invoice_no,
         lines: pending.lines,

@@ -1692,79 +1692,83 @@
     "sql": "INSERT INTO rust_checkout_requests(request_id,fingerprint,sale_id) VALUES($1,$2,NULL)"
   },
   {
-    "source": "sales.rs:447",
+    "source": "sales.rs:442",
+    "sql": "SELECT c.name,COALESCE(c.address,'') AS address FROM sales s JOIN customers c ON c.id=s.customer_id WHERE s.id=$1"
+  },
+  {
+    "source": "sales.rs:448",
     "sql": "SET LOCAL lock_timeout='10s'"
   },
   {
-    "source": "sales.rs:454",
+    "source": "sales.rs:455",
     "sql": "SELECT COALESCE(status,'completed'),COALESCE(payment_type,''),COALESCE(invoice_no,''),customer_id FROM sales WHERE id=$1 FOR UPDATE"
   },
   {
-    "source": "sales.rs:465",
+    "source": "sales.rs:466",
     "sql": "SELECT id FROM customers WHERE id=$1 FOR UPDATE"
   },
   {
-    "source": "sales.rs:470",
+    "source": "sales.rs:471",
     "sql": "SELECT id,total_amount::float8,COALESCE(paid_amount,0)::float8,COALESCE(balance_amount,0)::float8,COALESCE(status,'pending') FROM credit_sales WHERE customer_id=$1 AND (sale_id=$2 OR (sale_id IS NULL AND invoice_no=$3)) FOR UPDATE"
   },
   {
-    "source": "sales.rs:487",
+    "source": "sales.rs:488",
     "sql": "UPDATE customers SET current_balance=GREATEST(0,COALESCE(current_balance,0)-$1::float8) WHERE id=$2"
   },
   {
-    "source": "sales.rs:489",
+    "source": "sales.rs:490",
     "sql": "UPDATE credit_sales SET status='refunded',balance_amount=0,notes=COALESCE(notes,'') || ' [REFUNDED: Rust POS receipt refund]' WHERE id=$1"
   },
   {
-    "source": "sales.rs:492",
+    "source": "sales.rs:493",
     "sql": "INSERT INTO credit_payments(credit_sale_id,customer_id,amount,payment_date,payment_method,note) VALUES($1,$2,$3::float8,$4,'refund','Rust POS receipt refund') RETURNING id"
   },
   {
-    "source": "sales.rs:496",
+    "source": "sales.rs:497",
     "sql": "INSERT INTO credit_adjustments(customer_id,credit_sale_id,amount,adjustment_type,reason,created_by) VALUES($1,$2,$3::float8,'refund','Receipt refund',$4)"
   },
   {
-    "source": "sales.rs:499",
+    "source": "sales.rs:500",
     "sql": "SELECT product_id,variant_id,COALESCE(qty,0)::float8 AS qty,COALESCE(refunded_qty,0)::float8 AS refunded,location_id,location,COALESCE(batch_no,'') AS batch,COALESCE(expire_date,'') AS expiry FROM sale_items WHERE sale_id=$1 ORDER BY product_id,variant_id,id FOR UPDATE"
   },
   {
-    "source": "sales.rs:507",
+    "source": "sales.rs:508",
     "sql": "SELECT COALESCE(stock,0)::float8,COALESCE(sold_by,'Each') FROM products WHERE id=$1 FOR UPDATE"
   },
   {
-    "source": "sales.rs:514",
+    "source": "sales.rs:515",
     "sql": "SELECT COALESCE(stock,0)::float8 FROM product_variants WHERE id=$1 AND product_id=$2 FOR UPDATE"
   },
   {
-    "source": "sales.rs:521",
+    "source": "sales.rs:522",
     "sql": "UPDATE product_variants SET stock=COALESCE(stock,0)+$1,updated_at=$2 WHERE id=$3"
   },
   {
-    "source": "sales.rs:529",
+    "source": "sales.rs:530",
     "sql": "UPDATE products SET stock=COALESCE(stock,0)+$1,last_updated=$2 WHERE id=$3"
   },
   {
-    "source": "sales.rs:546",
+    "source": "sales.rs:547",
     "sql": "INSERT INTO variant_stock_batches(product_id,variant_id,location,batch_no,expire_date,quantity,expiry_unknown) VALUES($1,$2,$3,$4,$5,$6,0) ON CONFLICT(product_id,variant_id,location,batch_no,expire_date) DO UPDATE SET quantity=variant_stock_batches.quantity+EXCLUDED.quantity"
   },
   {
-    "source": "sales.rs:549",
+    "source": "sales.rs:550",
     "sql": "UPDATE product_locations SET quantity=COALESCE(quantity,0)+$1,last_updated=$2 WHERE id=$3 AND product_id=$4"
   },
   {
-    "source": "sales.rs:552",
+    "source": "sales.rs:553",
     "sql": "INSERT INTO product_locations(product_id,location,batch_no,expire_date,quantity) VALUES($1,$2,$3,$4,$5) ON CONFLICT(product_id,location,batch_no,expire_date) DO UPDATE SET quantity=product_locations.quantity+EXCLUDED.quantity,last_updated=EXCLUDED.last_updated"
   },
   {
-    "source": "sales.rs:557",
+    "source": "sales.rs:558",
     "sql": "INSERT INTO stock_movements(product_id,variant_id,type,quantity,old_stock,new_stock,reason,reference,created_by,location,created_at) VALUES($1,$2,'refund',$3,$4,$5,'Receipt refund',$6,$9,$7,$8)"
   },
   {
-    "source": "sales.rs:561",
+    "source": "sales.rs:562",
     "sql": "UPDATE sale_items SET refunded_qty=qty,refund_reason='Receipt refund' WHERE sale_id=$1"
   },
   {
-    "source": "sales.rs:566",
+    "source": "sales.rs:567",
     "sql": "UPDATE sales SET status='refunded' WHERE id=$1"
   },
   {

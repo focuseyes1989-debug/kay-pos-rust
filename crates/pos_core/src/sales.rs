@@ -439,7 +439,8 @@ pub async fn get_receipt_detail(pool: &PgPool, sale_id: i32) -> Result<ReceiptDe
     .context("failed to load receipt items")?;
 
     let serials=crate::warranty::receipt_serials(pool,sale_id).await?;
-    Ok(ReceiptDetail { summary, items, serials })
+    let customer=sqlx::query_as::<_,crate::models::ReceiptCustomer>("SELECT c.name,COALESCE(c.address,'') AS address FROM sales s JOIN customers c ON c.id=s.customer_id WHERE s.id=$1").bind(sale_id).fetch_optional(pool).await?;
+    Ok(ReceiptDetail { customer, summary, items, serials })
 }
 
 pub async fn refund_sale(pool: &PgPool, sale_id: i32, actor: &crate::auth::Session) -> Result<()> {

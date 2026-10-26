@@ -51,6 +51,11 @@ async fn standalone_credit_collection_retry_refund_and_reopen() -> Result<()> {
     let request = draft("Credit", 0.0);
     let receipt = complete_sale(&pool, &request, &actor).await?;
     assert_eq!(receipt.invoice_no, "INV000001");
+    let detail=pos_core::get_receipt_detail(&pool,receipt.id).await?;
+    let customer=pos_core::customers::list(&pool).await?.into_iter().find(|c|c.id==1).unwrap();
+    assert_eq!(detail.customer.as_ref().unwrap().name,customer.name);
+    assert_eq!(detail.customer.as_ref().unwrap().address,customer.address);
+
     assert_eq!(complete_sale(&pool, &request, &actor).await?.id, receipt.id);
     let balance: f64 = s::query_scalar("SELECT current_balance FROM customers WHERE id=1")
         .fetch_one(&pool)

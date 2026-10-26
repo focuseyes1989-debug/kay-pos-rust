@@ -170,8 +170,16 @@ fn totals(
         }
     }
 }
+fn customer_rows(rows:&mut Vec<Row>,customer:Option<&pos_core::models::ReceiptCustomer>) {
+    if let Some(customer)=customer {
+        for (key,label,value) in [("customer","Customer",customer.name.trim()),("customer_address","Customer address",customer.address.trim())] {
+            if !value.is_empty() {rows.push(field_row(key,"left",format!("{label}: {value}"),""));}
+        }
+    }
+}
 pub fn sale(receipt: &ReceiptData, settings: &HashMap<String, String>) -> Vec<Row> {
     let mut rows = header(settings, &receipt.invoice_no, &receipt.payment_type);
+    customer_rows(&mut rows,receipt.customer.as_ref());
     item_header(&mut rows, settings);
     for item in &receipt.lines {
         item_rows(
@@ -208,6 +216,7 @@ pub fn detail(receipt: &ReceiptDetail, settings: &HashMap<String, String>) -> Ve
         &invoice,
         summary.payment_type.as_deref().unwrap_or("Unknown"),
     );
+    customer_rows(&mut rows,receipt.customer.as_ref());
     item_header(&mut rows, settings);
     for item in &receipt.items {
         item_rows(
@@ -334,7 +343,7 @@ fn arrange(rows: &mut Vec<Row>, settings: &HashMap<String, String>) {
         });
         let group = |field: &str| match field {
             "logo" | "title" | "phone" | "address" | "header" => 0,
-            "invoice" | "payment" => 1,
+            "invoice" | "payment" | "customer" | "customer_address" => 1,
             "items" => 2,
             "footer" | "message" => 4,
             _ => 3,
@@ -385,10 +394,34 @@ mod tests {
     use super::*;
 
     #[test]
+    fn customer_fields_are_independent_optional_and_omit_blank_values() {
+        let mut receipt=crate::receipt_preview::sample_receipt();
+        let mut settings=HashMap::new();
+        assert!(!sale(&receipt,&settings).iter().any(|r|matches!(r.field.as_str(),"customer"|"customer_address")));
+        settings.insert("receipt_show_customer".into(),"1".into());
+        let rows=sale(&receipt,&settings);
+        assert!(rows.iter().any(|r|r.field=="customer"&&r.text.contains("Sample Customer")));
+        assert!(!rows.iter().any(|r|r.field=="customer_address"));
+        settings.insert("receipt_show_customer".into(),"0".into());
+        settings.insert("receipt_show_customer_address".into(),"1".into());
+        let rows=sale(&receipt,&settings);
+        assert!(!rows.iter().any(|r|r.field=="customer"));
+        assert!(rows.iter().any(|r|r.field=="customer_address"&&r.text.contains("မန္တလေး")));
+        receipt.customer.as_mut().unwrap().address="  ".into();
+        assert!(!sale(&receipt,&settings).iter().any(|r|r.field=="customer_address"));
+        receipt.customer=None;
+        settings.insert("receipt_show_customer".into(),"1".into());
+        assert!(!sale(&receipt,&settings).iter().any(|r|matches!(r.field.as_str(),"customer"|"customer_address")));
+        let legacy=HashMap::from([("receipt_field_order".into(),"invoice,payment,items,total".into())]);
+        let order=crate::receipt_fields::order(&legacy);
+        assert!(order.iter().position(|k|k=="customer_address")<order.iter().position(|k|k=="items"));
+    }
+    #[test]
     fn saved_receipt_and_historic_reprint_share_custom_layout() {
         let mut sale = crate::receipt_preview::sample_receipt();
         sale.serials=vec![pos_core::models::ReceiptSerial {product_name:"Sample item".into(),serial:"SN-<001>".into(),starts:"2026-01-31".into(),ends:"2028-01-31".into()}];
         let receipt = crate::ReceiptDetail {
+            customer:sale.customer.clone(),
             serials:sale.serials.clone(),
             summary: crate::SaleSummary {
                 id: 1,

@@ -169,3 +169,8 @@ body .shell .cart_sales_location .touch-combo-list button.touch-combo-option {
 .shell .summary_location_parent {background:var(--panel-soft,var(--panel));font-weight:600;}
 .shell .summary_location_parent button.summary_category_link {font-weight:600;text-align:left;}
 .shell .summary_location_child td:first-child {color:var(--muted);}
+
+.shell .receipt_customer_visibility {display:grid;gap:10px;margin:14px 0;min-width:0;}
+.shell .receipt_customer_visibility label {display:flex;align-items:center;gap:8px;}
+.shell .receipt_customer_visibility input[type="checkbox"] {flex:0 0 auto;}
+.shell .receipt_customer_visibility small {color:var(--muted);}

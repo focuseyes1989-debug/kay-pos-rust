@@ -85,6 +85,7 @@ struct CartLine {
 
 #[derive(Clone, PartialEq)]
 struct ReceiptData {
+    customer: Option<pos_core::models::ReceiptCustomer>,
     serials: Vec<pos_core::models::ReceiptSerial>,
     invoice_no: String,
     lines: Vec<CartLine>,
@@ -2242,6 +2243,7 @@ fn SettingsSection(
                     fieldset {
                         legend { "Receipt details" }
                         receipt_preview::ReceiptLogoPicker {original:original.clone(),draft,disabled:saving()}
+                        receipt_fields::CustomerVisibility {original:original.clone(),draft,disabled:saving()}
                         receipt_editor::ReceiptEditor {original:original.clone(),draft,disabled:saving()}
                         div { class: "tax_discount_inputs",
                             for (key, label) in [
