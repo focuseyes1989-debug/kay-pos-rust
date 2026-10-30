@@ -2424,7 +2424,7 @@ fn SettingsSection(
                 button { class: "settings_save", disabled: saving() || draft.read().is_empty(), onclick: move |_| {
                     let allowed = original.iter().map(|(key, _)| key).collect::<Vec<_>>();
                     let mut values = draft.read().iter().filter(|(key, _)| allowed.contains(key)).map(|(key, value)| (key.clone(), value.clone())).collect::<Vec<_>>();
-                    if title=="Receipt" {let mut merged:HashMap<String,String>=original.clone().into_iter().collect();merged.extend(draft.read().clone());if let Err(e)=receipt_editor::validate(&merged){error.set(true);notice.set(e.to_string());return;}}
+                    if title=="Receipt" {let mut merged:HashMap<String,String>=original.clone().into_iter().collect();merged.extend(draft.read().clone());if let Err(e)=receipt_editor::validate(&merged){error.set(true);notice.set(e.to_string());return;}draft.write().insert("receipt_field_order".into(),receipt_fields::order(&merged).join(","));}
                     if title == "Regional" {
                         if values.iter().any(|(key,_)|key=="language") {
                             values.push(("language_ui_version".into(),"1".into()));

@@ -246,10 +246,12 @@ pub fn validate(s: &HashMap<String, String>) -> anyhow::Result<()> {
         if let Some(v) = s.get(key) {
             let parts = v.split(',').collect::<Vec<_>>();
             anyhow::ensure!(
-                parts.len() == known.len()
-                    && known
-                        .iter()
-                        .all(|(k, _)| parts.iter().filter(|x| **x == *k).count() == 1),
+                parts.iter().all(|part|known.iter().any(|(k,_)|k==part))
+                    && parts.iter().all(|part|parts.iter().filter(|other|*other==part).count()==1)
+                    && known.iter().all(|(k,_)| {
+                        (key=="receipt_field_order" && matches!(*k,"customer"|"customer_address"))
+                            || parts.contains(k)
+                    }),
                 "Invalid field/column order"
             );
         }
@@ -324,6 +326,25 @@ pub fn ReceiptFields(
 mod tests {
     use super::*;
 
+    #[test]
+    fn legacy_receipt_orders_allow_customer_fields_without_resetting_layout() {
+        let legacy=FIELDS.iter().filter(|(k,_)|!matches!(*k,"customer"|"customer_address")).map(|(k,_)|*k).collect::<Vec<_>>().join(",");
+        let mut settings=defaults();
+        settings.insert("receipt_field_order".into(),legacy.clone());
+        settings.insert("receipt_show_customer_address".into(),"1".into());
+        validate(&settings).unwrap();
+        let upgraded=order(&settings);
+        assert_eq!(upgraded.len(),FIELDS.len());
+        assert_eq!(upgraded.iter().filter(|k|!matches!(k.as_str(),"customer"|"customer_address")).cloned().collect::<Vec<_>>().join(","),legacy);
+        settings.insert("receipt_field_order".into(),upgraded.join(","));
+        validate(&settings).unwrap();
+        for bad in [legacy.replace("items,",""),format!("{legacy},items"),format!("{legacy},unknown")] {
+            settings.insert("receipt_field_order".into(),bad);assert!(validate(&settings).is_err());
+        }
+        settings.insert("receipt_field_order".into(),legacy);
+        settings.insert("receipt_column_order".into(),"name,qty,price".into());
+        assert!(validate(&settings).is_err());
+    }
     #[test]
     fn drag_drop_preserves_each_field_and_column_once() {
         let defaults = crate::receipt_editor::defaults();
