@@ -23,6 +23,8 @@ fn SummaryDetails(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
     let mut to = use_signal(|| today.to_string());
     let mut range = use_signal(|| (today.to_string(), today.to_string()));
     let mut error = use_signal(String::new);
+    let mut output_busy=use_signal(||false);
+    let mut output_notice=use_signal(String::new);
     let mut tab = use_signal(|| 0usize);
     let mut expanded_locations=use_signal(std::collections::BTreeSet::<String>::new);
     let mut selected_category=use_signal(||None::<(String,String,String)>);
@@ -32,7 +34,8 @@ fn SummaryDetails(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
         let (from, to) = range();
         async move {
             async {
-                sale_summary::load(&connect(&source.database_config()?).await?, &from, &to).await
+                let report=sale_summary::load(&connect(&source.database_config()?).await?, &from, &to).await?;
+                Ok::<_,anyhow::Error>(((from,to),report))
             }
             .await
             .map_err(|e| format!("{e:#}"))
@@ -42,7 +45,7 @@ fn SummaryDetails(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
     let result = state
         .as_ref()
         .and_then(|r| r.as_ref().ok())
-        .cloned()
+        .map(|(_,report)|report.clone())
         .unwrap_or_default();
     let receipts: i64 = result.daily.iter().map(|r| r.receipts).sum();
     let sales: f64 = result.daily.iter().map(|r| r.sales).sum();
@@ -82,6 +85,15 @@ fn SummaryDetails(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
     }
     let expense_records: i64 = result.expenses.iter().map(|r| r.records).sum();
     let expense_amount: f64 = result.expenses.iter().map(|r| r.amount).sum();
+    let loaded_range=state.as_ref().and_then(|r|r.as_ref().ok()).map(|(dates,_)|dates.clone());
+    let output_ready=tab()==0 && data.finished() && loaded_range.as_ref()==Some(&range());
+    let daily_report=output_ready.then(|| {
+        let (from,to)=range();
+        let mut total=sale_summary::SummaryRow{label:"Total".into(),receipts,sales,discount,refunds,cost,estimated,..Default::default()};
+        total.gross=result.daily.iter().map(|row|row.gross).sum();
+        serde_json::json!({"from":from,"to":to,"rows":result.daily.iter().map(daily_cells).collect::<Vec<_>>(),
+            "total":daily_cells(&total),"estimated":estimated})
+    });
     rsx! {section {class:"customers_page products_touch summary_touch",
         header {class:"customers_header customers_touch_header",h2 {crate::icons::ActionLabel { label:"Sale Summary" }} div {class:"customers_actions",button { hidden:true, "data-page-refresh":"true", tabindex:-1, aria_hidden:"true",disabled:!data.finished(),onclick:move |_|data.restart(),"Refresh"}}}
         div {class:"summary_filters",
@@ -98,9 +110,33 @@ fn SummaryDetails(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
             }
             if estimated>0 {p {class:"summary_warning","Estimated cost: {estimated} item lines use current product/variant cost."}}
             div {class:"receipt_tabs summary_tabs",role:"tablist",for (index,label) in ["Daily","Payments","Categories (Sales)","Parent","Items","Categories (Expense)","Wholesale","Discount","Location"].iter().enumerate() {button {role:"tab",aria_selected:tab()==index,class:if tab()==index{"active"}else{""},onclick:move |_|tab.set(index),crate::icons::TabLabel {label:*label}}}}
+            if tab()==0 {
+                div {class:"customers_actions",
+                    for (pdf,label) in [(true,"Export PDF"),(false,"Print")] {
+                        button {r#type:"button",disabled:!output_ready||output_busy(),onclick:{
+                            let report=daily_report.clone();
+                            let dates=loaded_range.clone();
+                            move |_| {
+                                if output_busy()||!data.finished()||dates.as_ref()!=Some(&range()){return;}
+                                let Some(report)=report.clone() else{return};
+                                output_busy.set(true);output_notice.set(String::new());error.set(String::new());
+                                spawn(async move {
+                                    match output_daily(report,pdf).await {
+                                        Ok(message)=>output_notice.set(message),
+                                        Err(e)=>error.set(format!("{e:#}")),
+                                    }
+                                    output_busy.set(false);
+                                });
+                            }
+                        },crate::icons::ActionLabel {label}}
+                    }
+                    if output_busy(){span {role:"status","Preparing daily report..."}}
+                    else if !output_notice().is_empty(){span {role:"status","{output_notice}"}}
+                }
+            }
             if tab()<2 {
-            div {class:"summary_table",table {thead {tr {th {if tab()==1{"Payment method"}else{"Date"}} for title in ["Receipts","Sales","Item gross","Discount","Net sales","Cost of goods","Gross profit","Refunds"] {th {"{title}"}}}}
-                tbody {if rows.is_empty(){tr {td {colspan:"9","No sales in this date range."}}} for row in rows {tr {td {"{row.label}"} td {"{row.receipts}"} for value in [row.sales,row.gross,row.discount,row.gross-row.discount,row.cost,row.sales-row.cost,row.refunds] {td {{crate::format_ks(value)}}}}}}
+            div {class:"summary_table",table {thead {tr {th {if tab()==1{"Payment method"}else{"Date"}} for title in &DAILY_COLUMNS[1..] {th {"{title}"}}}}
+                tbody {if rows.is_empty(){tr {td {colspan:"9","No sales in this date range."}}} for row in rows {tr {for cell in daily_cells(row) {td {"{cell}"}}}}}
                 tfoot {tr {th {scope:"row","Total"} td {"{receipts}"} for value in [sales,gross,discount,gross-discount,cost,sales-cost,refunds] {td {{crate::format_ks(value)}}}}}
             }}
             } else if tab()==5 {
@@ -190,4 +226,35 @@ mod detail_loading_tests {
   while state.loaded.get()!=Some(42){tokio::select!{_=dom.wait_for_work()=>{dom.render_immediate_to_vec();},_=tokio::time::sleep_until(deadline)=>break}}
   assert_eq!(state.loaded.get(),Some(42),"resource completion must replace Loading receipt without another click");
  }
+}
+
+
+const DAILY_COLUMNS: [&str;9]=["Date","Receipts","Sales","Item gross","Discount","Net sales","Cost of goods","Gross profit","Refunds"];
+
+fn daily_cells(row:&sale_summary::SummaryRow)->Vec<String>{
+    let mut cells=vec![row.label.clone(),row.receipts.to_string()];
+    cells.extend([row.sales,row.gross,row.discount,row.gross-row.discount,row.cost,row.sales-row.cost,row.refunds].map(crate::format_ks));
+    cells
+}
+
+async fn output_daily(mut report:serde_json::Value,pdf:bool)->anyhow::Result<String>{
+    #[cfg(not(windows))]
+    { let _=(report,pdf); anyhow::bail!("Daily report output requires Windows"); }
+    #[cfg(windows)]
+    {
+        let destination=if pdf {
+            let name=format!("Daily Sales {} to {}.pdf",report["from"].as_str().unwrap_or(""),report["to"].as_str().unwrap_or(""));
+            let Some(file)=rfd::AsyncFileDialog::new().set_file_name(name).add_filter("PDF",&["pdf"]).save_file().await else {
+                return Ok("PDF export cancelled.".into());
+            };
+            Some(file.path().to_path_buf())
+        }else{None};
+        report["mode"]=if pdf {"pdf"}else{"print"}.into();
+        report["columns"]=serde_json::json!(DAILY_COLUMNS);
+        let path=destination.clone();
+        let sent=tokio::task::spawn_blocking(move ||crate::warranty_form::send_document(report,path,include_str!("../assets/sale-summary-print.ps1"))).await??;
+        Ok(if !sent {"Print cancelled.".into()}else if let Some(path)=destination {
+            format!("Daily sales PDF saved: {}",path.display())
+        }else{"Daily sales report sent to printer.".into()})
+    }
 }

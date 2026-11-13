@@ -41,7 +41,12 @@ pub async fn output(
 }
 
 #[cfg(windows)]
-fn send(mut payload: serde_json::Value, destination: Option<PathBuf>) -> anyhow::Result<bool> {
+fn send(payload: serde_json::Value, destination: Option<PathBuf>) -> anyhow::Result<bool> {
+    send_document(payload, destination, include_str!("../assets/warranty-form.ps1"))
+}
+
+#[cfg(windows)]
+pub(crate) fn send_document(mut payload: serde_json::Value, destination: Option<PathBuf>, script: &str) -> anyhow::Result<bool> {
     use std::{
         io::Write,
         os::windows::process::CommandExt,
@@ -51,7 +56,7 @@ fn send(mut payload: serde_json::Value, destination: Option<PathBuf>) -> anyhow:
     let temporary = if let Some(path) = &destination {
         Some(
             tempfile::Builder::new()
-                .prefix(".kay-warranty-")
+                .prefix(".kay-print-")
                 .suffix(".pdf")
                 .tempfile_in(path.parent().unwrap_or(std::path::Path::new(".")))?
                 .into_temp_path(),
@@ -68,10 +73,7 @@ fn send(mut payload: serde_json::Value, destination: Option<PathBuf>) -> anyhow:
             "-NonInteractive",
             "-STA",
             "-Command",
-            concat!(
-                "[Console]::InputEncoding=[System.Text.Encoding]::UTF8;\n",
-                include_str!("../assets/warranty-form.ps1")
-            ),
+            &format!("[Console]::InputEncoding=[System.Text.Encoding]::UTF8;\n{script}"),
         ])
         .creation_flags(0x08000000)
         .stdin(Stdio::piped())
@@ -86,7 +88,7 @@ fn send(mut payload: serde_json::Value, destination: Option<PathBuf>) -> anyhow:
     let result = child.wait_with_output()?;
     anyhow::ensure!(
         result.status.success(),
-        "Warranty form failed: {}",
+        "Document output failed: {}",
         String::from_utf8_lossy(&result.stderr)
     );
     if String::from_utf8_lossy(&result.stdout).contains("CANCELLED") {
