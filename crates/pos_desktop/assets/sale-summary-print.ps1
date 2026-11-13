@@ -31,6 +31,10 @@ function Row($g,$cells,$y,$font,$widths,$height) {
   $x+=$widths[$i]
  }
 }
+function RowHeight($g,$row,$widths) {
+ $height=[Math]::Ceiling($g.MeasureString([string]$row[0],$fonts.body,[Drawing.SizeF]::new(($widths[0]-4),100)).Height)+2
+ [Math]::Min(110,[Math]::Max(7,$height))
+}
 $doc=[Drawing.Printing.PrintDocument]::new()
 try {
  $doc.DocumentName='Sale Summary'
@@ -58,35 +62,51 @@ try {
   $script:page++
   Text $g 'Sale Summary' $fonts.title $ink 13 11 271 11
   Text $g ("Date range: "+$data.from+" to "+$data.to) $fonts.body $muted 13 24 271 7
-  $section=$data.sections[$script:sectionIndex]
-  $rows=@($section.rows)
-  $widths=switch($section.columns.Count){
-   3 {151;45;75}
-   9 {27;19;33;33;27;33;34;34;31}
-   10 {66;15;17;24;25;24;25;24;25;26}
-   default {throw 'Unexpected report columns.'}
-  }
-  Text $g $section.title $fonts.bold $ink 13 33 271 7
-  $g.FillRectangle([Drawing.Brushes]::AliceBlue,13,42,271,8)
-  Row $g $section.columns 42 $fonts.small $widths 8
-  $y=50
-  if(!$rows.Count){Text $g 'No records in this date range.' $fonts.body $muted 15 $y 267 7;$y+=7}
-  while($script:index -lt $rows.Count){
-   $row=$rows[$script:index]
-   $height=[Math]::Max(7,[Math]::Ceiling($g.MeasureString([string]$row[0],$fonts.body,[Drawing.SizeF]::new(($widths[0]-4),100)).Height)+2)
-   $height=[Math]::Min($height,110)
-   if($y+$height -gt 175){break}
-   Row $g $row $y $fonts.body $widths $height
-   $y+=$height
-   $g.DrawLine($line,13,$y,284,$y)
-   $script:index++
-  }
-  if($script:index -ge $rows.Count){
+  $y=33
+  $bottom=189
+  while($script:sectionIndex -lt $data.sections.Count){
+   $section=$data.sections[$script:sectionIndex]
+   $rows=@($section.rows)
+   $widths=switch($section.columns.Count){
+    3 {151;45;75}
+    9 {27;19;33;33;27;33;34;34;31}
+    10 {66;15;17;24;25;24;25;24;25;26}
+    default {throw 'Unexpected report columns.'}
+   }
+   $showEstimate=$script:sectionIndex -eq 0 -and $data.estimated -gt 0
+   $tail=7
+   if($showEstimate){$tail+=8}
+   $firstHeight=7
+   if($rows.Count){$firstHeight=RowHeight $g $rows[$script:index] $widths}
+   $needed=15+$firstHeight
+   if($script:index+1 -ge $rows.Count){$needed+=$tail}
+   if($y+$needed -gt $bottom){break}
+   $heading=$section.title
+   if($script:index -gt 0){$heading+=' (continued)'}
+   Text $g $heading $fonts.bold $ink 13 $y 271 7
+   $y+=7
+   $g.FillRectangle([Drawing.Brushes]::AliceBlue,13,$y,271,8)
+   Row $g $section.columns $y $fonts.small $widths 8
+   $y+=8
+   if(!$rows.Count){Text $g 'No records in this date range.' $fonts.body $muted 15 $y 267 7;$y+=7}
+   while($script:index -lt $rows.Count){
+    $row=$rows[$script:index]
+    $height=RowHeight $g $row $widths
+    $needed=$height
+    if($script:index+1 -eq $rows.Count){$needed+=$tail}
+    if($y+$needed -gt $bottom){break}
+    Row $g $row $y $fonts.body $widths $height
+    $y+=$height
+    $g.DrawLine($line,13,$y,284,$y)
+    $script:index++
+   }
+   if($script:index -lt $rows.Count){break}
    $g.FillRectangle([Drawing.Brushes]::AliceBlue,13,$y,271,7)
    Row $g $section.total $y $fonts.bold $widths 7
-   if($script:sectionIndex -eq 0 -and $data.estimated -gt 0){
+   if($showEstimate){
     Text $g ("Estimated cost: "+$data.estimated+" item lines use current product/variant cost.") $fonts.small $muted 13 ($y+8) 271 6
    }
+   $y+=$tail+5
    $script:sectionIndex++
    $script:index=0
   }

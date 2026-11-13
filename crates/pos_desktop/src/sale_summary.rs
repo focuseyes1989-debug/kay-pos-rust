@@ -93,6 +93,9 @@ fn SummaryDetails(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
             crate::date_range::DateRangePicker { from:from(), to:to(), disabled:!data.finished(), onchange:move |(a,b):(String,String)|{from.set(a.clone());to.set(b.clone());error.set(String::new());range.set((a,b));} }
             crate::date_range::DateRangeShortcuts { disabled:!data.finished(), onchange:move |(a,b):(String,String)|{from.set(a.clone());to.set(b.clone());error.set(String::new());range.set((a,b));} }
         }
+        if !output_notice().is_empty(){
+            crate::MessageBox {title:"Sale Summary".to_string(),message:output_notice(),on_close:move |_|output_notice.set(String::new())}
+        }
         if !error().is_empty(){p {role:"alert","{error}"}}
         if !data.finished(){div {class:"product_loading",role:"status",span {class:"loading_spinner"} strong {"Loading..."}}}
         else if let Some(Err(e))=state.as_ref(){p {role:"alert","{e}"}}
@@ -127,7 +130,7 @@ fn SummaryDetails(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
                         },crate::icons::ActionLabel {label}}
                     }
                     if output_busy(){span {role:"status","Preparing full report..."}}
-                    else if !output_notice().is_empty(){span {role:"status","{output_notice}"}}
+
                 }
             if tab()<2 {
             div {class:"summary_table",table {thead {tr {th {if tab()==1{"Payment method"}else{"Date"}} for title in &DAILY_COLUMNS[1..] {th {"{title}"}}}}
