@@ -86,14 +86,7 @@ fn SummaryDetails(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
     let expense_records: i64 = result.expenses.iter().map(|r| r.records).sum();
     let expense_amount: f64 = result.expenses.iter().map(|r| r.amount).sum();
     let loaded_range=state.as_ref().and_then(|r|r.as_ref().ok()).map(|(dates,_)|dates.clone());
-    let output_ready=tab()==0 && data.finished() && loaded_range.as_ref()==Some(&range());
-    let daily_report=output_ready.then(|| {
-        let (from,to)=range();
-        let mut total=sale_summary::SummaryRow{label:"Total".into(),receipts,sales,discount,refunds,cost,estimated,..Default::default()};
-        total.gross=result.daily.iter().map(|row|row.gross).sum();
-        serde_json::json!({"from":from,"to":to,"rows":result.daily.iter().map(daily_cells).collect::<Vec<_>>(),
-            "total":daily_cells(&total),"estimated":estimated})
-    });
+    let output_ready=data.finished() && loaded_range.as_ref()==Some(&range());
     rsx! {section {class:"customers_page products_touch summary_touch",
         header {class:"customers_header customers_touch_header",h2 {crate::icons::ActionLabel { label:"Sale Summary" }} div {class:"customers_actions",button { hidden:true, "data-page-refresh":"true", tabindex:-1, aria_hidden:"true",disabled:!data.finished(),onclick:move |_|data.restart(),"Refresh"}}}
         div {class:"summary_filters",
@@ -110,18 +103,21 @@ fn SummaryDetails(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
             }
             if estimated>0 {p {class:"summary_warning","Estimated cost: {estimated} item lines use current product/variant cost."}}
             div {class:"receipt_tabs summary_tabs",role:"tablist",for (index,label) in ["Daily","Payments","Categories (Sales)","Parent","Items","Categories (Expense)","Wholesale","Discount","Location"].iter().enumerate() {button {role:"tab",aria_selected:tab()==index,class:if tab()==index{"active"}else{""},onclick:move |_|tab.set(index),crate::icons::TabLabel {label:*label}}}}
-            if tab()==0 {
                 div {class:"customers_actions",
-                    for (pdf,label) in [(true,"Export PDF"),(false,"Print")] {
+                    for (pdf,label) in [(true,"Export Full PDF"),(false,"Print Full Report")] {
                         button {r#type:"button",disabled:!output_ready||output_busy(),onclick:{
-                            let report=daily_report.clone();
                             let dates=loaded_range.clone();
                             move |_| {
                                 if output_busy()||!data.finished()||dates.as_ref()!=Some(&range()){return;}
-                                let Some(report)=report.clone() else{return};
+                                let report={
+                                    let state=data.read();
+                                    let Some(Ok(((from,to),summary)))=state.as_ref() else{return};
+                                    if (from.clone(),to.clone())!=range(){return;}
+                                    full_report(from,to,summary)
+                                };
                                 output_busy.set(true);output_notice.set(String::new());error.set(String::new());
                                 spawn(async move {
-                                    match output_daily(report,pdf).await {
+                                    match output_report(report,pdf).await {
                                         Ok(message)=>output_notice.set(message),
                                         Err(e)=>error.set(format!("{e:#}")),
                                     }
@@ -130,10 +126,9 @@ fn SummaryDetails(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
                             }
                         },crate::icons::ActionLabel {label}}
                     }
-                    if output_busy(){span {role:"status","Preparing daily report..."}}
+                    if output_busy(){span {role:"status","Preparing full report..."}}
                     else if !output_notice().is_empty(){span {role:"status","{output_notice}"}}
                 }
-            }
             if tab()<2 {
             div {class:"summary_table",table {thead {tr {th {if tab()==1{"Payment method"}else{"Date"}} for title in &DAILY_COLUMNS[1..] {th {"{title}"}}}}
                 tbody {if rows.is_empty(){tr {td {colspan:"9","No sales in this date range."}}} for row in rows {tr {for cell in daily_cells(row) {td {"{cell}"}}}}}
@@ -237,24 +232,73 @@ fn daily_cells(row:&sale_summary::SummaryRow)->Vec<String>{
     cells
 }
 
-async fn output_daily(mut report:serde_json::Value,pdf:bool)->anyhow::Result<String>{
+fn full_report(from:&str,to:&str,summary:&sale_summary::Summary)->serde_json::Value {
+    use serde_json::json;
+    let section=|title:&str, columns:Vec<&str>, rows:Vec<Vec<String>>, total:Vec<String>| {
+        json!({"title":title,"columns":columns,"rows":rows,"total":total})
+    };
+    let summary_total=|rows:&[sale_summary::SummaryRow]| {
+        let mut total=sale_summary::SummaryRow{label:"Total".into(),..Default::default()};
+        for r in rows {
+            total.receipts+=r.receipts;total.sales+=r.sales;total.gross+=r.gross;
+            total.discount+=r.discount;total.cost+=r.cost;total.refunds+=r.refunds;
+        }
+        daily_cells(&total)
+    };
+    let group_cells=|label:String,receipts:i64,quantity:f64,gross:f64,discount:f64,net:f64,cost:f64,savings:f64| {
+        let mut cells=vec![label,receipts.to_string(),crate::format_qty(quantity)];
+        cells.extend([gross,discount,net,cost,net-cost,savings].map(crate::format_ks));
+        cells
+    };
+    let row_cells=|row:&sale_summary::GroupRow,label:String| group_cells(label,row.receipts,row.quantity,row.gross,row.discount,row.net,row.cost,row.savings);
+    let group=|title:&str,index:usize| {
+        let source=summary.groups.get(index).map(Vec::as_slice).unwrap_or_default();
+        let mut total=[0.;6];
+        for r in source {
+            for (t,v) in total.iter_mut().zip([r.quantity,r.gross,r.discount,r.net,r.cost,r.savings]) {*t+=v;}
+        }
+        let count=summary.group_receipts.get(index).copied().unwrap_or(0);
+        let rows=if index==5 {
+            summary.location_groups.iter().flat_map(|parent| {
+                std::iter::once(row_cells(&parent.total,parent.total.label.clone())).chain(
+                    parent.children.iter().map(|(row,depth)|row_cells(row,format!("{}- {}","  ".repeat(*depth),row.label)))
+                )
+            }).collect()
+        }else{source.iter().map(|r|row_cells(r,r.label.clone())).collect()};
+        section(title,vec![if index==5{"Location"}else{"Name"},"Receipts","Quantity","Item gross","Alloc. discount","Net sales","Cost of goods","Net less cost","Wholesale savings"],
+            rows,group_cells("Total".into(),count,total[0],total[1],total[2],total[3],total[4],total[5]))
+    };
+    let mut payment_columns=DAILY_COLUMNS.to_vec();
+    payment_columns[0]="Payment method";
+    let expenses=summary.expenses.iter().map(|r|vec![r.label.clone(),r.records.to_string(),crate::format_ks(r.amount)]).collect();
+    let expense_total=vec!["Total".into(),summary.expenses.iter().map(|r|r.records).sum::<i64>().to_string(),
+        crate::format_ks(summary.expenses.iter().map(|r|r.amount).sum())];
+    json!({"from":from,"to":to,"estimated":summary.daily.iter().map(|r|r.estimated).sum::<i64>(),"sections":[
+        section("Daily",DAILY_COLUMNS.to_vec(),summary.daily.iter().map(daily_cells).collect(),summary_total(&summary.daily)),
+        section("Payments",payment_columns,summary.payments.iter().map(daily_cells).collect(),summary_total(&summary.payments)),
+        group("Categories (Sales)",0),group("Parent",1),group("Items",2),
+        section("Categories (Expense)",vec!["Expense category","Records","Total expense"],expenses,expense_total),
+        group("Wholesale",3),group("Discount",4),group("Location",5)
+    ]})
+}
+
+async fn output_report(mut report:serde_json::Value,pdf:bool)->anyhow::Result<String>{
     #[cfg(not(windows))]
-    { let _=(report,pdf); anyhow::bail!("Daily report output requires Windows"); }
+    { let _=(report,pdf); anyhow::bail!("Sale Summary output requires Windows"); }
     #[cfg(windows)]
     {
         let destination=if pdf {
-            let name=format!("Daily Sales {} to {}.pdf",report["from"].as_str().unwrap_or(""),report["to"].as_str().unwrap_or(""));
+            let name=format!("Sale Summary {} to {}.pdf",report["from"].as_str().unwrap_or(""),report["to"].as_str().unwrap_or(""));
             let Some(file)=rfd::AsyncFileDialog::new().set_file_name(name).add_filter("PDF",&["pdf"]).save_file().await else {
                 return Ok("PDF export cancelled.".into());
             };
             Some(file.path().to_path_buf())
         }else{None};
         report["mode"]=if pdf {"pdf"}else{"print"}.into();
-        report["columns"]=serde_json::json!(DAILY_COLUMNS);
         let path=destination.clone();
         let sent=tokio::task::spawn_blocking(move ||crate::warranty_form::send_document(report,path,include_str!("../assets/sale-summary-print.ps1"))).await??;
         Ok(if !sent {"Print cancelled.".into()}else if let Some(path)=destination {
-            format!("Daily sales PDF saved: {}",path.display())
-        }else{"Daily sales report sent to printer.".into()})
+            format!("Sale Summary PDF saved: {}",path.display())
+        }else{"Sale Summary report sent to printer.".into()})
     }
 }
