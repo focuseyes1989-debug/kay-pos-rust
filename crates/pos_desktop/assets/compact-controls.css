@@ -129,6 +129,10 @@ body .shell.shell.shell.shell input[type="search"]:not(.touch-combo-input):not(.
   padding-top:8px!important;padding-bottom:0!important;padding-left:30px!important;padding-right:10px;
   background-position:8px center!important;
 }
+/* The asymmetric padding lowers text by 4px. Keep the native clear icon centered. */
+body .shell input[type="search"]:not(.touch-combo-input):not(.sales_search_ghost_field)::-webkit-search-cancel-button {
+  transform:translateY(-4px);
+}
 body .shell.shell.shell.shell input[type="search"]:not(.touch-combo-input):not(.sales_search_ghost_field):focus-visible {
   outline:2px solid var(--shop-focus,var(--accent));outline-offset:1px;
 }
