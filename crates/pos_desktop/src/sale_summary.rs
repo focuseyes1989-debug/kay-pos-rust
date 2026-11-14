@@ -254,21 +254,16 @@ fn full_report(from:&str,to:&str,summary:&sale_summary::Summary)->serde_json::Va
         cells
     };
     let row_cells=|row:&sale_summary::GroupRow,label:String| group_cells(label,row.receipts,row.quantity,row.gross,row.discount,row.net,row.cost,row.savings);
-    let group=|title:&str,index:usize| {
+    let parent_section=|| {
+        let index=1;
         let source=summary.groups.get(index).map(Vec::as_slice).unwrap_or_default();
         let mut total=[0.;6];
         for r in source {
             for (t,v) in total.iter_mut().zip([r.quantity,r.gross,r.discount,r.net,r.cost,r.savings]) {*t+=v;}
         }
         let count=summary.group_receipts.get(index).copied().unwrap_or(0);
-        let rows=if index==5 {
-            summary.location_groups.iter().flat_map(|parent| {
-                std::iter::once(row_cells(&parent.total,parent.total.label.clone())).chain(
-                    parent.children.iter().map(|(row,depth)|row_cells(row,format!("{}- {}","  ".repeat(*depth),row.label)))
-                )
-            }).collect()
-        }else{source.iter().map(|r|row_cells(r,r.label.clone())).collect()};
-        section(title,vec![if index==5{"Location"}else{"Name"},"Receipts","Quantity","Item gross","Alloc. discount","Net sales","Cost of goods","Net less cost","Wholesale savings"],
+        let rows=source.iter().map(|r|row_cells(r,r.label.clone())).collect();
+        section("Parent",vec!["Name","Receipts","Quantity","Item gross","Alloc. discount","Net sales","Cost of goods","Net less cost","Wholesale savings"],
             rows,group_cells("Total".into(),count,total[0],total[1],total[2],total[3],total[4],total[5]))
     };
     let mut payment_columns=DAILY_COLUMNS.to_vec();
@@ -279,9 +274,8 @@ fn full_report(from:&str,to:&str,summary:&sale_summary::Summary)->serde_json::Va
     json!({"from":from,"to":to,"estimated":summary.daily.iter().map(|r|r.estimated).sum::<i64>(),"sections":[
         section("Daily",DAILY_COLUMNS.to_vec(),summary.daily.iter().map(daily_cells).collect(),summary_total(&summary.daily)),
         section("Payments",payment_columns,summary.payments.iter().map(daily_cells).collect(),summary_total(&summary.payments)),
-        group("Categories (Sales)",0),group("Parent",1),group("Items",2),
-        section("Categories (Expense)",vec!["Expense category","Records","Total expense"],expenses,expense_total),
-        group("Wholesale",3),group("Discount",4),group("Location",5)
+        parent_section(),
+        section("Categories (Expense)",vec!["Expense category","Records","Total expense"],expenses,expense_total)
     ]})
 }
 
