@@ -29,8 +29,14 @@ pub async fn load(pool: &PgPool, actor: &Session, from: &str, to: &str) -> Resul
     sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY").execute(&mut *tx).await?;
     sqlx::query("SET LOCAL statement_timeout='20s'").execute(&mut *tx).await?;
     actor.authorize(&mut tx, Permission::Manage).await?;
-    let period = sqlx::query_as(include_str!("dashboard_period.sql"))
+    let mut period:Vec<Row> = sqlx::query_as(include_str!("dashboard_period.sql"))
         .bind(start.to_string()).bind(end.to_string()).fetch_all(&mut *tx).await?;
+    let completed_count=period.iter().find(|row|row.label=="Completed sales").map_or(0,|row|row.count);
+    period.insert(1,Row {
+        label:"Received at checkout".into(),
+        amount:crate::sale_summary::received_at_checkout(&mut tx,start,end).await?,
+        count:completed_count,
+    });
     let daily = sqlx::query_as("SELECT to_char(created_at,'YYYY-MM-DD') AS label,COALESCE(SUM(total),0)::float8 AS amount,COUNT(*) AS count FROM sales WHERE status='completed' AND created_at >= $1 AND created_at < $2 GROUP BY 1 ORDER BY 1")
         .bind(start.and_hms_opt(0,0,0).unwrap()).bind(end.and_hms_opt(0,0,0).unwrap()).fetch_all(&mut *tx).await?;
     let hourly_rows: Vec<Row> = sqlx::query_as(HOURLY_SQL)

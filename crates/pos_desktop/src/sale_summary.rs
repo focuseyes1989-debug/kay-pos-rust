@@ -269,14 +269,50 @@ fn full_report(from:&str,to:&str,summary:&sale_summary::Summary)->serde_json::Va
     let mut payment_columns=DAILY_COLUMNS.to_vec();
     payment_columns[0]="Payment method";
     let expenses=summary.expenses.iter().map(|r|vec![r.label.clone(),r.records.to_string(),crate::format_ks(r.amount)]).collect();
+    let recorded_expenses=summary.expenses.iter().map(|r|r.amount).sum::<f64>();
     let expense_total=vec!["Total".into(),summary.expenses.iter().map(|r|r.records).sum::<i64>().to_string(),
-        crate::format_ks(summary.expenses.iter().map(|r|r.amount).sum())];
-    json!({"from":from,"to":to,"estimated":summary.daily.iter().map(|r|r.estimated).sum::<i64>(),"sections":[
+        crate::format_ks(recorded_expenses)];
+    let mut report=json!({"from":from,"to":to,"estimated":summary.daily.iter().map(|r|r.estimated).sum::<i64>(),"sections":[
         section("Daily",DAILY_COLUMNS.to_vec(),summary.daily.iter().map(daily_cells).collect(),summary_total(&summary.daily)),
         section("Payments",payment_columns,summary.payments.iter().map(daily_cells).collect(),summary_total(&summary.payments)),
         parent_section(),
-        section("Categories (Expense)",vec!["Expense category","Records","Total expense"],expenses,expense_total)
-    ]})
+        section("Categories (Expense)",vec!["Expense category","Records","Total expense"],expenses,expense_total),
+        json!({
+            "title":"Cash Drawer Balance","columns":["Description","Amount"],
+            "rows":[["Received at checkout", &crate::format_ks(summary.received_at_checkout)],
+                    ["Recorded expenses", &crate::format_ks(recorded_expenses)]],
+            "total":["Cash Drawer Balance", &crate::format_ks(summary.received_at_checkout-recorded_expenses)],
+            "note":"Calculated as received at checkout minus recorded expenses. Includes non-cash payments."
+        })
+    ]});
+    let today=chrono::Local::now().date_naive().to_string();
+    if from==today && to==today {
+        compact_today(&mut report);
+    }
+    report
+}
+
+fn compact_today(report:&mut serde_json::Value) {
+    report["portrait"]=true.into();
+    let sections=report["sections"].as_array_mut().expect("report sections");
+    for (section, (keep, limit)) in sections.iter_mut().zip([
+        (&[0,1,2,4,7,8][..],1),
+        (&[0,1,2][..],4),
+        (&[0,1,5,6,7][..],8),
+        (&[0,1,2][..],6),
+        (&[0,1][..],2),
+    ]) {
+        let select=|cells:&serde_json::Value| serde_json::Value::Array(keep.iter().map(|&i|cells[i].clone()).collect());
+        section["columns"]=select(&section["columns"]);
+        section["total"]=select(&section["total"]);
+        let rows=section["rows"].as_array_mut().expect("report rows");
+        let count=rows.len();
+        rows.truncate(limit);
+        for row in rows {*row=select(row);}
+        if count>limit {
+            section["title"]=format!("{} ({} of {} rows; total includes all)",section["title"].as_str().unwrap_or(""),limit,count).into();
+        }
+    }
 }
 
 async fn output_report(mut report:serde_json::Value,pdf:bool)->anyhow::Result<String>{

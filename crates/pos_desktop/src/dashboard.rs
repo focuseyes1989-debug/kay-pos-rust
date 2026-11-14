@@ -130,6 +130,19 @@ pub fn DashboardPage(db_form: DbForm, actor: pos_core::auth::Session, on_navigat
                             }
                         }
                     }
+                    if let (Some(received),Some(expenses))=(
+                        summary.period.iter().find(|r|r.label=="Received at checkout"),
+                        summary.period.iter().find(|r|r.label=="Recorded expenses"),
+                    ) {
+                        article {class:"dashboard_metric", "data-metric":"Cash Drawer Balance",
+                            title:"Received at checkout minus recorded expenses for the selected period. Includes non-cash payments.",
+                            div {class:"dashboard_metric_heading",
+                                small {crate::icons::CardLabel {label:"Cash Drawer Balance".to_string()}}
+                                small {class:"dashboard_metric_count","Calculated"}
+                            }
+                            strong {"{format_ks(received.amount-expenses.amount)}"}
+                        }
+                    }
                 }
                 div {class:"dashboard_charts",
                     section {class:"dashboard_chart_card",

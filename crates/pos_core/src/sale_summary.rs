@@ -16,6 +16,7 @@ pub struct SummaryRow {
 }
 #[derive(Clone, Default)]
 pub struct Summary {
+    pub received_at_checkout: f64,
     pub daily: Vec<SummaryRow>,
     pub payments: Vec<SummaryRow>,
     pub groups: Vec<Vec<GroupRow>>,
@@ -123,6 +124,13 @@ pub fn dates(from: &str, to: &str) -> Result<(NaiveDate, NaiveDate)> {
             .ok_or_else(|| anyhow::anyhow!("Invalid end date"))?,
     ))
 }
+pub(crate) async fn received_at_checkout(connection:&mut sqlx::PgConnection,start:NaiveDate,end:NaiveDate)->Result<f64>{
+    Ok(sqlx::query_scalar("SELECT COALESCE(SUM(CASE WHEN COALESCE(payment,0)>COALESCE(change_amount,0) THEN COALESCE(payment,0)-COALESCE(change_amount,0) ELSE 0 END),0)::float8 FROM sales WHERE status='completed' AND created_at >= $1 AND created_at < $2")
+        .bind(start.and_hms_opt(0,0,0).unwrap())
+        .bind(end.and_hms_opt(0,0,0).unwrap())
+        .fetch_one(connection).await?)
+}
+
 pub async fn load(pool: &PgPool, from: &str, to: &str) -> Result<Summary> {
     let (start, end) = dates(from, to)?;
     let locations=crate::locations::list_names(pool).await?;
@@ -131,6 +139,7 @@ pub async fn load(pool: &PgPool, from: &str, to: &str) -> Result<Summary> {
         .execute(&mut *tx)
         .await?;
     let mut result = Summary::default();
+    result.received_at_checkout=received_at_checkout(&mut tx,start,end).await?;
     for (field, daily) in [
         ("to_char(s.created_at,'YYYY-MM-DD')", true),
         ("COALESCE(NULLIF(s.payment_type,''),'Other')", false),

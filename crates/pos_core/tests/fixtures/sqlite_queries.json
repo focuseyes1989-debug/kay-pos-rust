@@ -532,31 +532,31 @@
     "sql": "SET LOCAL statement_timeout='20s'"
   },
   {
-    "source": "dashboard.rs:34",
+    "source": "dashboard.rs:40",
     "sql": "SELECT to_char(created_at,'YYYY-MM-DD') AS label,COALESCE(SUM(total),0)::float8 AS amount,COUNT(*) AS count FROM sales WHERE status='completed' AND created_at >= $1 AND created_at < $2 GROUP BY 1 ORDER BY 1"
   },
   {
-    "source": "dashboard.rs:42",
+    "source": "dashboard.rs:48",
     "sql": "SELECT COALESCE(name,'Customer') || ' #' || id::text AS label,current_balance::float8 AS amount,1::bigint AS count FROM customers WHERE current_balance>0 ORDER BY current_balance DESC,id"
   },
   {
-    "source": "dashboard.rs:46",
+    "source": "dashboard.rs:52",
     "sql": "SELECT COALESCE(s.name,'Supplier') || ' #' || s.id::text AS label,COALESCE(SUM(CASE WHEN p.payment_type='Purchase' THEN p.amount WHEN p.payment_type<>'Purchase' THEN -p.amount ELSE 0 END),0)::float8 AS amount,COUNT(p.id) AS count FROM suppliers s JOIN supplier_payments p ON p.supplier_id=s.id GROUP BY s.id,s.name HAVING SUM(CASE WHEN p.payment_type='Purchase' THEN p.amount WHEN p.payment_type<>'Purchase' THEN -p.amount ELSE 0 END)<>0 ORDER BY amount DESC,s.id"
   },
   {
-    "source": "dashboard.rs:48",
+    "source": "dashboard.rs:54",
     "sql": "\n        SELECT 'Open service orders'::text AS label,0::float8 AS amount,COUNT(*) AS count FROM service_orders WHERE status NOT IN ('delivered','cancelled')\n        UNION ALL SELECT 'Outstanding invoices',COALESCE(SUM(balance_amount),0)::float8,COUNT(*) FROM credit_sales WHERE balance_amount>0 AND COALESCE(status,'pending')<>'refunded'\n        UNION ALL SELECT 'Overdue invoices',COALESCE(SUM(balance_amount),0)::float8,COUNT(*) FROM credit_sales WHERE balance_amount>0 AND COALESCE(status,'pending')<>'refunded' AND NULLIF(due_date,'')<to_char(CURRENT_DATE,'YYYY-MM-DD')\n        UNION ALL SELECT 'Credit marked fully paid (period)',COALESCE(SUM(total),0)::float8,COUNT(*) FROM sales WHERE status='completed' AND lower(trim(payment_type))='credit' AND payment>=total AND total>0 AND created_at >= $1 AND created_at < $2\n    "
   },
   {
-    "source": "dashboard.rs:55",
+    "source": "dashboard.rs:61",
     "sql": "SELECT 'Purchase orders without ledger entries'::text AS label,COALESCE(SUM(total_amount),0)::float8 AS amount,COUNT(*) AS count FROM purchase_orders po WHERE NOT EXISTS(SELECT 1 FROM supplier_payments sp WHERE sp.purchase_order_id=po.id)"
   },
   {
-    "source": "dashboard.rs:56",
+    "source": "dashboard.rs:62",
     "sql": "SELECT 'Active employees'::text AS label,0::float8 AS amount,COUNT(*) AS count FROM employees WHERE lower(employment_status)='active'"
   },
   {
-    "source": "dashboard.rs:58",
+    "source": "dashboard.rs:64",
     "sql": "SELECT to_regclass($1) IS NOT NULL"
   },
   {
@@ -1604,23 +1604,27 @@
     "sql": "INSERT INTO stock_movements(product_id,variant_id,type,quantity,old_stock,new_stock,reason,reference,created_by,location) VALUES($1,$2,'sale',$3,$4,$5,'POS sale',$6,$7,'Multiple batches')"
   },
   {
-    "source": "sale_summary.rs:85",
+    "source": "sale_summary.rs:86",
     "sql": "\nWITH window_sales AS (\n SELECT * FROM sales WHERE status='completed' AND created_at >= $1 AND created_at < $2\n), raw AS (\n SELECT s.id AS sale_id,si.id AS line_id,\n COALESCE(si.product_name,'[Receipt without items]') AS item,\n COALESCE(NULLIF(TRIM(si.location),''),'Legacy / unassigned') AS location,\n COALESCE(c.name,p.category,'Uncategorized') AS category,\n COALESCE(parent.name,c.name,p.category,'Uncategorized') AS parent,\n COALESCE(si.qty,0)::numeric AS quantity,\n (COALESCE(si.qty,0)*COALESCE(si.price,0))::numeric AS gross,\n (COALESCE(si.qty,0)*COALESCE(si.cost,v.cost,p.cost,0))::numeric AS cost,\n COALESCE(s.discount_amount,0)::numeric AS header_discount,\n COALESCE(si.wholesale_savings,0)::numeric AS savings,\n COALESCE(si.wholesale_tier_min_qty,0) AS tier\n FROM window_sales s LEFT JOIN sale_items si ON si.sale_id=s.id\n LEFT JOIN products p ON p.id=COALESCE(si.product_id,(SELECT p2.id FROM products p2 WHERE p2.name=si.product_name ORDER BY p2.id DESC LIMIT 1))\n LEFT JOIN product_variants v ON v.id=si.variant_id AND v.product_id=p.id\n LEFT JOIN categories c ON c.id=COALESCE(p.category_id,(SELECT c2.id FROM categories c2 WHERE c2.name=p.category ORDER BY c2.id DESC LIMIT 1))\n LEFT JOIN categories parent ON parent.id=c.parent_id\n), portions AS (\n SELECT *,ROW_NUMBER() OVER(PARTITION BY sale_id ORDER BY line_id) AS pos,\n COUNT(*) OVER(PARTITION BY sale_id) AS line_count,\n ROUND(CASE WHEN SUM(gross) OVER(PARTITION BY sale_id)<>0\n THEN header_discount*gross/SUM(gross) OVER(PARTITION BY sale_id)\n ELSE header_discount/COUNT(*) OVER(PARTITION BY sale_id) END,2) AS portion\n FROM raw\n), lines AS (\n SELECT *,CASE WHEN pos=line_count THEN header_discount-(SUM(portion) OVER(PARTITION BY sale_id)-portion) ELSE portion END AS discount\n FROM portions\n)  SELECT * FROM lines"
   },
   {
-    "source": "sale_summary.rs:130",
+    "source": "sale_summary.rs:128",
+    "sql": "SELECT COALESCE(SUM(CASE WHEN COALESCE(payment,0)>COALESCE(change_amount,0) THEN COALESCE(payment,0)-COALESCE(change_amount,0) ELSE 0 END),0)::float8 FROM sales WHERE status='completed' AND created_at >= $1 AND created_at < $2"
+  },
+  {
+    "source": "sale_summary.rs:138",
     "sql": "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
   },
   {
-    "source": "sale_summary.rs:179",
+    "source": "sale_summary.rs:188",
     "sql": "SELECT COALESCE(NULLIF(category,''),'Uncategorized') AS label,COUNT(*) AS records,COALESCE(SUM(amount),0)::float8 AS amount FROM expenses WHERE expense_date >= $1 AND expense_date < $2 GROUP BY COALESCE(NULLIF(category,''),'Uncategorized') ORDER BY SUM(amount) DESC,label"
   },
   {
-    "source": "sale_summary.rs:219",
+    "source": "sale_summary.rs:228",
     "sql": "SET TRANSACTION READ ONLY"
   },
   {
-    "source": "sale_summary.rs:220",
+    "source": "sale_summary.rs:229",
     "sql": "SET LOCAL statement_timeout='10s'"
   },
   {
@@ -2093,7 +2097,7 @@
   },
   {
     "source": "dashboard_period.sql",
-    "sql": "WITH period_sales AS (\n    SELECT * FROM sales WHERE created_at >= $1::text::timestamp AND created_at < $2::text::timestamp\n)\nSELECT 'Completed sales'::text AS label,COALESCE(SUM(total),0)::float8 AS amount,COUNT(*) AS count FROM period_sales WHERE status='completed'\nUNION ALL SELECT 'Received at checkout',COALESCE(SUM(GREATEST(0,COALESCE(payment,0)-COALESCE(change_amount,0))),0)::float8,COUNT(*) FROM period_sales WHERE status='completed'\nUNION ALL SELECT 'Credit sales',COALESCE(SUM(total),0)::float8,COUNT(*) FROM period_sales WHERE status='completed' AND lower(trim(payment_type))='credit'\nUNION ALL SELECT 'Discounts',COALESCE(SUM(discount_amount),0)::float8,COUNT(*) FROM period_sales WHERE status='completed' AND discount_amount>0\nUNION ALL SELECT 'Refunded sales (sale date)',COALESCE(SUM(total),0)::float8,COUNT(*) FROM period_sales WHERE status='refunded'\nUNION ALL SELECT 'Credit collections',COALESCE(SUM(amount),0)::float8,COUNT(*) FROM credit_payments WHERE left(payment_date,10)>=$1 AND left(payment_date,10)<$2\nUNION ALL SELECT 'Recorded expenses',COALESCE(SUM(amount),0)::float8,COUNT(*) FROM expenses WHERE left(expense_date,10)>=$1 AND left(expense_date,10)<$2\nUNION ALL SELECT 'Supplier payments',COALESCE(SUM(amount),0)::float8,COUNT(*) FROM supplier_payments WHERE payment_type<>'Purchase' AND left(payment_date,10)>=$1 AND left(payment_date,10)<$2\nUNION ALL SELECT 'Supplier purchases (ledger)',COALESCE(SUM(amount),0)::float8,COUNT(*) FROM supplier_payments WHERE payment_type='Purchase' AND left(payment_date,10)>=$1 AND left(payment_date,10)<$2\n"
+    "sql": "WITH period_sales AS (\n    SELECT * FROM sales WHERE created_at >= $1::text::timestamp AND created_at < $2::text::timestamp\n)\nSELECT 'Completed sales'::text AS label,COALESCE(SUM(total),0)::float8 AS amount,COUNT(*) AS count FROM period_sales WHERE status='completed'\nUNION ALL SELECT 'Credit sales',COALESCE(SUM(total),0)::float8,COUNT(*) FROM period_sales WHERE status='completed' AND lower(trim(payment_type))='credit'\nUNION ALL SELECT 'Discounts',COALESCE(SUM(discount_amount),0)::float8,COUNT(*) FROM period_sales WHERE status='completed' AND discount_amount>0\nUNION ALL SELECT 'Refunded sales (sale date)',COALESCE(SUM(total),0)::float8,COUNT(*) FROM period_sales WHERE status='refunded'\nUNION ALL SELECT 'Credit collections',COALESCE(SUM(amount),0)::float8,COUNT(*) FROM credit_payments WHERE left(payment_date,10)>=$1 AND left(payment_date,10)<$2\nUNION ALL SELECT 'Recorded expenses',COALESCE(SUM(amount),0)::float8,COUNT(*) FROM expenses WHERE left(expense_date,10)>=$1 AND left(expense_date,10)<$2\nUNION ALL SELECT 'Supplier payments',COALESCE(SUM(amount),0)::float8,COUNT(*) FROM supplier_payments WHERE payment_type<>'Purchase' AND left(payment_date,10)>=$1 AND left(payment_date,10)<$2\nUNION ALL SELECT 'Supplier purchases (ledger)',COALESCE(SUM(amount),0)::float8,COUNT(*) FROM supplier_payments WHERE payment_type='Purchase' AND left(payment_date,10)>=$1 AND left(payment_date,10)<$2\n"
   },
   {
     "source": "report_sales.sql",

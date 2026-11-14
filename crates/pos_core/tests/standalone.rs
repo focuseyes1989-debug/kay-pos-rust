@@ -1061,10 +1061,13 @@ async fn standalone_dashboard_hourly_sales_filter_dates_status_and_fill_quiet_ho
         ("2026-10-13 00:00:00","completed"),
         ("2026-10-12 09:30:00","refunded"),
     ] {
-        let receipt=complete_sale(&pool,&draft("Cash",20000.0),&actor).await?;
+        let receipt=complete_sale(&pool,&draft("Cash",25000.0),&actor).await?;
         s::query("UPDATE sales SET created_at=$1,status=$2 WHERE id=$3").bind(stamp).bind(status).bind(receipt.id).execute(&pool).await?;
     }
     let day=pos_core::dashboard::load(&pool,&actor,"2026-10-12","2026-10-12").await?;
+    let summary=pos_core::sale_summary::load(&pool,"2026-10-12","2026-10-12").await?;
+    assert_eq!(summary.received_at_checkout,80000.0);
+    assert_eq!(summary.received_at_checkout,day.period.iter().find(|r|r.label=="Received at checkout").unwrap().amount);
     assert_eq!(day.hourly[9].label,"09");
     assert_eq!(day.hourly[9].count,2);
     assert_eq!(day.hourly[9].amount,40000.0);

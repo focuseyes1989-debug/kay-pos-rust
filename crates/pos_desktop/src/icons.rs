@@ -116,7 +116,7 @@ pub fn CardLabel(label: String) -> Element {
     let (name,tone)=if lower.contains("refund") {("undo","pink")}
     else if lower.contains("credit") || lower.contains("outstanding") || lower.contains("advance") {("credit_card","purple")}
     else if lower.contains("expense") || lower.contains("spen") {("payments","amber")}
-    else if lower.contains("profit") || lower.contains("received") || lower.contains("paid") || lower.contains("delivered") {("payments","teal")}
+    else if lower.contains("profit") || lower.contains("received") || lower == "cash drawer balance" || lower.contains("paid") || lower.contains("delivered") {("payments","teal")}
     else if lower.contains("discount") {("payments","amber")}
     else if lower.contains("receipt") {("receipt","blue")}
     else if lower.contains("employee") || lower.contains("customer") {("groups","teal")}
