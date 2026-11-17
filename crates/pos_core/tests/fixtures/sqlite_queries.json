@@ -884,51 +884,55 @@
     "sql": "SELECT name FROM expense_categories WHERE COALESCE(is_active,1)=1 ORDER BY name"
   },
   {
-    "source": "expenses.rs:37",
+    "source": "expenses.rs:39",
+    "sql": "INSERT INTO expense_categories(name,is_active) VALUES($1,1) ON CONFLICT(name) DO NOTHING"
+  },
+  {
+    "source": "expenses.rs:49",
     "sql": "SELECT id FROM expenses WHERE id=$1 FOR UPDATE"
   },
   {
-    "source": "expenses.rs:41",
+    "source": "expenses.rs:53",
     "sql": "SELECT to_regclass('payrolls') IS NOT NULL"
   },
   {
-    "source": "expenses.rs:46",
+    "source": "expenses.rs:58",
     "sql": "SELECT EXISTS(SELECT 1 FROM payrolls WHERE expense_id=$1)"
   },
   {
-    "source": "expenses.rs:56",
+    "source": "expenses.rs:68",
     "sql": "DELETE FROM expense_attachments WHERE expense_id=$1"
   },
   {
-    "source": "expenses.rs:60",
+    "source": "expenses.rs:72",
     "sql": "DELETE FROM expenses WHERE id=$1"
   },
   {
-    "source": "expenses.rs:92",
+    "source": "expenses.rs:104",
     "sql": "SELECT id FROM expenses WHERE id=$1 FOR UPDATE"
   },
   {
-    "source": "expenses.rs:93",
+    "source": "expenses.rs:105",
     "sql": "SELECT to_regclass('payrolls') IS NOT NULL"
   },
   {
-    "source": "expenses.rs:95",
+    "source": "expenses.rs:107",
     "sql": "SELECT EXISTS(SELECT 1 FROM payrolls WHERE expense_id=$1)"
   },
   {
-    "source": "expenses.rs:100",
+    "source": "expenses.rs:112",
     "sql": "SELECT EXISTS(SELECT 1 FROM expense_categories WHERE name=$1)"
   },
   {
-    "source": "expenses.rs:106",
+    "source": "expenses.rs:118",
     "sql": "INSERT INTO expenses (expense_no,category,description,amount,expense_date,payment_method,reference_no,notes) VALUES ($1,$2,$3,$4::numeric,$5,$6,$7,$8) RETURNING id"
   },
   {
-    "source": "expenses.rs:109",
+    "source": "expenses.rs:121",
     "sql": "UPDATE expenses SET category=$2,description=$3,amount=$4::numeric,expense_date=$5,payment_method=$6,reference_no=$7,notes=$8 WHERE id=$1 RETURNING id"
   },
   {
-    "source": "expenses.rs:140",
+    "source": "expenses.rs:152",
     "sql": "SELECT name FROM expense_categories ORDER BY name"
   },
   {

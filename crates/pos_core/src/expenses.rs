@@ -31,6 +31,18 @@ pub async fn categories(pool: &PgPool) -> Result<Vec<String>> {
     .await?)
 }
 
+pub async fn add_category(pool: &PgPool, actor: &crate::auth::Session, name: &str) -> Result<()> {
+    let name = name.trim();
+    ensure!(!name.is_empty(), "Enter a category name");
+    let mut tx = pool.begin().await?;
+    actor.authorize(&mut tx, crate::auth::Permission::Manage).await?;
+    let inserted = sqlx::query("INSERT INTO expense_categories(name,is_active) VALUES($1,1) ON CONFLICT(name) DO NOTHING")
+        .bind(name).execute(&mut *tx).await?;
+    ensure!(inserted.rows_affected() == 1, "This expense category already exists");
+    tx.commit().await?;
+    Ok(())
+}
+
 pub async fn delete(pool: &PgPool, id: i32,actor:&crate::auth::Session) -> Result<()> {
     let mut tx = pool.begin().await?;
     actor.authorize(&mut tx,crate::auth::Permission::Manage).await?;

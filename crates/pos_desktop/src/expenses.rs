@@ -125,6 +125,10 @@ fn ExpenseHistory(
     let mut editor = use_signal(|| None::<Expense>);
     let mut error = use_signal(String::new);
     let mut notice = use_signal(String::new);
+    let mut adding_category=use_signal(||false);
+    let mut category_name=use_signal(String::new);
+    let mut saving_category=use_signal(||false);
+    let category_form=db_form.clone();
     let mut exporting = use_signal(|| false);
     let mut deleting = use_signal(|| None::<Expense>);
     let mut busy = use_signal(|| false);
@@ -201,6 +205,33 @@ fn ExpenseHistory(
                 label { "Search" input { r#type: "search", placeholder: "Category, description or reference", value: "{query}", oninput: move |event| query.set(event.value()) } }
                 button { onclick: move |_| { let date=today(); from.set(date.clone()); to.set(date.clone()); query.set(String::new()); category.set(String::new()); applied.set((date.clone(),date,String::new(),String::new())); page.set(0); selected.set(None); data.restart(); }, "Reset" }
             }
+            if can_manage && adding_category() {
+                form {class:"expense_filters expense_touch_filters",onsubmit:move |event|{
+                    event.prevent_default();
+                    if saving_category()||category_name().trim().is_empty(){return;}
+                    let Some(actor)=session() else{return};
+                    let form=category_form.clone();
+                    let name=category_name();
+                    saving_category.set(true);
+                    notice.set(String::new());
+                    error.set(String::new());
+                    spawn(async move {
+                        let result=async {
+                            let pool=connect(&form.database_config()?).await?;
+                            expenses::add_category(&pool,&actor,&name).await
+                        }.await;
+                        match result {
+                            Ok(())=>{adding_category.set(false);category_name.set(String::new());notice.set("Expense category added.".into());data.restart();}
+                            Err(e)=>error.set(format!("{e:#}")),
+                        }
+                        saving_category.set(false);
+                    });
+                },
+                    label {"New expense category" input {value:category_name(),disabled:saving_category(),oninput:move |event|category_name.set(event.value())}}
+                    button {r#type:"submit",disabled:saving_category()||category_name().trim().is_empty(),"Save category"}
+                    button {r#type:"button",disabled:saving_category(),onclick:move |_|adding_category.set(false),"Cancel"}
+                }
+            }
             if invalid_range { div { role: "alert", class: "customers_notice", "From date must not be after To date." } }
             if let Some(Err(message)) = state.as_ref() { div { role: "alert", class: "customers_notice", "{message}" } }
             if !notice().is_empty() { div { role: "status", class: "customers_notice", "{notice}" } }
@@ -217,6 +248,9 @@ fn ExpenseHistory(
                             } exporting.set(false);
                         }); }
                     }, crate::icons::ActionLabel { label:"Export Excel" } }
+                    if can_manage {
+                        button {r#type:"button",disabled:saving_category(),onclick:move |_|{adding_category.set(!adding_category());}, "Add category"}
+                    }
                     button { class: "customer_primary", onclick: move |_| editor.set(Some(new_record())), crate::icons::ActionLabel { label:"+ Add expense" } }
                 }
             }

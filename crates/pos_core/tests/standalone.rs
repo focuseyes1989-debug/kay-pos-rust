@@ -1298,12 +1298,15 @@ async fn standalone_quick_categories_rank_top_seven_exclude_returns_and_old_sale
 }
 #[tokio::test]
 async fn cashier_can_add_and_view_expenses_without_manager_access()->Result<()> {
-    let (_dir,pool,_admin)=fixture().await?;
-    s::query("INSERT INTO expense_categories(name) VALUES('Cashier expense')").execute(&pool).await?;
+    let (_dir,pool,admin)=fixture().await?;
+    pos_core::expenses::add_category(&pool,&admin," Cashier expense ").await?;
+    assert!(pos_core::expenses::categories(&pool).await?.contains(&"Cashier expense".to_owned()));
+    assert!(pos_core::expenses::add_category(&pool,&admin,"Cashier expense").await.is_err());
     s::query("UPDATE users SET role='Cashier' WHERE username='owner'").execute(&pool).await?;
     let cashier=auth::login(&pool,"owner","test-password").await?;
     assert!(cashier.allows(auth::Permission::Expenses));
     assert!(!cashier.allows(auth::Permission::Manage));
+    assert!(pos_core::expenses::add_category(&pool,&cashier,"Unauthorized category").await.is_err());
     let mut expense=pos_core::expenses::Expense {expense_no:"CASHIER-EXP-1".into(),category:"Cashier expense".into(),description:"Shop supplies".into(),amount:1500.into(),expense_date:"2026-10-18".into(),payment_method:"Cash".into(),..Default::default()};
     pos_core::expenses::save(&pool,&expense,&cashier).await?;
     let rows=pos_core::expenses::list(&pool,&cashier).await?;
