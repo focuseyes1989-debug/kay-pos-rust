@@ -889,50 +889,74 @@
   },
   {
     "source": "expenses.rs:49",
-    "sql": "SELECT id FROM expenses WHERE id=$1 FOR UPDATE"
+    "sql": "LOCK TABLE expense_categories,expenses IN SHARE ROW EXCLUSIVE MODE"
   },
   {
-    "source": "expenses.rs:53",
-    "sql": "SELECT to_regclass('payrolls') IS NOT NULL"
-  },
-  {
-    "source": "expenses.rs:58",
-    "sql": "SELECT EXISTS(SELECT 1 FROM payrolls WHERE expense_id=$1)"
-  },
-  {
-    "source": "expenses.rs:68",
-    "sql": "DELETE FROM expense_attachments WHERE expense_id=$1"
-  },
-  {
-    "source": "expenses.rs:72",
-    "sql": "DELETE FROM expenses WHERE id=$1"
-  },
-  {
-    "source": "expenses.rs:104",
-    "sql": "SELECT id FROM expenses WHERE id=$1 FOR UPDATE"
-  },
-  {
-    "source": "expenses.rs:105",
-    "sql": "SELECT to_regclass('payrolls') IS NOT NULL"
-  },
-  {
-    "source": "expenses.rs:107",
-    "sql": "SELECT EXISTS(SELECT 1 FROM payrolls WHERE expense_id=$1)"
-  },
-  {
-    "source": "expenses.rs:112",
+    "source": "expenses.rs:50",
     "sql": "SELECT EXISTS(SELECT 1 FROM expense_categories WHERE name=$1)"
   },
   {
-    "source": "expenses.rs:118",
+    "source": "expenses.rs:54",
+    "sql": "SELECT to_regclass($1) IS NOT NULL"
+  },
+  {
+    "source": "expenses.rs:64",
+    "sql": "SELECT EXISTS(SELECT 1 FROM expense_categories WHERE name=$1)"
+  },
+  {
+    "source": "expenses.rs:66",
+    "sql": "UPDATE expense_categories SET name=$1 WHERE name=$2"
+  },
+  {
+    "source": "expenses.rs:76",
+    "sql": "DELETE FROM expense_categories WHERE name=$1"
+  },
+  {
+    "source": "expenses.rs:85",
+    "sql": "SELECT id FROM expenses WHERE id=$1 FOR UPDATE"
+  },
+  {
+    "source": "expenses.rs:89",
+    "sql": "SELECT to_regclass('payrolls') IS NOT NULL"
+  },
+  {
+    "source": "expenses.rs:94",
+    "sql": "SELECT EXISTS(SELECT 1 FROM payrolls WHERE expense_id=$1)"
+  },
+  {
+    "source": "expenses.rs:104",
+    "sql": "DELETE FROM expense_attachments WHERE expense_id=$1"
+  },
+  {
+    "source": "expenses.rs:108",
+    "sql": "DELETE FROM expenses WHERE id=$1"
+  },
+  {
+    "source": "expenses.rs:140",
+    "sql": "SELECT id FROM expenses WHERE id=$1 FOR UPDATE"
+  },
+  {
+    "source": "expenses.rs:141",
+    "sql": "SELECT to_regclass('payrolls') IS NOT NULL"
+  },
+  {
+    "source": "expenses.rs:143",
+    "sql": "SELECT EXISTS(SELECT 1 FROM payrolls WHERE expense_id=$1)"
+  },
+  {
+    "source": "expenses.rs:148",
+    "sql": "SELECT EXISTS(SELECT 1 FROM expense_categories WHERE name=$1)"
+  },
+  {
+    "source": "expenses.rs:154",
     "sql": "INSERT INTO expenses (expense_no,category,description,amount,expense_date,payment_method,reference_no,notes) VALUES ($1,$2,$3,$4::numeric,$5,$6,$7,$8) RETURNING id"
   },
   {
-    "source": "expenses.rs:121",
+    "source": "expenses.rs:157",
     "sql": "UPDATE expenses SET category=$2,description=$3,amount=$4::numeric,expense_date=$5,payment_method=$6,reference_no=$7,notes=$8 WHERE id=$1 RETURNING id"
   },
   {
-    "source": "expenses.rs:152",
+    "source": "expenses.rs:188",
     "sql": "SELECT name FROM expense_categories ORDER BY name"
   },
   {

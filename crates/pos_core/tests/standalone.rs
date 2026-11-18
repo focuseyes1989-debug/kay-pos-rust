@@ -1319,7 +1319,15 @@ async fn cashier_can_add_and_view_expenses_without_manager_access()->Result<()> 
     s::query("UPDATE users SET role='Admin' WHERE username='owner'").execute(&pool).await?;
     let admin=auth::login(&pool,"owner","test-password").await?;
     pos_core::expenses::save(&pool,&expense,&admin).await?;
+    assert!(pos_core::expenses::change_category(&pool,&admin,"Cashier expense",None).await.is_err());
+    pos_core::expenses::change_category(&pool,&admin,"Cashier expense",Some("Renamed category")).await?;
+    assert_eq!(pos_core::expenses::list(&pool,&admin).await?[0].category,"Renamed category");
+    pos_core::expenses::add_category(&pool,&admin,"Existing category").await?;
+    assert!(pos_core::expenses::change_category(&pool,&admin,"Renamed category",Some("Existing category")).await.is_err());
+    assert!(pos_core::expenses::change_category(&pool,&cashier,"Renamed category",None).await.is_err());
     pos_core::expenses::delete(&pool,expense.id,&admin).await?;
+    pos_core::expenses::change_category(&pool,&admin,"Renamed category",None).await?;
+    assert!(!pos_core::expenses::categories(&pool).await?.contains(&"Renamed category".into()));
     assert!(pos_core::expenses::list(&pool,&admin).await?.is_empty());
     Ok(())
 }
@@ -1427,5 +1435,24 @@ async fn standalone_shop2_sales_only_use_its_parent_and_descendants() -> Result<
     assert_eq!(s::query_scalar::<_,f64>("SELECT SUM(quantity)::float8 FROM product_locations WHERE product_id=1 AND location IN ('Shop2 (သားကြီး)','Shop2 room','Shop2 shelf')").fetch_one(&pool).await?,9.0);
     assert_eq!(s::query_scalar::<_,f64>("SELECT quantity::float8 FROM product_locations WHERE product_id=1 AND location='Shop'").fetch_one(&pool).await?,10.0);
     assert_eq!(s::query_scalar::<_,f64>("SELECT quantity::float8 FROM product_locations WHERE product_id=1 AND location='Shop child'").fetch_one(&pool).await?,7.0);
+    Ok(())
+}
+
+
+#[tokio::test]
+async fn expense_category_budget_alert_rename_and_delete_protection()->Result<()> {
+    let (_dir,pool,admin)=fixture().await?;
+    let api=pos_core::expenses::add_category;
+    assert!(api(&pool,&admin,"   ").await.is_err());
+    api(&pool,&admin,"ဝယ်ယူစရိတ်").await?;
+    s::query("INSERT INTO expense_budgets(category,month,year,budget_amount) VALUES('ဝယ်ယူစရိတ်',11,2026,50000)").execute(&pool).await?;
+    s::query("INSERT INTO expense_alerts_log(category,month,year,message) VALUES('ဝယ်ယူစရိတ်',11,2026,'Original warning')").execute(&pool).await?;
+    pos_core::expenses::change_category(&pool,&admin,"ဝယ်ယူစရိတ်",Some("ရုံးစရိတ်")).await?;
+    assert_eq!(s::query_scalar::<_,String>("SELECT category FROM expense_budgets").fetch_one(&pool).await?,"ရုံးစရိတ်");
+    assert_eq!(s::query_scalar::<_,String>("SELECT category FROM expense_alerts_log").fetch_one(&pool).await?,"ရုံးစရိတ်");
+    assert!(pos_core::expenses::change_category(&pool,&admin,"ရုံးစရိတ်",None).await.is_err());
+    assert!(pos_core::expenses::change_category(&pool,&admin,"ရုံးစရိတ်",Some(" ")).await.is_err());
+    assert!(pos_core::expenses::change_category(&pool,&admin,"Missing category",None).await.is_err());
+    assert!(pos_core::expenses::categories(&pool).await?.contains(&"ရုံးစရိတ်".into()));
     Ok(())
 }

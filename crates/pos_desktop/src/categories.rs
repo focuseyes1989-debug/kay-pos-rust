@@ -135,7 +135,7 @@ fn CategoryEditor(
     let groups=use_resource(move||{let db=source.clone();async move{async{let actor=session().ok_or_else(||anyhow::anyhow!("Sign in again"))?;pos_core::category_groups::list(&connect(&db.database_config()?).await?,&actor).await}.await.map_err(|e:anyhow::Error|format!("{e:#}"))}});
     let mut form = use_signal(|| record.clone());
     let mut busy = use_signal(|| false);
-    rsx! {div {class:"modal_backdrop",section {class:"customer_dialog",role:"dialog",aria_modal:"true",aria_label:"Category",
+    rsx! {div {class:"modal_backdrop",section {class:"customer_dialog product_category_dialog",role:"dialog",aria_modal:"true",aria_label:"Category",
         h2 {if form().id==0 {"Add category"}else{"Edit category"}}
         div {class:"customer_form",
             label {"Name" input {value:form().name,disabled:busy(),oninput:move |e|form.write().name=e.value()}}

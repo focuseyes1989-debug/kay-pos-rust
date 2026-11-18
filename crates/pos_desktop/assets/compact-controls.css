@@ -178,3 +178,36 @@ body .shell .cart_sales_location .touch-combo-list button.touch-combo-option {
 .shell .receipt_customer_visibility label {display:flex;align-items:center;gap:8px;}
 .shell .receipt_customer_visibility input[type="checkbox"] {flex:0 0 auto;}
 .shell .receipt_customer_visibility small {color:var(--muted);}
+
+/* Compact category editors with stable action columns. */
+.shell .expense_category_dialog,
+.shell .product_category_dialog {padding:18px;width:min(560px,calc(100vw - 32px));}
+.shell .expense_category_dialog h2,
+.shell .product_category_dialog h2 {font-size:18px;margin:0 0 14px;}
+.shell .expense_category_editor {display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:end;padding-bottom:12px;border-bottom:1px solid var(--line);}
+.shell .expense_category_editor > label {display:grid;gap:5px;min-width:0;font-size:12px;color:var(--muted);}
+.shell .expense_category_editor input {width:100%;min-width:0;box-sizing:border-box;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink);padding:6px 10px;font:inherit;}
+.shell .expense_category_editor .customers_actions {display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;}
+.shell .expense_category_list {max-height:40vh;overflow:auto;scrollbar-gutter:stable;margin:8px 0;}
+.shell .expense_category_row {display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:6px;align-items:center;padding:6px 0;}
+.shell .expense_category_row > span {min-width:0;overflow-wrap:anywhere;font-size:13px;line-height:1.6;}
+.shell .expense_category_dialog .expense_category_row button {min-height:32px;padding:4px 9px;white-space:nowrap;}
+.shell .expense_category_row button.expense_category_delete {color:light-dark(#b91c1c,#fca5a5);border-color:light-dark(#fecaca,#7f1d1d);}
+.shell .expense_category_dialog > .customers_actions {display:flex;justify-content:flex-end;padding-top:10px;border-top:1px solid var(--line);}
+.shell .product_category_dialog .customer_form {gap:10px 12px;margin:0 0 14px;}
+.shell .product_category_dialog .customer_form label {gap:5px;font-size:12px;}
+.shell .product_category_dialog textarea {min-height:56px;height:56px;}
+.shell .product_category_dialog > .customers_actions {justify-content:flex-end;gap:8px;margin-top:10px;}
+@media(max-width:520px){.shell .expense_category_editor{grid-template-columns:minmax(0,1fr);}.shell .product_category_dialog .customer_form{grid-template-columns:minmax(0,1fr);}}
+
+.shell .expense_category_edit_dialog {width:min(420px,calc(100vw - 32px));padding:18px;}
+.shell .expense_category_edit_dialog h2 {font-size:18px;margin:0 0 14px;}
+.shell .expense_category_edit_dialog form {display:grid;gap:14px;}
+.shell .expense_category_edit_dialog label {display:grid;gap:6px;font-size:12px;color:var(--muted);}
+.shell .expense_category_edit_dialog input {width:100%;min-width:0;box-sizing:border-box;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink);padding:6px 10px;font:inherit;}
+.shell .expense_category_edit_dialog .customers_actions {display:flex;justify-content:flex-end;gap:8px;}
+
+.shell .expense_category_child_backdrop {z-index:1500;}
+.shell .expense_category_edit_dialog button.expense_category_delete {color:light-dark(#b91c1c,#fca5a5);border-color:light-dark(#fecaca,#7f1d1d);}
+
+.shell .expense_category_message > .modal_backdrop {z-index:1600;}

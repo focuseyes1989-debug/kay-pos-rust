@@ -43,6 +43,42 @@ pub async fn add_category(pool: &PgPool, actor: &crate::auth::Session, name: &st
     Ok(())
 }
 
+pub async fn change_category(pool:&PgPool,actor:&crate::auth::Session,old:&str,new:Option<&str>)->Result<()> {
+    let mut tx=pool.begin().await?;
+    actor.authorize(&mut tx,crate::auth::Permission::Manage).await?;
+    sqlx::query("LOCK TABLE expense_categories,expenses IN SHARE ROW EXCLUSIVE MODE").execute(&mut *tx).await?;
+    let exists:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM expense_categories WHERE name=$1)").bind(old).fetch_one(&mut *tx).await?;
+    ensure!(exists,"Expense category no longer exists; refresh the list");
+    let mut linked=vec!["expenses"];
+    for table in ["expense_budgets","expense_alerts_log"] {
+        let exists:bool=sqlx::query_scalar("SELECT to_regclass($1) IS NOT NULL").bind(table).fetch_one(&mut *tx).await?;
+        if exists {
+            sqlx::query(&format!("LOCK TABLE {table} IN SHARE ROW EXCLUSIVE MODE")).execute(&mut *tx).await?;
+            linked.push(table);
+        }
+    }
+    if let Some(name)=new {
+        let name=name.trim();
+        ensure!(!name.is_empty(),"Enter a category name");
+        if name!=old {
+            let duplicate:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM expense_categories WHERE name=$1)").bind(name).fetch_one(&mut *tx).await?;
+            ensure!(!duplicate,"This expense category already exists");
+            sqlx::query("UPDATE expense_categories SET name=$1 WHERE name=$2").bind(name).bind(old).execute(&mut *tx).await?;
+            for table in linked {
+                sqlx::query(&format!("UPDATE {table} SET category=$1 WHERE category=$2")).bind(name).bind(old).execute(&mut *tx).await?;
+            }
+        }
+    }else {
+        for table in linked {
+            let used:bool=sqlx::query_scalar(&format!("SELECT EXISTS(SELECT 1 FROM {table} WHERE category=$1)")).bind(old).fetch_one(&mut *tx).await?;
+            ensure!(!used,"This category is used by expenses, budgets or alerts and cannot be deleted. You can rename it instead.");
+        }
+        sqlx::query("DELETE FROM expense_categories WHERE name=$1").bind(old).execute(&mut *tx).await?;
+    }
+    tx.commit().await?;
+    Ok(())
+}
+
 pub async fn delete(pool: &PgPool, id: i32,actor:&crate::auth::Session) -> Result<()> {
     let mut tx = pool.begin().await?;
     actor.authorize(&mut tx,crate::auth::Permission::Manage).await?;

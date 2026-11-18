@@ -126,9 +126,6 @@ fn ExpenseHistory(
     let mut error = use_signal(String::new);
     let mut notice = use_signal(String::new);
     let mut adding_category=use_signal(||false);
-    let mut category_name=use_signal(String::new);
-    let mut saving_category=use_signal(||false);
-    let category_form=db_form.clone();
     let mut exporting = use_signal(|| false);
     let mut deleting = use_signal(|| None::<Expense>);
     let mut busy = use_signal(|| false);
@@ -206,31 +203,9 @@ fn ExpenseHistory(
                 button { onclick: move |_| { let date=today(); from.set(date.clone()); to.set(date.clone()); query.set(String::new()); category.set(String::new()); applied.set((date.clone(),date,String::new(),String::new())); page.set(0); selected.set(None); data.restart(); }, "Reset" }
             }
             if can_manage && adding_category() {
-                form {class:"expense_filters expense_touch_filters",onsubmit:move |event|{
-                    event.prevent_default();
-                    if saving_category()||category_name().trim().is_empty(){return;}
-                    let Some(actor)=session() else{return};
-                    let form=category_form.clone();
-                    let name=category_name();
-                    saving_category.set(true);
-                    notice.set(String::new());
-                    error.set(String::new());
-                    spawn(async move {
-                        let result=async {
-                            let pool=connect(&form.database_config()?).await?;
-                            expenses::add_category(&pool,&actor,&name).await
-                        }.await;
-                        match result {
-                            Ok(())=>{adding_category.set(false);category_name.set(String::new());notice.set("Expense category added.".into());data.restart();}
-                            Err(e)=>error.set(format!("{e:#}")),
-                        }
-                        saving_category.set(false);
-                    });
-                },
-                    label {"New expense category" input {value:category_name(),disabled:saving_category(),oninput:move |event|category_name.set(event.value())}}
-                    button {r#type:"submit",disabled:saving_category()||category_name().trim().is_empty(),"Save category"}
-                    button {r#type:"button",disabled:saving_category(),onclick:move |_|adding_category.set(false),"Cancel"}
-                }
+                ExpenseCategoryDialog {db_form:db_form.clone(),categories:categories.clone(),
+                    on_close:move |_|adding_category.set(false),
+                    on_saved:move |_|{category.set(String::new());selected.set(None);detail_category.set(None);data.restart();}}
             }
             if invalid_range { div { role: "alert", class: "customers_notice", "From date must not be after To date." } }
             if let Some(Err(message)) = state.as_ref() { div { role: "alert", class: "customers_notice", "{message}" } }
@@ -249,7 +224,7 @@ fn ExpenseHistory(
                         }); }
                     }, crate::icons::ActionLabel { label:"Export Excel" } }
                     if can_manage {
-                        button {r#type:"button",disabled:saving_category(),onclick:move |_|{adding_category.set(!adding_category());}, "Add category"}
+                        button {r#type:"button",onclick:move |_|adding_category.set(true), "Expense categories"}
                     }
                     button { class: "customer_primary", onclick: move |_| editor.set(Some(new_record())), crate::icons::ActionLabel { label:"+ Add expense" } }
                 }
@@ -566,4 +541,248 @@ fn export(rows: &[Expense], path: &std::path::Path) -> anyhow::Result<()> {
     sheet.set_freeze_panes(1, 0)?;
     workbook.save(path)?;
     Ok(())
+}
+
+
+#[component]
+fn ExpenseCategoryDialog(db_form:DbForm,categories:Vec<String>,on_close:EventHandler<()>,on_saved:EventHandler<()>)->Element {
+    let session=use_context::<Signal<Option<pos_core::auth::Session>>>();
+    let mut editing=use_signal(||None::<String>);
+    let mut name=use_signal(String::new);
+    let mut deleting=use_signal(||None::<String>);
+    let mut busy=use_signal(||false);
+    let mut error=use_signal(String::new);
+    let mut notice=use_signal(String::new);
+    let source=db_form.clone();
+    rsx!{div {class:"modal_backdrop",inert:if editing().is_some()||deleting().is_some()||!error().is_empty()||!notice().is_empty(){Some("")}else{None},
+        section {class:"customer_dialog expense_category_dialog",role:"dialog",aria_modal:(editing().is_none()&&deleting().is_none()&&error().is_empty()&&notice().is_empty()).to_string(),aria_label:"Expense categories",
+            h2 {"Expense categories"}
+            form {class:"expense_category_editor",onsubmit:move |e|{
+                e.prevent_default();
+                if busy()||name().trim().is_empty(){return}
+                let Some(actor)=session() else{return};
+                let form=source.clone();let value=name();
+                busy.set(true);error.set(String::new());notice.set(String::new());
+                spawn(async move {
+                    let result=async {
+                        let pool=connect(&form.database_config()?).await?;
+                        expenses::add_category(&pool,&actor,&value).await
+                    }.await;
+                    busy.set(false);
+                    match result {Ok(())=>{editing.set(None);name.set(String::new());notice.set("Category saved.".into());on_saved.call(());},Err(e)=>error.set(format!("{e:#}"))}
+                });
+            },
+                label {"New expense category"
+                    input {value:name(),disabled:busy(),oninput:move |e|name.set(e.value())}
+                }
+                div {class:"customers_actions",
+                    button {class:"customer_primary",r#type:"submit",disabled:busy()||name().trim().is_empty(),"Save category"}
+                }
+            }
+            div {class:"expense_category_list",
+                for category in categories {
+                    div {class:"expense_category_row",
+                        span {"{category}"}
+                        button {disabled:busy(),onclick:{let category=category.clone();move |_|{editing.set(Some(category.clone()));deleting.set(None);error.set(String::new());}},crate::icons::ActionLabel{label:"Edit"}}
+                        button {class:"expense_category_delete",disabled:busy(),onclick:{let category=category.clone();move |_|{deleting.set(Some(category.clone()));error.set(String::new());}},crate::icons::ActionLabel{label:"Delete"}}
+                    }
+                }
+            }
+            div {class:"customers_actions",button {disabled:busy(),onclick:move |_|on_close.call(()),"Close"}}
+        }
+    }
+    if let Some(category)=deleting() {
+        ExpenseCategoryDeleteDialog {key:"{category}",db_form:db_form.clone(),category,
+            on_close:move |_|deleting.set(None),
+            on_saved:move |_|{deleting.set(None);notice.set("Category deleted.".into());on_saved.call(());}
+        }
+    }
+    if let Some(category)=editing() {
+        ExpenseCategoryEditDialog {key:"{category}",db_form:db_form.clone(),category,
+            on_close:move |_|editing.set(None),
+            on_saved:move |_|{editing.set(None);notice.set("Category updated.".into());on_saved.call(());}
+        }
+    }
+    if !error().is_empty(){ExpenseCategoryMessage {title:"Expense Category Error".to_string(),message:error(),on_close:move |_|error.set(String::new())}}
+    else if !notice().is_empty(){ExpenseCategoryMessage {title:"Expense Category".to_string(),message:notice(),on_close:move |_|notice.set(String::new())}}
+    }
+}
+
+
+#[component]
+fn ExpenseCategoryEditDialog(db_form:DbForm,category:String,on_close:EventHandler<()>,on_saved:EventHandler<()>)->Element {
+    let session=use_context::<Signal<Option<pos_core::auth::Session>>>();
+    let mut name=use_signal(||category.clone());
+    let mut busy=use_signal(||false);
+    let mut error=use_signal(String::new);
+    rsx!{div {class:"modal_backdrop expense_category_child_backdrop",inert:if !error().is_empty(){Some("")}else{None},
+        section {class:"customer_dialog expense_category_edit_dialog",role:"dialog",aria_modal:"true",aria_label:"Edit expense category",
+            h2 {"Edit expense category"}
+            form {onsubmit:move |e|{
+                e.prevent_default();
+                if busy()||name().trim().is_empty(){return}
+                let Some(actor)=session() else{return};
+                let form=db_form.clone();let old=category.clone();let value=name();
+                busy.set(true);error.set(String::new());
+                spawn(async move {
+                    let result=async {
+                        let pool=connect(&form.database_config()?).await?;
+                        expenses::change_category(&pool,&actor,&old,Some(&value)).await
+                    }.await;
+                    busy.set(false);
+                    match result {Ok(())=>on_saved.call(()),Err(e)=>error.set(format!("{e:#}"))}
+                });
+            },
+                label {"Category name" input {value:name(),disabled:busy(),oninput:move |e|name.set(e.value()),
+                    onmounted:move |_|{document::eval("document.querySelector('.expense_category_edit_dialog input')?.focus();");}
+                }}
+                div {class:"customers_actions",
+                    button {r#type:"button",disabled:busy(),onclick:move |_|on_close.call(()),"Cancel"}
+                    button {class:"customer_primary",r#type:"submit",disabled:busy()||name().trim().is_empty(),if busy(){"Saving..."}else{"Save changes"}}
+                }
+            }
+        }
+    }
+    if !error().is_empty(){ExpenseCategoryMessage {title:"Expense Category Error".to_string(),message:error(),on_close:move |_|error.set(String::new())}}
+    }
+}
+
+
+#[component]
+fn ExpenseCategoryDeleteDialog(db_form:DbForm,category:String,on_close:EventHandler<()>,on_saved:EventHandler<()>)->Element {
+    let session=use_context::<Signal<Option<pos_core::auth::Session>>>();
+    let mut busy=use_signal(||false);
+    let mut error=use_signal(String::new);
+    rsx!{div {class:"modal_backdrop expense_category_child_backdrop",inert:if !error().is_empty(){Some("")}else{None},
+        section {class:"customer_dialog expense_category_edit_dialog",role:"dialog",aria_modal:"true",aria_label:"Delete expense category",
+            h2 {"Delete expense category?"}
+            p {"{category}"}
+            p {"Categories used by expenses, budgets or alerts cannot be deleted."}
+            div {class:"customers_actions",
+                button {r#type:"button",disabled:busy(),onmounted:move |_|{document::eval("document.querySelector('.expense_category_child_backdrop button')?.focus();");},onclick:move |_|on_close.call(()),"Cancel"}
+                button {class:"expense_category_delete",r#type:"button",disabled:busy(),onclick:move |_|{
+                    if busy(){return}
+                    let Some(actor)=session() else{return};
+                    let form=db_form.clone();let category=category.clone();
+                    busy.set(true);error.set(String::new());
+                    spawn(async move {
+                        let result=async {let pool=connect(&form.database_config()?).await?;expenses::change_category(&pool,&actor,&category,None).await}.await;
+                        busy.set(false);
+                        match result {Ok(())=>on_saved.call(()),Err(e)=>error.set(format!("{e:#}"))}
+                    });
+                },if busy(){"Deleting..."}else{"Confirm delete"}}
+            }
+        }
+    }
+    if !error().is_empty(){ExpenseCategoryMessage {title:"Expense Category Error".to_string(),message:error(),on_close:move |_|error.set(String::new())}}
+    }
+}
+
+
+#[component]
+fn ExpenseCategoryMessage(title:String,message:String,on_close:EventHandler<()>)->Element {
+    rsx!{div {class:"expense_category_message",
+        MessageBox {title,message,on_close:move |_|on_close.call(())}
+    }}
+}
+
+#[cfg(test)]
+mod category_dialog_tests {
+    use super::*;
+    use dioxus::dioxus_core::{AttributeValue,DynamicNode,TemplateNode,TemplateAttribute};
+    use std::rc::Rc;
+    fn probe()->Element {
+        let session=use_signal(||None::<pos_core::auth::Session>);
+        use_context_provider(move ||session);
+        rsx!{ExpenseCategoryDialog{db_form:DbForm::default(),categories:vec!["Wifi".into()],on_close:move |_|{},on_saved:move |_|{}}}
+    }
+    fn handlers(dom:&VirtualDom,node:&VNode,output:&mut Vec<dioxus::dioxus_core::ListenerCallback>) {
+        for attrs in &node.dynamic_attrs {
+            for attr in attrs.iter() {
+                if attr.name=="onclick" {
+                    if let AttributeValue::Listener(callback)=&attr.value {output.push(callback.clone());}
+                }
+            }
+        }
+        for (index,child) in node.dynamic_nodes.iter().enumerate() {
+            match child {
+                DynamicNode::Fragment(nodes)=>for child in nodes {handlers(dom,child,output)},
+                DynamicNode::Component(component)=>if let Some(scope)=component.mounted_scope(index,node,dom){handlers(dom,scope.root_node(),output)},
+                _=>{}
+            }
+        }
+    }
+    async fn click(dom:&mut VirtualDom,index:usize) {
+        let mut callbacks=Vec::new();
+        handlers(dom,dom.base_scope().root_node(),&mut callbacks);
+        let callback=callbacks[index].clone();
+        dom.in_scope(ScopeId::APP,||{
+            callback.call(Event::new(Rc::new(dioxus::html::PlatformEventData::new(Box::new(dioxus::html::SerializedMouseData::default()))),true));
+        });
+        dom.render_immediate_to_vec();
+        let end=tokio::time::Instant::now()+std::time::Duration::from_millis(40);
+        loop {tokio::select!{_=dom.wait_for_work()=>{dom.render_immediate_to_vec();},_=tokio::time::sleep_until(end)=>break}}
+    }
+    fn labels(dom:&VirtualDom,node:&VNode,output:&mut Vec<String>) {
+        fn static_labels(node:&TemplateNode,output:&mut Vec<String>){
+            if let TemplateNode::Element{attrs,children,..}=node {
+                for attr in *attrs {if let TemplateAttribute::Static{name:"aria-label",value,..}=attr {output.push(value.to_string());}}
+                for child in *children {static_labels(child,output);}
+            }
+        }
+        for root in node.template.roots {static_labels(root,output);}
+        for attrs in &node.dynamic_attrs {
+            for attr in attrs.iter() {
+                if attr.name=="aria-label" {
+                    if let AttributeValue::Text(text)=&attr.value {output.push(text.clone());}
+                }
+            }
+        }
+        for (index,child) in node.dynamic_nodes.iter().enumerate() {
+            match child {
+                DynamicNode::Fragment(nodes)=>for child in nodes {labels(dom,child,output)},
+                DynamicNode::Component(component)=>if let Some(scope)=component.mounted_scope(index,node,dom){labels(dom,scope.root_node(),output)},
+                _=>{}
+            }
+        }
+    }
+    fn parent_inert(dom:&VirtualDom,node:&VNode)->Option<bool> {
+        for attrs in &node.dynamic_attrs {
+            for attr in attrs.iter() {
+                if attr.name=="inert" {return Some(!matches!(&attr.value,AttributeValue::None));}
+            }
+        }
+        for (index,child) in node.dynamic_nodes.iter().enumerate() {
+            match child {
+                DynamicNode::Fragment(nodes)=>for child in nodes {if let Some(value)=parent_inert(dom,child){return Some(value)}},
+                DynamicNode::Component(component)=>if let Some(scope)=component.mounted_scope(index,node,dom){if let Some(value)=parent_inert(dom,scope.root_node()){return Some(value)}},
+                _=>{}
+            }
+        }
+        None
+    }
+    #[tokio::test(flavor="current_thread")]
+    async fn edit_and_delete_cancel_keep_parent_dialog_mounted() {
+        dioxus::html::set_event_converter(Box::new(dioxus::html::SerializedHtmlEventConverter));
+        let mut dom=VirtualDom::new(probe);dom.rebuild_in_place();
+        assert_eq!(parent_inert(&dom,dom.base_scope().root_node()),Some(false),"inert must be absent before any child opens");
+        click(&mut dom,1).await; // Edit the sole category.
+        let mut open=Vec::new();labels(&dom,dom.base_scope().root_node(),&mut open);
+        assert!(open.contains(&"Expense categories".into()));
+        assert!(open.contains(&"Edit expense category".into()));
+        assert_eq!(parent_inert(&dom,dom.base_scope().root_node()),Some(true));
+        click(&mut dom,3).await; // Child Cancel follows parent Edit/Delete/Close.
+        open.clear();labels(&dom,dom.base_scope().root_node(),&mut open);
+        assert!(!open.contains(&"Edit expense category".into()));
+        assert_eq!(parent_inert(&dom,dom.base_scope().root_node()),Some(false));
+        click(&mut dom,2).await; // Delete.
+        open.clear();labels(&dom,dom.base_scope().root_node(),&mut open);
+        assert!(open.contains(&"Expense categories".into()));
+        assert!(open.contains(&"Delete expense category".into()));
+        click(&mut dom,3).await; // Delete Cancel.
+        open.clear();labels(&dom,dom.base_scope().root_node(),&mut open);
+        assert!(!open.contains(&"Delete expense category".into()));
+        assert_eq!(parent_inert(&dom,dom.base_scope().root_node()),Some(false));
+        assert!(open.contains(&"Expense categories".into()));
+    }
 }
