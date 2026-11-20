@@ -1,5 +1,8 @@
 use super::*;
 
+#[derive(Clone, Copy)]
+pub struct ReportActivity(pub Signal<bool>);
+
 #[component]
 pub fn StatusBar(form: DbForm, operator: String, activity: String) -> Element {
     let mut refresh = use_signal(|| 0u64);

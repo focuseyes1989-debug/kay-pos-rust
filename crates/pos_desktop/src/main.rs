@@ -238,6 +238,7 @@ fn App() -> Element {
     use_effect(move ||{if !show_side_menu(){menu_search.set(String::new());}});
     let db_form = use_signal(load_saved_db_form);
     use_context_provider(|| db_form);
+    let report_activity=use_context_provider(||status_bar::ReportActivity(Signal::new(false)));
     let mut query = use_signal(String::new);
     let mut cart = use_signal(Vec::<CartLine>::new);
     let mut cart_serial_index=use_signal(||None::<usize>);
@@ -1431,6 +1432,7 @@ fn App() -> Element {
                 operator: actor.username().to_string(),
                 activity: if checkout_saving() { "Saving / checking sale...".into() }
                     else if !matches!(&*pending.read(), Ok(None)) { "Checkout needs recovery".into() }
+                    else if (report_activity.0)() { "Preparing full report...".into() }
                     else if product_cards_loading() { "Loading catalog...".into() }
                     else if *active_view.read() == WorkspaceView::Receipts && !receipts_status.read().is_empty() { receipts_status.read().clone() }
                     else if *active_view.read() == WorkspaceView::Sales && !checkout_status.read().is_empty() { checkout_status.read().clone() }

@@ -24,6 +24,9 @@ fn SummaryDetails(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
     let mut range = use_signal(|| (today.to_string(), today.to_string()));
     let mut error = use_signal(String::new);
     let mut output_busy=use_signal(||false);
+    let mut report_activity=use_context::<crate::status_bar::ReportActivity>().0;
+    use_effect(move ||report_activity.set(output_busy()));
+    use_drop(move ||{if let Ok(mut busy)=report_activity.try_write(){*busy=false;}});
     let mut output_notice=use_signal(String::new);
     let mut tab = use_signal(|| 0usize);
     let mut expanded_locations=use_signal(std::collections::BTreeSet::<String>::new);
@@ -129,7 +132,6 @@ fn SummaryDetails(db_form: DbForm, on_sales: EventHandler<()>) -> Element {
                             }
                         },crate::icons::ActionLabel {label}}
                     }
-                    if output_busy(){span {role:"status","Preparing full report..."}}
 
                 }
             if tab()<2 {
@@ -286,13 +288,11 @@ fn full_report(from:&str,to:&str,summary:&sale_summary::Summary)->serde_json::Va
         })
     ]});
     let today=chrono::Local::now().date_naive().to_string();
-    if from==today && to==today {
-        compact_today(&mut report);
-    }
+    portrait_report(&mut report,from==today && to==today);
     report
 }
 
-fn compact_today(report:&mut serde_json::Value) {
+fn portrait_report(report:&mut serde_json::Value, limit_today_rows:bool) {
     report["portrait"]=true.into();
     let sections=report["sections"].as_array_mut().expect("report sections");
     for (section, (keep, limit)) in sections.iter_mut().zip([
@@ -307,11 +307,70 @@ fn compact_today(report:&mut serde_json::Value) {
         section["total"]=select(&section["total"]);
         let rows=section["rows"].as_array_mut().expect("report rows");
         let count=rows.len();
-        rows.truncate(limit);
+        if limit_today_rows {rows.truncate(limit);}
         for row in rows {*row=select(row);}
-        if count>limit {
+        if limit_today_rows && count>limit {
             section["title"]=format!("{} ({} of {} rows; total includes all)",section["title"].as_str().unwrap_or(""),limit,count).into();
         }
+    }
+}
+
+#[cfg(test)]
+mod portrait_report_tests {
+    use super::*;
+    fn with_runtime<T>(action:impl FnOnce()->T)->T {
+        let mut dom=VirtualDom::new(||rsx!{div {}});
+        dom.rebuild_in_place();
+        dom.in_scope(ScopeId::APP,action)
+    }
+    fn sample(count:usize)->sale_summary::Summary {
+        let daily=(0..count).map(|i|sale_summary::SummaryRow {
+            label:(chrono::NaiveDate::from_ymd_opt(2026,10,1).unwrap()+chrono::Duration::days(i as i64)).to_string(),
+            receipts:2,sales:25000.0,gross:25000.0,cost:5000.0,..Default::default()
+        }).collect();
+        sale_summary::Summary {
+            daily,payments:vec![sale_summary::SummaryRow{label:"Cash".into(),receipts:2*count as i64,sales:25000.0*count as f64,gross:25000.0*count as f64,..Default::default()}],
+            groups:vec![vec![],vec![sale_summary::GroupRow{label:"Service Group".into(),receipts:2*count as i64,net:25000.0*count as f64,gross:25000.0*count as f64,cost:5000.0*count as f64,..Default::default()}]],
+            group_receipts:vec![0,2*count as i64],
+            expenses:vec![sale_summary::ExpenseRow{label:"ရုံးအသုံးစရိတ်".into(),records:1,amount:2500.0}],
+            received_at_checkout:25000.0*count as f64,..Default::default()
+        }
+    }
+    #[test]
+    fn historical_ranges_use_portrait_columns_without_losing_rows_or_totals() {
+      with_runtime(|| {
+        for count in [1,60] {
+            let report=full_report("2026-10-01","2026-11-29",&sample(count));
+            assert_eq!(report["portrait"],true);
+            assert_eq!(report["sections"][0]["rows"].as_array().unwrap().len(),count);
+            assert_eq!(report["sections"][0]["total"][1],(count*2).to_string());
+            assert_eq!(report["sections"][0]["total"][2],crate::format_ks(count as f64*25000.0));
+            assert_eq!(report["sections"].as_array().unwrap().iter().map(|s|s["columns"].as_array().unwrap().len()).collect::<Vec<_>>(),vec![6,3,5,3,2]);
+        }
+      });
+    }
+    #[test]
+    fn today_keeps_its_existing_one_page_compact_policy() {
+      with_runtime(|| {
+        let today=chrono::Local::now().date_naive().to_string();
+        let report=full_report(&today,&today,&sample(2));
+        assert_eq!(report["portrait"],true);
+        assert_eq!(report["sections"][0]["rows"].as_array().unwrap().len(),1);
+        assert_eq!(report["sections"][0]["total"][1],"4");
+      });
+    }
+    #[test]
+    #[ignore="writes synthetic native PDF verification payloads to KAY_SUMMARY_QA_DIR"]
+    fn write_portrait_qa_payloads() {
+      with_runtime(|| {
+        let directory=std::path::PathBuf::from(std::env::var("KAY_SUMMARY_QA_DIR").expect("QA directory"));
+        std::fs::create_dir_all(&directory).unwrap();
+        for (name,count,to) in [("historical-day",1,"2026-10-01"),("historical-range",60,"2026-11-29")] {
+            let mut report=full_report("2026-10-01",to,&sample(count));
+            report["mode"]="pdf".into();report["path"]=directory.join(format!("{name}.pdf")).to_string_lossy().into_owned().into();
+            std::fs::write(directory.join(format!("{name}.json")),serde_json::to_vec_pretty(&report).unwrap()).unwrap();
+        }
+      });
     }
 }
 
